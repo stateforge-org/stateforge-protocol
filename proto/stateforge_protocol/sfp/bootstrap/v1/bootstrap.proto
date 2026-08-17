@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package stateforge.sfp.bootstrap.v1;
+
+// BootstrapService establishes the identity and wire version of one SFP
+// session before operational RPCs are permitted on the channel.
+service BootstrapService {
+  rpc Handshake(HandshakeRequest) returns (HandshakeResponse);
+}
+
+// ProtocolVersion identifies an SFP wire contract. Patch versions belong to
+// software packages and are deliberately excluded from the wire version.
+message ProtocolVersion {
+  uint32 major = 1;
+  uint32 minor = 2;
+}
+
+// AgentRuntime identifies the currently executing Agent process. It is not the
+// durable Control Plane Agent identity.
+message AgentRuntime {
+  string runtime_id = 1;
+  string software_version = 2;
+}
+
+// HandshakeRequest binds the provisional channel to the endpoint discovered
+// by the Agent and offers the wire versions understood by the Agent.
+message HandshakeRequest {
+  AgentRuntime agent_runtime = 1;
+  string expected_provider_instance_id = 2;
+  uint64 expected_endpoint_generation = 3;
+  repeated ProtocolVersion supported_sfp_versions = 4;
+}
+
+// HandshakeResponse confirms the connected Provider and permanently selects
+// the wire version used by this SFP session.
+message HandshakeResponse {
+  string provider_instance_id = 1;
+  uint64 endpoint_generation = 2;
+  ProtocolVersion selected_sfp_version = 3;
+  string provider_runtime_id = 4;
+  string session_id = 5;
+}
+
