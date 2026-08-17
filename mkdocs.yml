@@ -16,7 +16,19 @@ theme:
 
 nav:
   - Overview: index.md
-  - Bootstrap contract: bootstrap.md
+  - SFP procedures:
+      - Procedure map: procedures/index.md
+      - Endpoint discovery and channel establishment: procedures/endpoint-discovery.md
+      - Handshake and version negotiation: bootstrap.md
+      - Provider manifest exchange: procedures/provider-manifest.md
+      - Health and availability monitoring: procedures/health.md
+      - Capability assessment: procedures/capability-assessment.md
+      - Trigger publication and acknowledgement: procedures/triggers.md
+      - Operation admission and idempotency: procedures/operation-admission.md
+      - Backup preparation: procedures/backup-preparation.md
+      - Disaster-recovery execution: procedures/disaster-recovery.md
+      - Progress, results, and cancellation: procedures/progress-results-cancellation.md
+      - Disconnection and recovery: procedures/disconnection-recovery.md
   - Generated Python contracts: reference/python-contracts.md
 
 plugins:
@@ -39,7 +51,11 @@ markdown_extensions:
   - admonition
   - attr_list
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - tables
 
 validation:
