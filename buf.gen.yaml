@@ -1,0 +1,12 @@
+version: v2
+clean: true
+
+plugins:
+  - protoc_builtin: python
+    out: src
+  - local: protoc-gen-mypy
+    out: src
+  - local: grpc_python_plugin
+    out: src
+  - local: protoc-gen-mypy_grpc
+    out: src
