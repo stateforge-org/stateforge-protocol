@@ -1,6 +1,6 @@
 <!-- STATEFORGE_DPT_MANIFEST
 {
-  "fingerprint": "b62a8ac4fe5aa160a66414e808d8dedf94483b9eeb516799fbd8103bed2de814",
+  "fingerprint": "2c23a27f29d5cee20e2810386c19e13066eed2362b5dca7295da44e9bd197f5f",
   "format": "stateforge-dpt-plan",
   "format_version": 1,
   "plan": {
@@ -8,7 +8,7 @@
       "generated_filename": "STATEFORGE_DPT.md",
       "name": "StateForge",
       "release": "MVP",
-      "revision": 4,
+      "revision": 5,
       "slug": "stateforge"
     },
     "repositories": [
@@ -506,7 +506,7 @@ STATEFORGE_DPT_MANIFEST -->
 
 **Project:** StateForge  
 **Release:** MVP  
-**Revision:** 4
+**Revision:** 5
 
 ## Repositories
 
