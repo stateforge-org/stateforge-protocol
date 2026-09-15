@@ -1,12 +1,14 @@
 version: v2
-clean: true
+# Generated files share src/ with package markers and validation schemas.
+# Deleting the output directory would also delete these handwritten assets.
+clean: false
 
 plugins:
-  - protoc_builtin: python
+  - remote: buf.build/protocolbuffers/python:v35.1
     out: src
   - local: protoc-gen-mypy
     out: src
-  - local: grpc_python_plugin
+  - remote: buf.build/grpc/python:v1.83.0
     out: src
   - local: protoc-gen-mypy_grpc
     out: src

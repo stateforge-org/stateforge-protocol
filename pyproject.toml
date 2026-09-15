@@ -34,13 +34,16 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "build>=1.2",
     "grpcio-tools>=1.83",
+    "jsonschema>=4.25",
     "mypy>=1.17",
-    "mypy-protobuf>=3.6",
+    "mypy-protobuf==5.1.0",
     "pytest>=8.4",
     "pytest-asyncio>=1",
     "pytest-cov>=6.2",
     "ruff>=0.12",
+    "rfc8785>=0.1.4",
     "types-grpcio",
     "types-protobuf",
 ]

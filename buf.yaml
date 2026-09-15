@@ -6,8 +6,11 @@ modules:
 lint:
   use:
     - STANDARD
+  # Proto paths deliberately follow the public Python import namespace while
+  # wire packages retain the established stateforge.sfp namespace.
+  except:
+    - PACKAGE_DIRECTORY_MATCH
 
 breaking:
   use:
     - FILE
-

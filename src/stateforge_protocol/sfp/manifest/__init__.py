@@ -1,0 +1,1 @@
+"""Versioned Provider manifest contracts."""
