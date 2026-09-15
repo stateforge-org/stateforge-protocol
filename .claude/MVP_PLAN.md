@@ -23,7 +23,7 @@ implementing SFP.
 | ---: | --- | --- | --- |
 | 1 | Endpoint Discovery and Channel Establishment | `N/A` | Designed and documented as a filesystem contract; no protobuf is required. |
 | 2 | Handshake and Version Negotiation | `IMPLEMENTED` | `BootstrapService.Handshake` v1 and generated Python contracts exist. |
-| 3 | Provider Manifest Exchange | `READY` | No manifest protobuf exists. |
+| 3 | Provider Manifest Exchange | `IMPLEMENTED` | `ManifestService.GetManifest` v1, generated typed Python bindings, a packaged schema-1 validation schema, and revision conformance vectors exist; Provider/Agent runtime integration remains in their repositories. |
 | 4 | Health and Availability Monitoring | `N/A` | Uses the standard `grpc.health.v1` contract rather than a StateForge duplicate. |
 | 5 | Capability Assessment | `BLOCKED` | Define after the effective manifest contract. |
 | 6 | Trigger Publication and Acknowledgement | `BLOCKED` | Define after manifest and capability declarations stabilize. |
@@ -44,7 +44,7 @@ generated Python modules, tests, and compatibility checks together.
 | ID | Status | Branch | Pull-request title | Required result |
 | --- | --- | --- | --- | --- |
 | P0 | `IMPLEMENTED` | Existing work | `[TASK][MVP] Define SFP Handshake and Version Negotiation` | Bootstrap v1 selects one mutually supported wire version and binds discovered Provider identity and generation. |
-| P1 | `READY` | `mvp/provider-manifest-exchange` | `[TASK][MVP] Define Provider Manifest Exchange Contract` | Version the effective manifest, Provider identity, runtime requirements, configuration schema, namespaced operation identifiers, trigger declarations, and explicit backup/DR compliance profiles. Do not encode a closed operation enum. |
+| P1 | `IMPLEMENTED` | `mvp/3-taskmvp-define-provider-manifest-exchange-contract` | `[TASK][MVP] Define Provider Manifest Exchange Contract` | Versioned manifest messages, generic operation/trigger declarations, explicit compliance claims, configuration/runtime/platform schemas, canonical revisions, generated Python bindings, and automated contract checks are implemented locally for issue #3. Review and GitHub merge state remain user-owned. |
 | P2 | `BLOCKED` | `mvp/capability-assessment` | `[TASK][MVP] Define Capability Assessment Contract` | Assess a declared operation identifier against a target and return normalized support, requirements, reasons, and assessment identity. |
 | P3 | `BLOCKED` | `mvp/trigger-publication` | `[TASK][MVP] Define Trigger Publication and Acknowledgement Contract` | Define normalized trigger envelopes, source identity, idempotency, publication streaming, and acknowledgement dispositions without introducing SF-AOP. |
 | P4 | `BLOCKED` | `mvp/operation-admission` | `[TASK][MVP] Define Operation Admission and Idempotency Contract` | Define immutable operation envelopes, generic identifiers, request fingerprints, and deterministic admission dispositions. |

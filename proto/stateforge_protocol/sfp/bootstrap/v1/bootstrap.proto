@@ -40,4 +40,3 @@ message HandshakeResponse {
   string provider_runtime_id = 4;
   string session_id = 5;
 }
-

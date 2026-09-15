@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n4stateforge_protocol/sfp/bootstrap/v1/bootstrap.proto\x12\x1bstateforge.sfp.bootstrap.v1\"/\n\x0fProtocolVersion\x12\r\n\x05major\x18\x01 \x01(\r\x12\r\n\x05minor\x18\x02 \x01(\r\"<\n\x0c\x41gentRuntime\x12\x12\n\nruntime_id\x18\x01 \x01(\t\x12\x18\n\x10software_version\x18\x02 \x01(\t\"\xef\x01\n\x10HandshakeRequest\x12@\n\ragent_runtime\x18\x01 \x01(\x0b\x32).stateforge.sfp.bootstrap.v1.AgentRuntime\x12%\n\x1d\x65xpected_provider_instance_id\x18\x02 \x01(\t\x12$\n\x1c\x65xpected_endpoint_generation\x18\x03 \x01(\x04\x12L\n\x16supported_sfp_versions\x18\x04 \x03(\x0b\x32,.stateforge.sfp.bootstrap.v1.ProtocolVersion\"\xcb\x01\n\x11HandshakeResponse\x12\x1c\n\x14provider_instance_id\x18\x01 \x01(\t\x12\x1b\n\x13\x65ndpoint_generation\x18\x02 \x01(\x04\x12J\n\x14selected_sfp_version\x18\x03 \x01(\x0b\x32,.stateforge.sfp.bootstrap.v1.ProtocolVersion\x12\x1b\n\x13provider_runtime_id\x18\x04 \x01(\t\x12\x12\n\nsession_id\x18\x05 \x01(\t2~\n\x10\x42ootstrapService\x12j\n\tHandshake\x12-.stateforge.sfp.bootstrap.v1.HandshakeRequest\x1a..stateforge.sfp.bootstrap.v1.HandshakeResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n4stateforge_protocol/sfp/bootstrap/v1/bootstrap.proto\x12\x1bstateforge.sfp.bootstrap.v1\"=\n\x0fProtocolVersion\x12\x14\n\x05major\x18\x01 \x01(\rR\x05major\x12\x14\n\x05minor\x18\x02 \x01(\rR\x05minor\"X\n\x0c\x41gentRuntime\x12\x1d\n\nruntime_id\x18\x01 \x01(\tR\truntimeId\x12)\n\x10software_version\x18\x02 \x01(\tR\x0fsoftwareVersion\"\xcb\x02\n\x10HandshakeRequest\x12N\n\ragent_runtime\x18\x01 \x01(\x0b\x32).stateforge.sfp.bootstrap.v1.AgentRuntimeR\x0c\x61gentRuntime\x12\x41\n\x1d\x65xpected_provider_instance_id\x18\x02 \x01(\tR\x1a\x65xpectedProviderInstanceId\x12@\n\x1c\x65xpected_endpoint_generation\x18\x03 \x01(\x04R\x1a\x65xpectedEndpointGeneration\x12\x62\n\x16supported_sfp_versions\x18\x04 \x03(\x0b\x32,.stateforge.sfp.bootstrap.v1.ProtocolVersionR\x14supportedSfpVersions\"\xa5\x02\n\x11HandshakeResponse\x12\x30\n\x14provider_instance_id\x18\x01 \x01(\tR\x12providerInstanceId\x12/\n\x13\x65ndpoint_generation\x18\x02 \x01(\x04R\x12\x65ndpointGeneration\x12^\n\x14selected_sfp_version\x18\x03 \x01(\x0b\x32,.stateforge.sfp.bootstrap.v1.ProtocolVersionR\x12selectedSfpVersion\x12.\n\x13provider_runtime_id\x18\x04 \x01(\tR\x11providerRuntimeId\x12\x1d\n\nsession_id\x18\x05 \x01(\tR\tsessionId2~\n\x10\x42ootstrapService\x12j\n\tHandshake\x12-.stateforge.sfp.bootstrap.v1.HandshakeRequest\x1a..stateforge.sfp.bootstrap.v1.HandshakeResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,13 +32,13 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'stateforge_protocol.sfp.boo
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_PROTOCOLVERSION']._serialized_start=85
-  _globals['_PROTOCOLVERSION']._serialized_end=132
-  _globals['_AGENTRUNTIME']._serialized_start=134
-  _globals['_AGENTRUNTIME']._serialized_end=194
-  _globals['_HANDSHAKEREQUEST']._serialized_start=197
-  _globals['_HANDSHAKEREQUEST']._serialized_end=436
-  _globals['_HANDSHAKERESPONSE']._serialized_start=439
-  _globals['_HANDSHAKERESPONSE']._serialized_end=642
-  _globals['_BOOTSTRAPSERVICE']._serialized_start=644
-  _globals['_BOOTSTRAPSERVICE']._serialized_end=770
+  _globals['_PROTOCOLVERSION']._serialized_end=146
+  _globals['_AGENTRUNTIME']._serialized_start=148
+  _globals['_AGENTRUNTIME']._serialized_end=236
+  _globals['_HANDSHAKEREQUEST']._serialized_start=239
+  _globals['_HANDSHAKEREQUEST']._serialized_end=570
+  _globals['_HANDSHAKERESPONSE']._serialized_start=573
+  _globals['_HANDSHAKERESPONSE']._serialized_end=866
+  _globals['_BOOTSTRAPSERVICE']._serialized_start=868
+  _globals['_BOOTSTRAPSERVICE']._serialized_end=994
 # @@protoc_insertion_point(module_scope)

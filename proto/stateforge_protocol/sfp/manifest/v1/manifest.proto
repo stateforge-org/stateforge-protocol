@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package stateforge.sfp.manifest.v1;
+
+import "google/protobuf/struct.proto";
+
+// ManifestService exposes a complete declaration of the running Provider after
+// bootstrap has selected SFP 1.0. It shares the Agent-established local channel.
+// This read-only service does not admit operations or change Provider state.
+service ManifestService {
+  // GetManifest selects the highest mutually supported manifest schema version.
+  // See docs/procedures/provider-manifest.md for validation, errors and retries.
+  rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
+}
+
+// GetManifestRequest binds the read to the identity confirmed by Handshake.
+// Empty/default fields are invalid, not wildcards. At most 32 distinct positive
+// schema versions may be offered; order conveys no preference. Schema 1 is the
+// only manifest schema defined by this package today.
+message GetManifestRequest {
+  // Canonical lowercase UUIDv4 of the installation, copied from Handshake.
+  string expected_provider_instance_id = 1;
+  // Positive endpoint generation copied from Handshake, never a process ID.
+  uint64 expected_endpoint_generation = 2;
+  repeated uint32 supported_manifest_schema_versions = 3;
+}
+
+// GetManifestResponse is one atomic snapshot. A successful response always
+// contains a complete manifest; there is no implicit not-modified response.
+// Schema validation and revision acceptance are independent of gRPC health.
+message GetManifestResponse {
+  // Must equal the request's expected identity and the negotiated session.
+  string provider_instance_id = 1;
+  // Must equal the request's expected generation and the negotiated session.
+  uint64 endpoint_generation = 2;
+  // Highest common schema version, not an SFP or implementation version.
+  uint32 manifest_schema_version = 3;
+  // "sha256:" plus 64 lowercase hex digits. The normative preimage is RFC 8785
+  // canonical JSON of {manifest, manifestSchemaVersion, providerInstanceId}.
+  // The manifest uses ProtoJSON with defaults emitted; generation is excluded.
+  // Protobuf deterministic serialization is NOT a canonical hashing format.
+  string manifest_revision = 4;
+  // Required. At most 1 MiB of canonical JSON for the revision preimage.
+  ProviderManifest manifest = 5;
+}
+
+// ProviderManifest describes implementation-wide declarations, not configured
+// customer resources. It contains no credentials, configured values, component
+// bindings or admission decisions. The packaged manifest.schema.json validates
+// its schema-1 ProtoJSON representation and embedded JSON Schemas.
+message ProviderManifest {
+  // Author-declared dotted lowercase type identity, for example stateforge.git.
+  string provider_identity = 1;
+  // SemVer 2.0.0 of the running implementation, independent of wire versions.
+  string implementation_version = 2;
+  string display_name = 3;
+  // Keys are extensible versioned identifiers, e.g.
+  // stateforge.git/reference.resolve@1. They are not a closed operation enum.
+  map<string, OperationDeclaration> operations = 4;
+  // Unique versioned identifiers for supported third-party target kinds.
+  repeated string target_kinds = 5;
+  // Keys identify declared requirements, e.g. runtime.python or executable.git.
+  map<string, RuntimeRequirement> runtime_requirements = 6;
+  // Explicit supported OS/architecture pairs. Empty does not mean universal.
+  repeated PlatformCompatibility platforms = 7;
+  // Required Draft 2020-12 object schema, with writeOnly secret-bearing inputs.
+  // Values describe configuration shape, never an actual configuration.
+  google.protobuf.Struct configuration_schema = 8;
+  // Keys are versioned trigger identifiers. Empty means no trigger support.
+  map<string, TriggerDeclaration> triggers = 9;
+}
+
+// OperationDeclaration describes an available handler and explicit compliance
+// claims. Declaring a role is not proof of compliance; consumers validate claims
+// against the referenced profile. No StartOperation or execution behavior is
+// introduced by this message.
+message OperationDeclaration {
+  // Required Draft 2020-12 object schemas for typed input and terminal result.
+  google.protobuf.Struct input_schema = 1;
+  google.protobuf.Struct result_schema = 2;
+  // Unique role identifiers, e.g. stateforge.backup.v1.prepare or
+  // stateforge.disaster_recovery.v1.reconstruct. Empty means no compliance claim.
+  // Never infer a role from the operation identifier or a Python method name.
+  repeated string implements = 3;
+  // Declared backup source modes; empty unless an explicit backup/DR role is
+  // claimed. Profile-specific validation belongs to the corresponding contract.
+  repeated string backup_source_modes = 4;
+}
+
+// RuntimeRequirement describes a dependency or prerequisite without transferring
+// installed state, secrets or commands to execute. Version constraint syntax is
+// owned by the named requirement; this contract does not prescribe an evaluator.
+message RuntimeRequirement {
+  string description = 1;
+  // Empty means that the declaration imposes no version constraint.
+  string version_constraint = 2;
+}
+
+// PlatformCompatibility is one supported pair, not a Cartesian product.
+// Values are lowercase identifiers such as linux and x86_64; no wildcards.
+message PlatformCompatibility {
+  string operating_system = 1;
+  string architecture = 2;
+}
+
+// TriggerDeclaration describes a Provider-originated event's payload. Stream,
+// acknowledgement and delivery semantics belong to a later SFP procedure.
+message TriggerDeclaration {
+  // Required Draft 2020-12 object schema, never an event instance.
+  google.protobuf.Struct payload_schema = 1;
+}

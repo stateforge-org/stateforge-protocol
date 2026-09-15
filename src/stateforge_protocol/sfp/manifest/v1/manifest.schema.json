@@ -1,0 +1,461 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:stateforge:sfp:manifest:1",
+  "title": "SFP manifest schema 1 ProtoJSON validation",
+  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure; session binding, negotiation, revision integrity, JSON reference resolution and semantic compliance require consumer checks described in the procedure specification.",
+  "$ref": "#/$defs/getManifestResponse",
+  "$defs": {
+    "instanceId": {
+      "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+    },
+    "generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "pattern": "^[1-9][0-9]*(?![\\s\\S])"
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+/[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*@[1-9][0-9]*(?![\\s\\S])"
+    },
+    "dottedIdentifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+(?![\\s\\S])"
+    },
+    "semver": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 128,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(?![\\s\\S])"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+    },
+    "schemaDocument": {
+      "allOf": [
+        {
+          "$ref": "https://json-schema.org/draft/2020-12/schema"
+        },
+        {
+          "$ref": "#/$defs/schemaRules"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "$schema",
+        "type"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://json-schema.org/draft/2020-12/schema"
+        },
+        "type": {
+          "const": "object"
+        }
+      }
+    },
+    "schemaRules": {
+      "description": "Additional schema-only restrictions: local references and no defaults, examples, const or enum on writeOnly fields. Semantic secret detection remains the runtime author responsibility.",
+      "type": [
+        "object",
+        "boolean"
+      ],
+      "if": {
+        "type": "object",
+        "required": [
+          "writeOnly"
+        ],
+        "properties": {
+          "writeOnly": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "default"
+              ]
+            },
+            {
+              "required": [
+                "examples"
+              ]
+            },
+            {
+              "required": [
+                "const"
+              ]
+            },
+            {
+              "required": [
+                "enum"
+              ]
+            }
+          ]
+        }
+      },
+      "properties": {
+        "$ref": {
+          "type": "string",
+          "pattern": "^#"
+        },
+        "$dynamicRef": {
+          "type": "string",
+          "pattern": "^#"
+        },
+        "$id": false,
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/schemaRules"
+          }
+        },
+        "patternProperties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/schemaRules"
+          }
+        },
+        "$defs": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/schemaRules"
+          }
+        },
+        "dependentSchemas": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/schemaRules"
+          }
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/schemaRules"
+        },
+        "unevaluatedProperties": {
+          "$ref": "#/$defs/schemaRules"
+        },
+        "propertyNames": {
+          "$ref": "#/$defs/schemaRules"
+        },
+        "items": {
+          "$ref": "#/$defs/schemaRules"
+        },
+        "unevaluatedItems": {
+          "$ref": "#/$defs/schemaRules"
+        },
+        "contains": {
+          "$ref": "#/$defs/schemaRules"
+        },
+        "not": {
+          "$ref": "#/$defs/schemaRules"
+        },
+        "if": {
+          "$ref": "#/$defs/schemaRules"
+        },
+        "then": {
+          "$ref": "#/$defs/schemaRules"
+        },
+        "else": {
+          "$ref": "#/$defs/schemaRules"
+        },
+        "contentSchema": {
+          "$ref": "#/$defs/schemaRules"
+        },
+        "allOf": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/schemaRules"
+          }
+        },
+        "anyOf": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/schemaRules"
+          }
+        },
+        "oneOf": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/schemaRules"
+          }
+        },
+        "prefixItems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/schemaRules"
+          }
+        },
+        "definitions": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/schemaRules"
+          }
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "properties": {
+        "inputSchema": {
+          "$ref": "#/$defs/schemaDocument"
+        },
+        "resultSchema": {
+          "$ref": "#/$defs/schemaDocument"
+        },
+        "implements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dottedIdentifier"
+          },
+          "minItems": 0,
+          "maxItems": 64,
+          "uniqueItems": true
+        },
+        "backupSourceModes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "staged_filesystem",
+              "provider_reference"
+            ]
+          },
+          "minItems": 0,
+          "maxItems": 2,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "inputSchema",
+        "resultSchema",
+        "implements",
+        "backupSourceModes"
+      ],
+      "additionalProperties": false,
+      "if": {
+        "required": [
+          "backupSourceModes"
+        ],
+        "properties": {
+          "backupSourceModes": {
+            "minItems": 1
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "implements": {
+            "contains": {
+              "type": "string",
+              "pattern": "^stateforge\\.(backup|disaster_recovery)\\.v[1-9][0-9]*\\."
+            }
+          }
+        }
+      }
+    },
+    "runtimeRequirement": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "versionConstraint": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 255
+        }
+      },
+      "required": [
+        "description",
+        "versionConstraint"
+      ],
+      "additionalProperties": false
+    },
+    "platform": {
+      "type": "object",
+      "properties": {
+        "operatingSystem": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*(?![\\s\\S])"
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "operatingSystem",
+        "architecture"
+      ],
+      "additionalProperties": false
+    },
+    "trigger": {
+      "type": "object",
+      "properties": {
+        "payloadSchema": {
+          "$ref": "#/$defs/schemaDocument"
+        }
+      },
+      "required": [
+        "payloadSchema"
+      ],
+      "additionalProperties": false
+    },
+    "providerManifest": {
+      "type": "object",
+      "properties": {
+        "providerIdentity": {
+          "$ref": "#/$defs/dottedIdentifier"
+        },
+        "implementationVersion": {
+          "$ref": "#/$defs/semver"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "operations": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/operation"
+          },
+          "minProperties": 0,
+          "maxProperties": 1024
+        },
+        "targetKinds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "minItems": 1,
+          "maxItems": 1024,
+          "uniqueItems": true
+        },
+        "runtimeRequirements": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/dottedIdentifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/runtimeRequirement"
+          },
+          "minProperties": 0,
+          "maxProperties": 1024
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/platform"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "configurationSchema": {
+          "$ref": "#/$defs/schemaDocument"
+        },
+        "triggers": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/trigger"
+          },
+          "minProperties": 0,
+          "maxProperties": 1024
+        }
+      },
+      "required": [
+        "providerIdentity",
+        "implementationVersion",
+        "displayName",
+        "operations",
+        "targetKinds",
+        "runtimeRequirements",
+        "platforms",
+        "configurationSchema",
+        "triggers"
+      ],
+      "additionalProperties": false
+    },
+    "getManifestRequest": {
+      "type": "object",
+      "properties": {
+        "expectedProviderInstanceId": {
+          "$ref": "#/$defs/instanceId"
+        },
+        "expectedEndpointGeneration": {
+          "$ref": "#/$defs/generation"
+        },
+        "supportedManifestSchemaVersions": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          },
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "expectedProviderInstanceId",
+        "expectedEndpointGeneration",
+        "supportedManifestSchemaVersions"
+      ],
+      "additionalProperties": false
+    },
+    "getManifestResponse": {
+      "type": "object",
+      "properties": {
+        "providerInstanceId": {
+          "$ref": "#/$defs/instanceId"
+        },
+        "endpointGeneration": {
+          "$ref": "#/$defs/generation"
+        },
+        "manifestSchemaVersion": {
+          "const": 1
+        },
+        "manifestRevision": {
+          "$ref": "#/$defs/revision"
+        },
+        "manifest": {
+          "$ref": "#/$defs/providerManifest"
+        }
+      },
+      "required": [
+        "providerInstanceId",
+        "endpointGeneration",
+        "manifestSchemaVersion",
+        "manifestRevision",
+        "manifest"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
