@@ -223,47 +223,14 @@
           "minItems": 0,
           "maxItems": 64,
           "uniqueItems": true
-        },
-        "backupSourceModes": {
-          "type": "array",
-          "items": {
-            "enum": [
-              "staged_filesystem",
-              "provider_reference"
-            ]
-          },
-          "minItems": 0,
-          "maxItems": 2,
-          "uniqueItems": true
         }
       },
       "required": [
         "inputSchema",
         "resultSchema",
-        "implements",
-        "backupSourceModes"
+        "implements"
       ],
-      "additionalProperties": false,
-      "if": {
-        "required": [
-          "backupSourceModes"
-        ],
-        "properties": {
-          "backupSourceModes": {
-            "minItems": 1
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "implements": {
-            "contains": {
-              "type": "string",
-              "pattern": "^stateforge\\.(backup|disaster_recovery)\\.v[1-9][0-9]*\\."
-            }
-          }
-        }
-      }
+      "additionalProperties": false
     },
     "runtimeRequirement": {
       "type": "object",

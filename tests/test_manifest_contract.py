@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import rfc8785
-from google.protobuf import json_format
+from google.protobuf import descriptor_pb2, json_format
 from google.protobuf.descriptor import FieldDescriptor
 from jsonschema import Draft202012Validator, ValidationError
 
@@ -248,7 +248,6 @@ def test_compliance_claims_and_trigger_schemas_survive_wire(
     manifest = response["manifest"]
     operation = next(iter(manifest["operations"].values()))
     operation["implements"] = ["stateforge.backup.v1.prepare"]
-    operation["backupSourceModes"] = ["provider_reference"]
     manifest["triggers"]["stateforge.git/reference.changed@1"] = {
         "payloadSchema": copy.deepcopy(operation["resultSchema"])
     }
@@ -267,13 +266,6 @@ def test_compliance_claims_and_trigger_schemas_survive_wire(
     assert "stateforge.git/reference.changed@1" in decoded.manifest.triggers
 
 
-def test_backup_modes_require_explicit_profile_claim(response, validator):
-    operation = next(iter(response["manifest"]["operations"].values()))
-    operation["backupSourceModes"] = ["provider_reference"]
-    with pytest.raises(ValidationError):
-        validator.validate(response)
-
-
 def test_unchanged_revision_is_independent_of_map_order_and_generation(
     response,
 ) -> None:
@@ -284,7 +276,8 @@ def test_unchanged_revision_is_independent_of_map_order_and_generation(
 
 
 @pytest.mark.parametrize(
-    "change", ["identity", "version", "configuration", "operation", "profile"]
+    "change",
+    ["identity", "version", "configuration", "operation", "profile", "result"],
 )
 def test_interoperability_changes_change_revision(response, change):
     original = hashlib.sha256(_preimage(response)).digest()
@@ -299,6 +292,10 @@ def test_interoperability_changes_change_revision(response, change):
         ] = 1
     elif change == "operation":
         manifest["operations"] = {}
+    elif change == "result":
+        next(iter(manifest["operations"].values()))["resultSchema"][
+            "properties"
+        ] = {"count": {"type": "integer"}}
     else:
         next(iter(manifest["operations"].values()))["implements"] = [
             "stateforge.backup.v1.prepare"
@@ -316,3 +313,137 @@ def test_protobuf_decoding_does_not_perform_semantic_validation(validator):
                 empty, always_print_fields_with_no_presence=True
             )
         )
+
+
+def test_operation_fields_and_legacy_reservations():
+    descriptor = manifest_pb2.OperationDeclaration.DESCRIPTOR
+    assert {field.name: field.number for field in descriptor.fields} == {
+        "input_schema": 1,
+        "result_schema": 2,
+        "implements": 3,
+    }
+    proto = descriptor_pb2.DescriptorProto()
+    descriptor.CopyToProto(proto)
+    assert [(item.start, item.end) for item in proto.reserved_range] == [
+        (4, 5)
+    ]
+    assert list(proto.reserved_name) == ["backup_source_modes"]
+
+
+def test_checked_in_legacy_property_fixture_is_rejected():
+    response = json.loads(
+        (_FIXTURES / "invalid-backup-source-modes.json").read_text()
+    )
+    with pytest.raises(ValidationError, match="Additional properties"):
+        Draft202012Validator(_SCHEMA).validate(response)
+    with pytest.raises(json_format.ParseError, match="backupSourceModes"):
+        json_format.ParseDict(response, manifest_pb2.GetManifestResponse())
+
+
+@pytest.mark.parametrize("field", ["backupSourceModes", "backup_source_modes"])
+@pytest.mark.parametrize("value", [[], ["provider_reference"]])
+def test_no_legacy_property_even_when_empty(response, field, value):
+    operation = next(iter(response["manifest"]["operations"].values()))
+    operation[field] = value
+    with pytest.raises(ValidationError, match="Additional properties"):
+        Draft202012Validator(_SCHEMA).validate(response)
+
+
+@pytest.mark.parametrize(
+    "field", ["inputSchema", "resultSchema", "implements"]
+)
+def test_all_declaration_fields_are_explicitly_required(response, field):
+    operation = next(iter(response["manifest"]["operations"].values()))
+    del operation[field]
+    with pytest.raises(ValidationError, match="required property"):
+        Draft202012Validator(_SCHEMA).validate(response)
+
+
+@pytest.mark.parametrize(
+    ("identifier", "roles"),
+    [
+        ("stateforge.git/reference.resolve@1", []),
+        ("example.vendor/backup.prepare@3", []),
+        ("example.vendor/collect@1", ["stateforge.backup.v1.prepare"]),
+        (
+            "example.vendor/reconstruct@1",
+            ["stateforge.disaster_recovery.v1.reconstruct"],
+        ),
+        ("example.vendor/custom@2", ["example.vendor.manifest_pb2.custom"]),
+    ],
+)
+def test_all_operation_categories_share_generic_declaration(
+    response, identifier, roles
+):
+    # These are structural claim examples, not certification of the future
+    # backup/DR profiles. Their exact schemas belong to those milestones.
+    operation = next(iter(response["manifest"]["operations"].values()))
+    operation["implements"] = roles
+    response["manifest"]["operations"] = {identifier: operation}
+    Draft202012Validator(_SCHEMA).validate(response)
+    message = json_format.ParseDict(
+        response, manifest_pb2.GetManifestResponse()
+    )
+    projected = json_format.MessageToDict(
+        message, always_print_fields_with_no_presence=True
+    )["manifest"]["operations"][identifier]
+    assert projected == operation
+    assert set(projected) == {"inputSchema", "resultSchema", "implements"}
+    assert projected["implements"] == roles
+
+
+def test_incidental_result_shape_creates_no_manifest_semantics(response):
+    operation = next(iter(response["manifest"]["operations"].values()))
+    # A custom schema can use these words as data without a compliance role.
+    operation["resultSchema"]["properties"] = {
+        "backupSourceModes": {"type": "string"},
+        "kind": {"enum": ["materialized_source", "provider_reference"]},
+    }
+    Draft202012Validator(_SCHEMA).validate(response)
+    message = json_format.ParseDict(
+        response, manifest_pb2.GetManifestResponse()
+    )
+    projected = json_format.MessageToDict(
+        message, always_print_fields_with_no_presence=True
+    )
+    assert projected == response
+    assert not operation["implements"]
+    assert set(operation) == {"inputSchema", "resultSchema", "implements"}
+
+
+@pytest.mark.parametrize("field", ["inputSchema", "resultSchema"])
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("$schema", "http://json-schema.org/draft-07/schema#"),
+        ("type", "string"),
+        ("required", "invalid"),
+        ("$ref", "https://example.invalid/schema"),
+        ("$id", "urn:example:change-base"),
+    ],
+)
+def test_input_and_result_schemas_use_bounded_draft_2020_12(
+    response, field, key, value
+):
+    operation = next(iter(response["manifest"]["operations"].values()))
+    operation[field][key] = value
+    with pytest.raises(ValidationError):
+        Draft202012Validator(_SCHEMA).validate(response)
+
+
+def test_revision_ignores_nested_map_order_and_generation(response):
+    before = _preimage(response)
+
+    def reverse_maps(value):
+        if isinstance(value, dict):
+            return {
+                key: reverse_maps(item)
+                for key, item in reversed(value.items())
+            }
+        if isinstance(value, list):
+            return [reverse_maps(item) for item in value]
+        return value
+
+    reordered = reverse_maps(response)
+    reordered["endpointGeneration"] = "5"
+    assert _preimage(reordered) == before

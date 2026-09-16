@@ -75,16 +75,19 @@ message ProviderManifest {
 // against the referenced profile. No StartOperation or execution behavior is
 // introduced by this message.
 message OperationDeclaration {
+  // Removed operation-specific result metadata; never reuse its number/name.
+  reserved 4;
+  reserved "backup_source_modes";
+
   // Required Draft 2020-12 object schemas for typed input and terminal result.
   google.protobuf.Struct input_schema = 1;
+  // The sole declaration of terminal result shape for this versioned operation.
+  // Recognized compliance roles require the exact schemas of their profile.
   google.protobuf.Struct result_schema = 2;
   // Unique role identifiers, e.g. stateforge.backup.v1.prepare or
   // stateforge.disaster_recovery.v1.reconstruct. Empty means no compliance claim.
   // Never infer a role from the operation identifier or a Python method name.
   repeated string implements = 3;
-  // Declared backup source modes; empty unless an explicit backup/DR role is
-  // claimed. Profile-specific validation belongs to the corresponding contract.
-  repeated string backup_source_modes = 4;
 }
 
 // RuntimeRequirement describes a dependency or prerequisite without transferring
