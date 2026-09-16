@@ -159,7 +159,7 @@ message CapabilityFinding {
   repeated ReasonDetail reasons = 4;
   // Structured constraints and limitations required to use the operation
   // safely against this target, for example a required read-only mode or
-  // a rate limit.
+  // a rate limit. Unique by constraint_id.
   repeated ConstraintDetail constraints = 5;
   // Subset of the operation's accepted-manifest-declared
   // backup_source_modes relevant to this target's current assessed state.

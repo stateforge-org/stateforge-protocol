@@ -317,7 +317,7 @@ class CapabilityFinding(_message.Message):
     def constraints(self) -> _containers.RepeatedCompositeFieldContainer[Global___ConstraintDetail]:
         """Structured constraints and limitations required to use the operation
         safely against this target, for example a required read-only mode or
-        a rate limit.
+        a rate limit. Unique by constraint_id.
         """
 
     @_builtins.property

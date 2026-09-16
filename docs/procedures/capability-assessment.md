@@ -45,7 +45,7 @@ the target, dispatch work, or rely on a hidden write as a probe.
 | `expected_session_id` | Copied from `HandshakeResponse.session_id`; the actual session-level fence. |
 | `expected_manifest_revision` | Copied from the Agent's accepted `GetManifestResponse.manifest_revision`. |
 | `target_kind` | Single declared target kind, `namespace/name@major`, must be one of the accepted manifest's `target_kinds`. |
-| `target_configuration` | Target-specific configuration needed for inspection. Structurally must be an object; its contents are validated against the accepted manifest's `configuration_schema` for `target_kind` at runtime, not by this package. |
+| `target_configuration` | Target-specific configuration needed for inspection. Structurally a bounded object (see limits below); its contents are validated against the accepted manifest's `configuration_schema` for `target_kind` at runtime, not by this package. |
 | `execution_context` | Bounded, non-secret situational metadata the Provider inspection may use to refine a finding. Not manifest-schema-validated and never treated as part of the target's identity or configuration. |
 | `operation_identifiers` | Bounded, nonempty, unique set of `namespace/name@major` identifiers. Every entry must be declared in the accepted manifest's `operations`. Order conveys no preference; duplicates are invalid. |
 
@@ -99,12 +99,16 @@ requirement is never evidence of satisfaction, and an unverified
 - `SUPPORTED` must not carry a `requirement_findings` entry in state
   `UNSATISFIED` or `UNKNOWN`.
 - `SUPPORTED_WITH_REQUIREMENTS` must carry at least one `requirement_findings`
-  or `constraints` entry — an actionable item, not an empty finding.
+  entry in state `UNSATISFIED` or `UNKNOWN`, or at least one `constraints`
+  entry — an actual unmet item, not merely any requirement or an empty
+  finding. A finding whose requirements are all already `SATISFIED` and
+  which carries no constraints has nothing left pending and does not justify
+  this state.
 - `UNSUPPORTED` and `INDETERMINATE` must carry at least one `reasons` entry.
-- `requirement_findings[*].requirement_id` and `reasons[*].reason_code` are
-  unique within one finding. JSON Schema cannot express uniqueness by a
-  sub-key over an array of objects; this rule is enforced by dedicated tests,
-  not the packaged schema.
+- `requirement_findings[*].requirement_id`, `reasons[*].reason_code`, and
+  `constraints[*].constraint_id` are each unique within one finding. JSON
+  Schema cannot express uniqueness by a sub-key over an array of objects;
+  this rule is enforced by dedicated tests, not the packaged schema.
 
 ### Backup source modes
 
@@ -148,27 +152,45 @@ matching [provider manifest exchange](provider-manifest.md#structural-and-semant
 
 The protobuf definition owns field names, numbers, types, and service shape.
 The JSON Schema adds required-field, identifier, uniqueness, count, and the
-cross-field invariants above. It validates `target_configuration` and
-`execution_context` only as `{"type": "object"}`; validating their contents
-against the accepted manifest's `configuration_schema` is a runtime semantic
-check this static schema cannot perform. It likewise cannot verify that
-`backup_source_modes` is actually a subset of what the accepted manifest
-declared for that operation, or that a response contains exactly one finding
-per requested operation with no duplicates or omissions — both are consumer
-and test-suite responsibilities, not schema responsibilities.
+cross-field invariants above. `target_configuration` and `execution_context`
+are each bounded to at most 32 top-level entries, each entry either a scalar
+(at most 2,048 characters) or one further level of nesting (an array of at
+most 32 scalars, or an object of at most 32 scalar-valued entries) — bounding
+breadth, nesting depth, and leaf length so a degenerate or oversized payload
+cannot pass structural validation. This is a structural ceiling only, not a
+model of legitimate configuration shapes: validating their contents against
+the accepted manifest's `configuration_schema` for `target_kind` is a
+runtime semantic check this static schema cannot perform. The schema
+likewise cannot verify that `backup_source_modes` is actually a subset of
+what the accepted manifest declared for that operation, or that a response
+contains exactly one finding per requested operation with no duplicates or
+omissions — both are consumer and test-suite responsibilities, not schema
+responsibilities.
 
 | Limit | Maximum |
 | --- | ---: |
+| Serialized request | 8 MiB |
+| Serialized response | 16 MiB |
+| `target_configuration` / `execution_context` nesting depth | 2 levels (root object, one nested array/object) |
+| `target_configuration` / `execution_context` entries per level | 32 |
+| `target_configuration` / `execution_context` scalar leaf | 2,048 characters |
 | `operation_identifiers` per request | 64 unique entries |
 | `requirement_findings` per finding | 64 entries, unique `requirement_id` |
 | `reasons` per finding | 16 entries, unique `reason_code` |
-| `constraints` per finding | 32 entries |
+| `constraints` per finding | 32 entries, unique `constraint_id` |
 | `backup_source_modes` per finding | 2 entries (matches P1 exactly) |
 | `explanation` | 1,024 characters |
 | `RequirementFinding.description` | 2,048 characters |
 | `version_constraint` | 255 characters (matches `RuntimeRequirement.version_constraint`) |
 | `ConstraintDetail.value` | 512 characters |
 | `ConstraintDetail.explanation` | 1,024 characters |
+
+Configure transport message limits before decoding, matching
+[provider manifest exchange](provider-manifest.md#structural-and-semantic-validation).
+The serialized request/response limits above are the structural worst case
+these field-level bounds produce (roughly 4.3 MiB for a maximally filled
+request, roughly 15 MiB for a 64-finding response with every collection at
+its bound), rounded up for transport-layer configuration margin.
 
 ## Assessment semantics and correlation
 

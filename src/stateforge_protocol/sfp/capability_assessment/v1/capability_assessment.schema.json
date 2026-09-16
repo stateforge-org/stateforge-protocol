@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:stateforge:sfp:capability_assessment:1",
   "title": "SFP capability-assessment schema 1 ProtoJSON validation",
-  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure and the finding-level support/reason/backup-source-mode invariants; session binding, manifest-revision fencing, per-operation completeness (one finding per requested operation, no duplicates or omissions), uniqueness of requirementId/reasonCode within one finding, and semantic validation of targetConfiguration against the accepted manifest's configuration_schema require consumer checks described in the procedure specification and are exercised by dedicated tests instead.",
+  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure, bounded targetConfiguration/executionContext shape, and the finding-level support/reason/backup-source-mode invariants; session binding, manifest-revision fencing, per-operation completeness (one finding per requested operation, no duplicates or omissions), uniqueness of requirementId/reasonCode/constraintId within one finding, and full semantic validation of targetConfiguration against the accepted manifest's configuration_schema require consumer checks described in the procedure specification and are exercised by dedicated tests instead.",
   "$ref": "#/$defs/assessCapabilitiesResponse",
   "$defs": {
     "instanceId": {
@@ -60,6 +60,56 @@
         "REQUIREMENT_STATE_UNSATISFIED",
         "REQUIREMENT_STATE_UNKNOWN"
       ]
+    },
+    "boundedScalar": {
+      "type": [
+        "null",
+        "boolean",
+        "number",
+        "string"
+      ],
+      "maxLength": 2048
+    },
+    "boundedArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/boundedScalar"
+      },
+      "maxItems": 32
+    },
+    "boundedNestedObject": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": {
+        "maxLength": 128
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/boundedScalar"
+      }
+    },
+    "boundedValue": {
+      "description": "A leaf value, or one further level of array/object nesting containing only leaf values. This deliberately bounds breadth (maxItems/maxProperties) and leaf string length so a degenerate or oversized payload cannot pass structural validation. It is not a full model of legitimate configuration shapes: validating targetConfiguration's actual contents against the accepted manifest's configuration_schema for target_kind remains a runtime semantic check this static file cannot perform.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/boundedScalar"
+        },
+        {
+          "$ref": "#/$defs/boundedArray"
+        },
+        {
+          "$ref": "#/$defs/boundedNestedObject"
+        }
+      ]
+    },
+    "boundedContext": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": {
+        "maxLength": 128
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/boundedValue"
+      }
     },
     "backupSourceModes": {
       "type": "array",
@@ -219,7 +269,7 @@
           }
         },
         {
-          "description": "SUPPORTED_WITH_REQUIREMENTS needs at least one actionable requirement finding or constraint.",
+          "description": "SUPPORTED_WITH_REQUIREMENTS needs at least one unmet (unsatisfied or unknown) requirement finding, or at least one constraint; an all-satisfied requirement list with no constraints leaves nothing actually pending and does not justify this state.",
           "if": {
             "properties": {
               "supportState": {
@@ -232,7 +282,16 @@
               {
                 "properties": {
                   "requirementFindings": {
-                    "minItems": 1
+                    "contains": {
+                      "properties": {
+                        "state": {
+                          "enum": [
+                            "REQUIREMENT_STATE_UNSATISFIED",
+                            "REQUIREMENT_STATE_UNKNOWN"
+                          ]
+                        }
+                      }
+                    }
                   }
                 }
               },
@@ -290,10 +349,10 @@
           "$ref": "#/$defs/identifier"
         },
         "targetConfiguration": {
-          "type": "object"
+          "$ref": "#/$defs/boundedContext"
         },
         "executionContext": {
-          "type": "object"
+          "$ref": "#/$defs/boundedContext"
         },
         "operationIdentifiers": {
           "type": "array",

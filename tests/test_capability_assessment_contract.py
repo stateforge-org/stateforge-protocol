@@ -32,6 +32,11 @@ _REQUIREMENT_SCHEMA = {
     "$ref": "#/$defs/requirementFinding",
     "$defs": _SCHEMA["$defs"],
 }
+_MANIFEST_SCHEMA = json.loads(
+    files("stateforge_protocol.sfp.manifest.v1")
+    .joinpath("manifest.schema.json")
+    .read_text()
+)
 
 
 @pytest.fixture
@@ -48,6 +53,11 @@ def backup_response():
 @pytest.fixture
 def request_data():
     return json.loads((_FIXTURES / "request.json").read_text())
+
+
+@pytest.fixture
+def manifest_response():
+    return json.loads((_FIXTURES / "accepted-manifest.json").read_text())
 
 
 @pytest.fixture
@@ -320,6 +330,43 @@ def test_supported_with_requirements_needs_an_actionable_item(
         validator.validate(response)
 
 
+def test_supported_with_requirements_rejects_all_satisfied_with_no_constraints(
+    response, validator
+) -> None:
+    # A finding whose requirements are all already SATISFIED, and which
+    # carries no constraints, has nothing left pending: it does not justify
+    # SUPPORTED_WITH_REQUIREMENTS even though "a" requirement is present.
+    finding = response["findings"][1]
+    finding["requirementFindings"] = [
+        {
+            "requirementId": "example.vendor.requirement",
+            "state": "REQUIREMENT_STATE_SATISFIED",
+            "description": "Already satisfied.",
+            "versionConstraint": "",
+        }
+    ]
+    finding["constraints"] = []
+    with pytest.raises(ValidationError):
+        validator.validate(response)
+
+
+def test_supported_with_requirements_allows_all_satisfied_with_a_constraint(
+    response, validator
+) -> None:
+    finding = response["findings"][1]
+    finding["requirementFindings"] = [
+        {
+            "requirementId": "example.vendor.requirement",
+            "state": "REQUIREMENT_STATE_SATISFIED",
+            "description": "Already satisfied.",
+            "versionConstraint": "",
+        }
+    ]
+    # A constraint alone (e.g. a standing rate limit) still justifies the
+    # state even when every requirement happens to already be satisfied.
+    validator.validate(response)
+
+
 @pytest.mark.parametrize(
     "support_state",
     ["SUPPORT_STATE_UNSUPPORTED", "SUPPORT_STATE_INDETERMINATE"],
@@ -334,7 +381,7 @@ def test_terminal_negative_states_need_a_reason(
         validator.validate(response)
 
 
-def test_duplicate_finding_identifiers_are_not_schema_enforced(
+def test_duplicate_requirement_ids_are_not_schema_enforced(
     response, validator
 ) -> None:
     # JSON Schema 2020-12 has no practical way to express "unique by a
@@ -347,6 +394,26 @@ def test_duplicate_finding_identifiers_are_not_schema_enforced(
     )
     validator.validate(response)  # still schema-valid
     ids = [r["requirementId"] for r in finding["requirementFindings"]]
+    assert len(ids) != len(set(ids))
+
+
+def test_duplicate_reason_codes_are_not_schema_enforced(
+    response, validator
+) -> None:
+    finding = response["findings"][2]
+    finding["reasons"].append(copy.deepcopy(finding["reasons"][0]))
+    validator.validate(response)  # still schema-valid
+    codes = [r["reasonCode"] for r in finding["reasons"]]
+    assert len(codes) != len(set(codes))
+
+
+def test_duplicate_constraint_ids_are_not_schema_enforced(
+    response, validator
+) -> None:
+    finding = response["findings"][1]
+    finding["constraints"].append(copy.deepcopy(finding["constraints"][0]))
+    validator.validate(response)  # still schema-valid
+    ids = [c["constraintId"] for c in finding["constraints"]]
     assert len(ids) != len(set(ids))
 
 
@@ -574,8 +641,44 @@ def test_target_configuration_and_execution_context_must_be_objects(
 def test_target_configuration_and_execution_context_accept_objects(
     request_data, field
 ) -> None:
-    request_data[field] = {"nested": {"anything": [1, 2, 3]}}
+    # One level of nesting (an array or object of scalars) is allowed under
+    # each top-level entry; a second level is not (see the bounds test
+    # below), matching the documented "root object, one nested level" cap.
+    request_data[field] = {
+        "list": [1, 2, 3],
+        "nested": {"anything": "a value"},
+        "scalar": "value",
+    }
     _REQUEST_VALIDATOR.validate(request_data)
+
+
+@pytest.mark.parametrize("field", ["targetConfiguration", "executionContext"])
+def test_target_configuration_and_execution_context_bound_nesting_depth(
+    request_data, field
+) -> None:
+    # A second level of nesting (an object/array nested inside an
+    # already-nested object/array) exceeds the documented depth bound.
+    request_data[field] = {"nested": {"anything": [1, 2, 3]}}
+    with pytest.raises(ValidationError):
+        _REQUEST_VALIDATOR.validate(request_data)
+
+
+@pytest.mark.parametrize("field", ["targetConfiguration", "executionContext"])
+def test_target_configuration_and_execution_context_bound_leaf_length(
+    request_data, field
+) -> None:
+    request_data[field] = {"huge": "x" * 1_000_000}
+    with pytest.raises(ValidationError):
+        _REQUEST_VALIDATOR.validate(request_data)
+
+
+@pytest.mark.parametrize("field", ["targetConfiguration", "executionContext"])
+def test_target_configuration_and_execution_context_bound_breadth(
+    request_data, field
+) -> None:
+    request_data[field] = {f"key_{i}": "value" for i in range(33)}
+    with pytest.raises(ValidationError):
+        _REQUEST_VALIDATOR.validate(request_data)
 
 
 def test_response_schema_has_no_configuration_or_secret_field() -> None:
@@ -668,3 +771,95 @@ def test_string_length_bounds_enforced(
     target[path[-1]] = value
     with pytest.raises(ValidationError):
         validator.validate(response)
+
+
+# -- Paired accepted-manifest conformance ----------------------------------
+#
+# request.json, response-mixed-states.json, and response-backup-source-modes
+# .json share identity, manifest revision, target kind, operation, and
+# configuration values with accepted-manifest.json, so they can be used
+# together as one interoperable conformance set: this is what a Provider or
+# Agent integration test actually pairs against, not a manifest fixture
+# declaring an unrelated single operation and a different identity/revision.
+
+
+def test_accepted_manifest_fixture_is_a_valid_p1_manifest(
+    manifest_response,
+) -> None:
+    Draft202012Validator(_MANIFEST_SCHEMA).validate(manifest_response)
+
+
+def test_request_and_response_correlate_with_accepted_manifest(
+    request_data, response, manifest_response
+) -> None:
+    assert (
+        request_data["expectedProviderInstanceId"]
+        == manifest_response["providerInstanceId"]
+    )
+    assert (
+        request_data["expectedManifestRevision"]
+        == manifest_response["manifestRevision"]
+    )
+    assert (
+        response["providerInstanceId"]
+        == manifest_response["providerInstanceId"]
+    )
+    assert (
+        response["manifestRevision"] == manifest_response["manifestRevision"]
+    )
+
+
+def test_target_kind_is_declared_in_accepted_manifest(
+    request_data, manifest_response
+) -> None:
+    assert (
+        request_data["targetKind"]
+        in manifest_response["manifest"]["targetKinds"]
+    )
+
+
+def test_operation_identifiers_are_declared_in_accepted_manifest(
+    request_data, manifest_response
+) -> None:
+    declared = set(manifest_response["manifest"]["operations"])
+    requested = set(request_data["operationIdentifiers"])
+    assert requested <= declared
+
+
+def test_target_configuration_validates_against_accepted_manifest_schema(
+    request_data, manifest_response
+) -> None:
+    # This is the semantic check the packaged capability-assessment schema
+    # explicitly cannot perform on its own (see "Structural and semantic
+    # validation" in the procedure page): validating target_configuration's
+    # actual contents against the accepted manifest's configuration_schema
+    # for target_kind.
+    configuration_schema = manifest_response["manifest"]["configurationSchema"]
+    Draft202012Validator(configuration_schema).validate(
+        request_data["targetConfiguration"]
+    )
+
+
+@pytest.mark.parametrize("fixture_name", ["response", "backup_response"])
+def test_backup_source_modes_are_a_subset_of_accepted_manifest_declaration(
+    request, fixture_name, manifest_response
+) -> None:
+    data = request.getfixturevalue(fixture_name)
+    operations = manifest_response["manifest"]["operations"]
+    for finding in data["findings"]:
+        if not finding["backupSourceModes"]:
+            continue
+        declared = set(
+            operations[finding["operationIdentifier"]]["backupSourceModes"]
+        )
+        assert set(finding["backupSourceModes"]) <= declared
+
+
+def test_ordinary_operation_backup_relevance_is_absent_from_manifest_too(
+    manifest_response,
+) -> None:
+    ordinary = manifest_response["manifest"]["operations"][
+        "stateforge.git/reference.resolve@1"
+    ]
+    assert ordinary["backupSourceModes"] == []
+    assert ordinary["implements"] == []
