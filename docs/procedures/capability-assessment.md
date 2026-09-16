@@ -45,7 +45,7 @@ the target, dispatch work, or rely on a hidden write as a probe.
 | `expected_session_id` | Copied from `HandshakeResponse.session_id`; the actual session-level fence. |
 | `expected_manifest_revision` | Copied from the Agent's accepted `GetManifestResponse.manifest_revision`. |
 | `target_kind` | Single declared target kind, `namespace/name@major`, must be one of the accepted manifest's `target_kinds`. |
-| `target_configuration` | Target-specific configuration needed for inspection. Structurally a bounded object (see limits below); its contents are validated against the accepted manifest's `configuration_schema` for `target_kind` at runtime, not by this package. |
+| `target_configuration` | Target-specific configuration needed for inspection. Structurally a bounded object (see limits below); its contents are validated against the accepted manifest's Provider-level `configuration_schema` at runtime, not by this package. `target_kind` membership is validated separately. |
 | `execution_context` | Bounded, non-secret situational metadata the Provider inspection may use to refine a finding. Not manifest-schema-validated and never treated as part of the target's identity or configuration. |
 | `operation_identifiers` | Bounded, nonempty, unique set of `namespace/name@major` identifiers. Every entry must be declared in the accepted manifest's `operations`. Order conveys no preference; duplicates are invalid. |
 
@@ -149,31 +149,41 @@ It validates the **ProtoJSON projection** of a complete response; the
 `assessCapabilitiesRequest` definition validates requests. Use lowerCamelCase
 names and `MessageToDict(message, always_print_fields_with_no_presence=True)`,
 matching [provider manifest exchange](provider-manifest.md#structural-and-semantic-validation).
+Every request and response field shown by the schema is required in that
+projection. Proto3 zero/default values are not wildcards: empty identities,
+generation zero, `UNSPECIFIED` enums, a missing findings collection, or an
+empty requested-operation collection are invalid. Empty repeated detail
+collections remain explicit empty arrays in a complete projected response.
 
 The protobuf definition owns field names, numbers, types, and service shape.
 The JSON Schema adds required-field, identifier, uniqueness, count, and the
 cross-field invariants above. `target_configuration` and `execution_context`
-are each bounded to at most 32 top-level entries, each entry either a scalar
-(at most 2,048 characters) or one further level of nesting (an array of at
-most 32 scalars, or an object of at most 32 scalar-valued entries) — bounding
-breadth, nesting depth, and leaf length so a degenerate or oversized payload
-cannot pass structural validation. This is a structural ceiling only, not a
-model of legitimate configuration shapes: validating their contents against
-the accepted manifest's `configuration_schema` for `target_kind` is a
-runtime semantic check this static schema cannot perform. The schema
-likewise cannot verify that `backup_source_modes` is actually a subset of
-what the accepted manifest declared for that operation, or that a response
-contains exactly one finding per requested operation with no duplicates or
-omissions — both are consumer and test-suite responsibilities, not schema
-responsibilities.
+accept recursively nested JSON so they remain compatible with legitimate P1
+configuration schemas. The packaged schema bounds every object and array to
+32 entries, every property name to 128 characters, and every string value to
+2,048 characters. Consumers separately enforce the aggregate 64-container
+nesting limit and serialized-message limits; JSON Schema cannot portably
+express either limit, and `maxLength` counts Unicode code points rather than
+encoded bytes.
+
+These are structural ceilings only, not a model of legitimate configuration
+shapes. The Provider validates `target_configuration` against the accepted
+manifest's Provider-level `configuration_schema`; it validates `target_kind`
+membership separately. `execution_context` is not manifest-schema-validated.
+The capability schema likewise cannot verify that `backup_source_modes` is a
+subset of what the accepted manifest declared for that operation, or that a
+response contains exactly one finding per requested operation with no
+duplicates or omissions. Those checks are consumer and conformance-test
+responsibilities, not static-schema responsibilities.
 
 | Limit | Maximum |
 | --- | ---: |
 | Serialized request | 8 MiB |
 | Serialized response | 16 MiB |
-| `target_configuration` / `execution_context` nesting depth | 2 levels (root object, one nested array/object) |
-| `target_configuration` / `execution_context` entries per level | 32 |
-| `target_configuration` / `execution_context` scalar leaf | 2,048 characters |
+| `target_configuration` / `execution_context` nesting depth | 64 containers |
+| `target_configuration` / `execution_context` entries per container | 32 |
+| `target_configuration` / `execution_context` property name | 128 characters |
+| `target_configuration` / `execution_context` string value | 2,048 characters |
 | `operation_identifiers` per request | 64 unique entries |
 | `requirement_findings` per finding | 64 entries, unique `requirement_id` |
 | `reasons` per finding | 16 entries, unique `reason_code` |
@@ -187,10 +197,11 @@ responsibilities.
 
 Configure transport message limits before decoding, matching
 [provider manifest exchange](provider-manifest.md#structural-and-semantic-validation).
-The serialized request/response limits above are the structural worst case
-these field-level bounds produce (roughly 4.3 MiB for a maximally filled
-request, roughly 15 MiB for a 64-finding response with every collection at
-its bound), rounded up for transport-layer configuration margin.
+The byte limits are independent of the field-level bounds: a structurally
+valid payload containing multibyte Unicode strings can still exceed the wire
+limit. Reject that payload with `RESOURCE_EXHAUSTED`. After decoding, enforce
+the nesting limit with a cheap iterative walk before expensive manifest-schema
+validation; malformed shape or excessive nesting is `INVALID_ARGUMENT`.
 
 ## Assessment semantics and correlation
 
@@ -212,12 +223,13 @@ the assessment's evidence was captured — point-in-time evidence only, never
 a trusted ordering or authorization mechanism across sessions or Providers.
 
 A successful response reports exactly one finding per requested operation
-identifier, correlated by `operation_identifier`, not position. The Agent
-validates a successful response against the active session and manifest
-before normalizing it for a consumer; a Provider response cannot add
-operations, roles, source modes, or target kinds absent from the accepted
-manifest. Later operation admission performs its own current validation and
-must not treat an old assessment as permission to dispatch.
+identifier in request order for a deterministic projection. Consumers still
+correlate by `operation_identifier`, not position. The Agent validates a
+successful response against the active session and manifest before normalizing
+it for a consumer; a Provider response cannot add operations, roles, source
+modes, or target kinds absent from the accepted manifest. Later operation
+admission performs its own current validation and must not treat an old
+assessment as permission to dispatch.
 
 ## Failures, deadlines and retries
 
@@ -235,6 +247,14 @@ Check request syntax before session binding, then session/manifest fencing,
 then perform target-specific inspection. Diagnostic text is not a
 machine-readable error discriminator; this contract uses standard gRPC
 statuses and reason codes, not a separate error-detail schema.
+
+The Agent supplies a finite per-call deadline; the wire contract defines no
+implicit default. On cancellation or deadline expiry, the Provider stops
+inspection where possible and never returns or acts on a partial result.
+Retries are bounded and use backoff. Reuse `assessment_request_id` only when
+the semantic request is unchanged, and revalidate the negotiated session and
+accepted manifest before every retry; changed content receives a new request
+identity.
 
 ## Compatibility and delivery boundary
 

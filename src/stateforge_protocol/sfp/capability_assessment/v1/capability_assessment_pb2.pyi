@@ -156,9 +156,10 @@ class AssessCapabilitiesRequest(_message.Message):
     def target_configuration(self) -> _struct_pb2.Struct:
         """Target-specific configuration needed for inspection. Structurally must
         be an object; its contents are validated against the accepted
-        manifest's configuration_schema for target_kind. writeOnly-declared
-        fields (secrets) may be supplied here; the Provider must never copy
-        them into the response, reasons, logs, identity, or diagnostics.
+        manifest's Provider-level configuration_schema. target_kind membership
+        is validated separately. writeOnly-declared fields (secrets) may be
+        supplied here; the Provider must never copy them into the response,
+        reasons, logs, identity, or diagnostics.
         """
 
     @_builtins.property

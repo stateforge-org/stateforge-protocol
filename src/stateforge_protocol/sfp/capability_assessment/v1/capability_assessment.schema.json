@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:stateforge:sfp:capability_assessment:1",
   "title": "SFP capability-assessment schema 1 ProtoJSON validation",
-  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure, bounded targetConfiguration/executionContext shape, and the finding-level support/reason/backup-source-mode invariants; session binding, manifest-revision fencing, per-operation completeness (one finding per requested operation, no duplicates or omissions), uniqueness of requirementId/reasonCode/constraintId within one finding, and full semantic validation of targetConfiguration against the accepted manifest's configuration_schema require consumer checks described in the procedure specification and are exercised by dedicated tests instead.",
+  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure, per-container targetConfiguration/executionContext breadth and string bounds, and the finding-level support/reason/backup-source-mode invariants; transport byte limits, aggregate nesting depth, session binding, manifest-revision fencing, per-operation completeness (one finding per requested operation, no duplicates or omissions), uniqueness of requirementId/reasonCode/constraintId within one finding, and full semantic validation of targetConfiguration against the accepted manifest's Provider-level configuration_schema require consumer checks described in the procedure specification and are exercised by dedicated tests instead.",
   "$ref": "#/$defs/assessCapabilitiesResponse",
   "$defs": {
     "instanceId": {
@@ -73,7 +73,7 @@
     "boundedArray": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/boundedScalar"
+        "$ref": "#/$defs/boundedValue"
       },
       "maxItems": 32
     },
@@ -84,11 +84,11 @@
         "maxLength": 128
       },
       "additionalProperties": {
-        "$ref": "#/$defs/boundedScalar"
+        "$ref": "#/$defs/boundedValue"
       }
     },
     "boundedValue": {
-      "description": "A leaf value, or one further level of array/object nesting containing only leaf values. This deliberately bounds breadth (maxItems/maxProperties) and leaf string length so a degenerate or oversized payload cannot pass structural validation. It is not a full model of legitimate configuration shapes: validating targetConfiguration's actual contents against the accepted manifest's configuration_schema for target_kind remains a runtime semantic check this static file cannot perform.",
+      "description": "A recursively nested JSON value. Every array/object is breadth-bounded and every string is length-bounded here. Aggregate nesting depth and serialized message size are consumer-enforced limits because JSON Schema cannot portably express either one. This is not a full model of legitimate configuration shapes: validating targetConfiguration's actual contents against the accepted manifest's Provider-level configuration_schema remains a runtime semantic check this static file cannot perform; targetKind membership is checked separately.",
       "anyOf": [
         {
           "$ref": "#/$defs/boundedScalar"
@@ -102,14 +102,7 @@
       ]
     },
     "boundedContext": {
-      "type": "object",
-      "maxProperties": 32,
-      "propertyNames": {
-        "maxLength": 128
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/boundedValue"
-      }
+      "$ref": "#/$defs/boundedNestedObject"
     },
     "backupSourceModes": {
       "type": "array",

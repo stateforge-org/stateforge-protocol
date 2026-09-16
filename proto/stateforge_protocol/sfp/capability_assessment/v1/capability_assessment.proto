@@ -86,9 +86,10 @@ message AssessCapabilitiesRequest {
   string target_kind = 6;
   // Target-specific configuration needed for inspection. Structurally must
   // be an object; its contents are validated against the accepted
-  // manifest's configuration_schema for target_kind. writeOnly-declared
-  // fields (secrets) may be supplied here; the Provider must never copy
-  // them into the response, reasons, logs, identity, or diagnostics.
+  // manifest's Provider-level configuration_schema. target_kind membership
+  // is validated separately. writeOnly-declared fields (secrets) may be
+  // supplied here; the Provider must never copy them into the response,
+  // reasons, logs, identity, or diagnostics.
   google.protobuf.Struct target_configuration = 7;
   // Bounded, non-secret situational metadata the Provider inspection may
   // use to refine a finding, for example locale or invoking-automation

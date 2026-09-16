@@ -16,6 +16,46 @@
       "backupSourceModes": []
     },
     {
+      "operationIdentifier": "stateforge.git/branch.list@1",
+      "supportState": "SUPPORT_STATE_SUPPORTED_WITH_REQUIREMENTS",
+      "requirementFindings": [
+        {
+          "requirementId": "stateforge.capability_assessment.v1.write_permission",
+          "state": "REQUIREMENT_STATE_SATISFIED",
+          "description": "Write access to the target repository is available.",
+          "versionConstraint": ""
+        },
+        {
+          "requirementId": "stateforge.capability_assessment.v1.tooling_version",
+          "state": "REQUIREMENT_STATE_UNKNOWN",
+          "description": "Vendor tooling version could not be determined from available evidence.",
+          "versionConstraint": ">=2.30"
+        }
+      ],
+      "reasons": [],
+      "constraints": [
+        {
+          "constraintId": "stateforge.capability_assessment.v1.read_only_window",
+          "value": "",
+          "explanation": "Only usable during the nightly maintenance window."
+        }
+      ],
+      "backupSourceModes": []
+    },
+    {
+      "operationIdentifier": "stateforge.git/tag.list@1",
+      "supportState": "SUPPORT_STATE_UNSUPPORTED",
+      "requirementFindings": [],
+      "reasons": [
+        {
+          "reasonCode": "stateforge.capability_assessment.v1.unsupported_vendor_state",
+          "explanation": "The target repository has no tags configured."
+        }
+      ],
+      "constraints": [],
+      "backupSourceModes": []
+    },
+    {
       "operationIdentifier": "stateforge.git/backup.prepare@1",
       "supportState": "SUPPORT_STATE_SUPPORTED",
       "requirementFindings": [],

@@ -1,11 +1,13 @@
 """Conformance vectors for the capability-assessment wire and schema."""
 
 import copy
+import hashlib
 import json
 from importlib.resources import files
 from pathlib import Path
 
 import pytest
+import rfc8785
 from google.protobuf import json_format
 from jsonschema import Draft202012Validator, ValidationError
 
@@ -37,6 +39,32 @@ _MANIFEST_SCHEMA = json.loads(
     .joinpath("manifest.schema.json")
     .read_text()
 )
+_MAX_CONTEXT_NESTING = 64
+_MAX_REQUEST_BYTES = 8 * 1024 * 1024
+_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+
+
+def _container_depth(value) -> int:
+    maximum = 0
+    pending = [(value, 0)]
+    while pending:
+        current, parent_depth = pending.pop()
+        if isinstance(current, dict):
+            depth = parent_depth + 1
+            maximum = max(maximum, depth)
+            pending.extend((item, depth) for item in current.values())
+        elif isinstance(current, list):
+            depth = parent_depth + 1
+            maximum = max(maximum, depth)
+            pending.extend((item, depth) for item in current)
+    return maximum
+
+
+def _nested_context(depth: int):
+    value = "leaf"
+    for _ in range(depth):
+        value = {"nested": value}
+    return value
 
 
 @pytest.fixture
@@ -290,13 +318,18 @@ def test_mixed_support_states_correlate_by_identifier(response) -> None:
     }
 
 
+@pytest.mark.parametrize("fixture_name", ["response", "backup_response"])
 def test_findings_cover_every_requested_operation_exactly_once(
-    request_data, response
+    request, request_data, fixture_name
 ) -> None:
     # JSON Schema cannot express request/response completeness; this is a
     # dedicated Python-level check of the invariant instead.
+    response_data = request.getfixturevalue(fixture_name)
     requested = request_data["operationIdentifiers"]
-    returned = [f["operationIdentifier"] for f in response["findings"]]
+    returned = [
+        finding["operationIdentifier"] for finding in response_data["findings"]
+    ]
+    assert returned == requested
     assert set(returned) == set(requested)
     assert len(returned) == len(set(returned))
 
@@ -460,14 +493,23 @@ def test_constraint_detail_round_trips(response) -> None:
 def test_ordinary_operation_has_empty_backup_source_modes(
     backup_response,
 ) -> None:
-    ordinary = backup_response["findings"][0]
+    ordinary = next(
+        finding
+        for finding in backup_response["findings"]
+        if finding["operationIdentifier"]
+        == "stateforge.git/reference.resolve@1"
+    )
     assert ordinary["backupSourceModes"] == []
 
 
 def test_backup_operation_carries_declared_source_modes(
     backup_response,
 ) -> None:
-    backup = backup_response["findings"][1]
+    backup = next(
+        finding
+        for finding in backup_response["findings"]
+        if finding["operationIdentifier"] == "stateforge.git/backup.prepare@1"
+    )
     assert backup["backupSourceModes"]
     assert set(backup["backupSourceModes"]) <= {
         "staged_filesystem",
@@ -592,13 +634,26 @@ def test_invalid_target_kind_identifiers(request_data, identifier) -> None:
 
 
 def test_undeclared_target_kind_passes_structural_validation(
-    request_data,
+    request_data, manifest_response
 ) -> None:
     # Whether target_kind is actually declared by the accepted manifest is a
     # FAILED_PRECONDITION check the Provider performs at runtime; this
     # static schema can only enforce identifier syntax.
     request_data["targetKind"] = "example.vendor/unknown_target@1"
     _REQUEST_VALIDATOR.validate(request_data)
+    assert (
+        request_data["targetKind"]
+        not in manifest_response["manifest"]["targetKinds"]
+    )
+
+
+def test_undeclared_operation_passes_structure_but_fails_manifest_check(
+    request_data, manifest_response
+) -> None:
+    request_data["operationIdentifiers"] = ["example.vendor/unknown@1"]
+    _REQUEST_VALIDATOR.validate(request_data)
+    declared = set(manifest_response["manifest"]["operations"])
+    assert not set(request_data["operationIdentifiers"]) <= declared
 
 
 def test_custom_reason_and_requirement_identifiers_are_extensible(
@@ -641,26 +696,33 @@ def test_target_configuration_and_execution_context_must_be_objects(
 def test_target_configuration_and_execution_context_accept_objects(
     request_data, field
 ) -> None:
-    # One level of nesting (an array or object of scalars) is allowed under
-    # each top-level entry; a second level is not (see the bounds test
-    # below), matching the documented "root object, one nested level" cap.
+    # P1 configuration schemas may legitimately contain nested objects and
+    # arrays of objects. The capability envelope must preserve that shape.
     request_data[field] = {
-        "list": [1, 2, 3],
-        "nested": {"anything": "a value"},
+        "auth": {
+            "oauth": {
+                "clientId": "stateforge",
+                "scopes": [{"name": "repository:read"}],
+            }
+        },
         "scalar": "value",
     }
     _REQUEST_VALIDATOR.validate(request_data)
 
 
 @pytest.mark.parametrize("field", ["targetConfiguration", "executionContext"])
-def test_target_configuration_and_execution_context_bound_nesting_depth(
+def test_context_nesting_limit_is_a_consumer_check_not_a_schema_restriction(
     request_data, field
 ) -> None:
-    # A second level of nesting (an object/array nested inside an
-    # already-nested object/array) exceeds the documented depth bound.
-    request_data[field] = {"nested": {"anything": [1, 2, 3]}}
-    with pytest.raises(ValidationError):
-        _REQUEST_VALIDATOR.validate(request_data)
+    request_data[field] = _nested_context(_MAX_CONTEXT_NESTING)
+    _REQUEST_VALIDATOR.validate(request_data)
+    assert _container_depth(request_data[field]) == _MAX_CONTEXT_NESTING
+
+    # JSON Schema cannot express an aggregate recursive-depth ceiling. The
+    # consumer's cheap pre-validation walk rejects the next container.
+    request_data[field] = _nested_context(_MAX_CONTEXT_NESTING + 1)
+    _REQUEST_VALIDATOR.validate(request_data)
+    assert _container_depth(request_data[field]) > _MAX_CONTEXT_NESTING
 
 
 @pytest.mark.parametrize("field", ["targetConfiguration", "executionContext"])
@@ -694,6 +756,20 @@ def test_response_schema_has_no_configuration_or_secret_field() -> None:
             lowered = property_name.lower()
             assert "configuration" not in lowered
             assert "secret" not in lowered
+
+
+@pytest.mark.parametrize("fixture_name", ["response", "backup_response"])
+def test_secret_bearing_request_input_is_never_echoed_by_valid_fixtures(
+    request, request_data, fixture_name, manifest_response
+) -> None:
+    sensitive_value = "stateforge-sensitive-value-never-echo"
+    request_data["targetConfiguration"]["token"] = sensitive_value
+    configuration_schema = manifest_response["manifest"]["configurationSchema"]
+    Draft202012Validator(configuration_schema).validate(
+        request_data["targetConfiguration"]
+    )
+    response_data = request.getfixturevalue(fixture_name)
+    assert sensitive_value not in json.dumps(response_data)
 
 
 # -- Bounds -----------------------------------------------------------------
@@ -746,6 +822,58 @@ def test_constraints_bound_enforced(response, validator) -> None:
         validator.validate(response)
 
 
+def test_serialized_resource_limits_are_independent_of_schema_bounds(
+    request_data, response, validator
+) -> None:
+    request_message = json_format.ParseDict(
+        request_data,
+        capability_assessment_pb2.AssessCapabilitiesRequest(),
+    )
+    response_message = json_format.ParseDict(
+        response,
+        capability_assessment_pb2.AssessCapabilitiesResponse(),
+    )
+    assert request_message.ByteSize() <= _MAX_REQUEST_BYTES
+    assert response_message.ByteSize() <= _MAX_RESPONSE_BYTES
+
+    # JSON Schema maxLength counts code points, not encoded bytes. This is
+    # structurally valid but deliberately exceeds the independent wire cap.
+    leaf = "\U0001f600" * 2048
+    large_context = {f"key_{index}": [leaf] * 32 for index in range(32)}
+    request_data["targetConfiguration"] = large_context
+    request_data["executionContext"] = large_context
+    _REQUEST_VALIDATOR.validate(request_data)
+    oversized_message = json_format.ParseDict(
+        request_data,
+        capability_assessment_pb2.AssessCapabilitiesRequest(),
+    )
+    assert oversized_message.ByteSize() > _MAX_REQUEST_BYTES
+
+    requirement_findings = [
+        {
+            "requirementId": f"example.vendor.requirement_{index}",
+            "state": "REQUIREMENT_STATE_SATISFIED",
+            "description": leaf,
+            "versionConstraint": "",
+        }
+        for index in range(64)
+    ]
+    large_response = copy.deepcopy(response)
+    finding = copy.deepcopy(response["findings"][0])
+    finding["requirementFindings"] = requirement_findings
+    large_response["findings"] = []
+    for index in range(32):
+        item = copy.deepcopy(finding)
+        item["operationIdentifier"] = f"example.vendor/op_{index}@1"
+        large_response["findings"].append(item)
+    validator.validate(large_response)
+    oversized_response = json_format.ParseDict(
+        large_response,
+        capability_assessment_pb2.AssessCapabilitiesResponse(),
+    )
+    assert oversized_response.ByteSize() > _MAX_RESPONSE_BYTES
+
+
 @pytest.mark.parametrize(
     ("path", "value"),
     [
@@ -789,9 +917,28 @@ def test_accepted_manifest_fixture_is_a_valid_p1_manifest(
     Draft202012Validator(_MANIFEST_SCHEMA).validate(manifest_response)
 
 
-def test_request_and_response_correlate_with_accepted_manifest(
-    request_data, response, manifest_response
+def test_accepted_manifest_fixture_revision_is_recomputable(
+    manifest_response,
 ) -> None:
+    preimage = rfc8785.dumps(
+        {
+            key: manifest_response[key]
+            for key in (
+                "manifest",
+                "manifestSchemaVersion",
+                "providerInstanceId",
+            )
+        }
+    )
+    expected = "sha256:" + hashlib.sha256(preimage).hexdigest()
+    assert manifest_response["manifestRevision"] == expected
+
+
+@pytest.mark.parametrize("fixture_name", ["response", "backup_response"])
+def test_request_and_response_correlate_with_accepted_manifest(
+    request, request_data, fixture_name, manifest_response
+) -> None:
+    response_data = request.getfixturevalue(fixture_name)
     assert (
         request_data["expectedProviderInstanceId"]
         == manifest_response["providerInstanceId"]
@@ -801,12 +948,23 @@ def test_request_and_response_correlate_with_accepted_manifest(
         == manifest_response["manifestRevision"]
     )
     assert (
-        response["providerInstanceId"]
+        response_data["providerInstanceId"]
         == manifest_response["providerInstanceId"]
     )
     assert (
-        response["manifestRevision"] == manifest_response["manifestRevision"]
+        response_data["manifestRevision"]
+        == manifest_response["manifestRevision"]
     )
+    assert (
+        response_data["assessmentRequestId"]
+        == request_data["assessmentRequestId"]
+    )
+    assert (
+        response_data["endpointGeneration"]
+        == request_data["expectedEndpointGeneration"]
+    )
+    assert response_data["sessionId"] == request_data["expectedSessionId"]
+    assert response_data["assessmentId"] != request_data["assessmentRequestId"]
 
 
 def test_target_kind_is_declared_in_accepted_manifest(
@@ -832,8 +990,8 @@ def test_target_configuration_validates_against_accepted_manifest_schema(
     # This is the semantic check the packaged capability-assessment schema
     # explicitly cannot perform on its own (see "Structural and semantic
     # validation" in the procedure page): validating target_configuration's
-    # actual contents against the accepted manifest's configuration_schema
-    # for target_kind.
+    # actual contents against the accepted manifest's Provider-level
+    # configuration_schema. Target-kind membership is checked separately.
     configuration_schema = manifest_response["manifest"]["configurationSchema"]
     Draft202012Validator(configuration_schema).validate(
         request_data["targetConfiguration"]
