@@ -20,8 +20,7 @@
           "properties": {},
           "additionalProperties": false
         },
-        "implements": [],
-        "backupSourceModes": []
+        "implements": []
       }
     },
     "targetKinds": [
@@ -58,5 +57,5 @@
     },
     "triggers": {}
   },
-  "manifestRevision": "sha256:c9778345b616fa0396b923586d236cdc18f83221db8da73443f1b2f36fb8b928"
+  "manifestRevision": "sha256:34f54f69855f1fbebef4d3d6bb74c0238785e0f8ef43f9efb1a12e6b4353183d"
 }

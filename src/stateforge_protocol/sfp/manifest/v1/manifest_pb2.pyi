@@ -249,24 +249,21 @@ class OperationDeclaration(_message.Message):
     INPUT_SCHEMA_FIELD_NUMBER: _builtins.int
     RESULT_SCHEMA_FIELD_NUMBER: _builtins.int
     IMPLEMENTS_FIELD_NUMBER: _builtins.int
-    BACKUP_SOURCE_MODES_FIELD_NUMBER: _builtins.int
     @_builtins.property
     def input_schema(self) -> _struct_pb2.Struct:
         """Required Draft 2020-12 object schemas for typed input and terminal result."""
 
     @_builtins.property
-    def result_schema(self) -> _struct_pb2.Struct: ...
+    def result_schema(self) -> _struct_pb2.Struct:
+        """The sole declaration of terminal result shape for this versioned operation.
+        Recognized compliance roles require the exact schemas of their profile.
+        """
+
     @_builtins.property
     def implements(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """Unique role identifiers, e.g. stateforge.backup.v1.prepare or
         stateforge.disaster_recovery.v1.reconstruct. Empty means no compliance claim.
         Never infer a role from the operation identifier or a Python method name.
-        """
-
-    @_builtins.property
-    def backup_source_modes(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """Declared backup source modes; empty unless an explicit backup/DR role is
-        claimed. Profile-specific validation belongs to the corresponding contract.
         """
 
     def __init__(
@@ -275,11 +272,10 @@ class OperationDeclaration(_message.Message):
         input_schema: _struct_pb2.Struct | None = ...,
         result_schema: _struct_pb2.Struct | None = ...,
         implements: _abc.Iterable[_builtins.str] | None = ...,
-        backup_source_modes: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["input_schema", b"input_schema", "result_schema", b"result_schema"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["backup_source_modes", b"backup_source_modes", "implements", b"implements", "input_schema", b"input_schema", "result_schema", b"result_schema"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["implements", b"implements", "input_schema", b"input_schema", "result_schema", b"result_schema"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

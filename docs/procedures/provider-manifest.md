@@ -45,7 +45,7 @@ authors do not construct protobuf messages or calculate revisions themselves.
 | `provider_identity` | Author-declared dotted lowercase identity such as `stateforge.git`. |
 | `implementation_version` | SemVer 2.0.0 of the running Provider implementation. |
 | `display_name` | Nonempty human-readable name. |
-| `operations` | Map from extensible operation identifier to input schema, result schema, explicit `implements` roles, and declared backup source modes. |
+| `operations` | Map from extensible operation identifier to Draft 2020-12 input schema, result schema, and explicit `implements` roles. |
 | `target_kinds` | Nonempty set of supported third-party kinds, without configured targets or StateForge component bindings. |
 | `runtime_requirements` | Map of dotted requirement identifiers to descriptions and version constraints. These are declarations, not installed-state observations or commands to execute. |
 | `platforms` | Nonempty list of explicit operating-system/architecture pairs, such as `linux` / `x86_64`. No wildcard or implied Cartesian product. |
@@ -72,11 +72,29 @@ Compliance roles are explicit per-operation dotted identifiers such as
 `stateforge.disaster_recovery.v1.reconstruct`. An operation named "backup"
 with an empty `implements` list makes no compliance claim. Unknown roles may
 be transported but cannot establish a recognized compliance profile. A known
-claim must be checked against that profile's contract before use. Schema 1
-allows `staged_filesystem` and `provider_reference` as backup source mode
-declarations and requires an explicit backup/DR role when modes are nonempty.
-Detailed source/reference payloads and execution semantics belong to the
-later compliance contracts; this declaration alone does not enable them.
+claim must be checked against that profile's exact versioned input/result
+schemas and semantic requirements before use. The versioned operation
+identifier identifies its input/result contract; an incompatible operation
+contract change requires a new identifier version.
+
+Every operation declaration contains exactly `input_schema`, `result_schema`,
+and `implements`. The operation's `result_schema` is the only manifest-level
+declaration of terminal result shape. Generic, custom, backup-profile, and
+DR-profile operations all use the same structure. Construction and structural
+validation must not infer additional result modes from names, roles, or schema
+payloads. Protobuf field 4 and `backup_source_modes` are reserved; the ProtoJSON
+schema rejects `backupSourceModes` and `backup_source_modes` as unknown
+operation properties, including empty values. Names inside embedded schemas
+remain ordinary schema data and do not create manifest fields or claims.
+
+The later backup-preparation profile will define the exact terminal result
+schema as an explicitly tagged choice between `materialized_source` and
+`provider_reference`. This manifest contract does not define its tag key or
+variant fields. The Provider prepares data and returns one schema-valid
+result. The Agent validates the variant; it may route a materialized source
+to an Agent-owned BackupEngine, while a Provider reference bypasses it.
+Engine configuration, capabilities, routing, credentials, and lifecycle have
+no place in Manifest Exchange. Providers do not choose or invoke an engine.
 
 ## Structural and semantic validation
 
@@ -166,8 +184,9 @@ claims. Exclude `manifest_revision` and `endpoint_generation`. Thus a restart
 with unchanged declarations and stable installation identity can retain its
 revision, while a new installation or changed declarations gets a new one.
 
-Object/map key insertion order does not affect the revision. Array order is
-preserved and contributes to the revision, including JSON Schema arrays. A
+Changing an input or result schema changes the revision even if the role is
+unchanged. Object/map key insertion order does not affect the revision. Array
+order is preserved and contributes to the revision, including JSON Schema arrays. A
 Provider should generate stable ordering for set-like declaration lists to
 avoid unnecessary revision changes. RFC 8785 supplies string escaping, UTF-16
 key ordering and IEEE 754 number formatting; do not apply extra Unicode
@@ -177,7 +196,7 @@ Do not hash protobuf bytes, even with deterministic serialization enabled:
 [protobuf serialization is not canonical](https://protobuf.dev/programming-guides/serialization-not-canonical/).
 The checked-in `tests/fixtures/manifest/response.json` and
 `revision-preimage.json` form a cross-language conformance vector. Its revision
-is `sha256:c9778345b616fa0396b923586d236cdc18f83221db8da73443f1b2f36fb8b928`.
+is `sha256:34f54f69855f1fbebef4d3d6bb74c0238785e0f8ef43f9efb1a12e6b4353183d`.
 
 ## Agent acceptance and caching
 
@@ -220,11 +239,20 @@ statuses and introduces no separate error-detail schema.
 
 ## Compatibility and delivery boundary
 
-Keep bootstrap v1 unchanged. Never reuse field numbers or silently change
-schema-1 meaning. Any new declaration that changes interoperability or revision
-semantics requires a new negotiated manifest schema and its validation rules.
-Additive protobuf fields alone do not grant older consumers understanding of
-new semantics; preserve a complete schema-1 view when serving schema 1.
+This change intentionally revises manifest schema 1 in place: it removes
+`backup_source_modes` / `backupSourceModes` and updates the validation schema,
+fixture, and golden revision together. This is a breaking schema/API correction,
+not a backward-compatible projection. Consumers of the earlier schema-1
+shape must update together and discard their previously validated manifest
+cache entries. The existing negotiated version remains 1, so negotiation
+cannot distinguish old and corrected schema-1 implementations. There is no
+second manifest package, negotiation RPC, or legacy adapter.
+
+Bootstrap v1 and the existing GetManifest request/response envelope remain
+unchanged. Removed operation field number 4 and its name stay reserved.
+Unknown manifest versions are rejected rather than interpreted as schema 1.
+Future interoperability changes should use a separately negotiated contract
+unless another explicit breaking revision is agreed.
 
 This procedure provides the contract for Provider-runtime manifest construction
 and subsequent Agent integration. Capability assessment, operation admission,
