@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:stateforge:sfp:capability_assessment:1",
   "title": "SFP capability-assessment schema 1 ProtoJSON validation",
-  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure, per-container targetConfiguration/executionContext breadth and string bounds, and the finding-level support/reason/backup-source-mode invariants; transport byte limits, aggregate nesting depth, session binding, manifest-revision fencing, per-operation completeness (one finding per requested operation, no duplicates or omissions), uniqueness of requirementId/reasonCode/constraintId within one finding, and full semantic validation of targetConfiguration against the accepted manifest's Provider-level configuration_schema require consumer checks described in the procedure specification and are exercised by dedicated tests instead.",
+  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure, per-container targetConfiguration/executionContext breadth and string bounds, and the finding-level support/reason invariants; transport byte limits, aggregate nesting depth, session binding, manifest-revision fencing, per-operation completeness (one finding per requested operation, no duplicates or omissions), uniqueness of requirementId/reasonCode/constraintId within one finding, and full semantic validation of targetConfiguration against the accepted manifest's Provider-level configuration_schema require consumer checks described in the procedure specification and are exercised by dedicated tests instead.",
   "$ref": "#/$defs/assessCapabilitiesResponse",
   "$defs": {
     "instanceId": {
@@ -103,18 +103,6 @@
     },
     "boundedContext": {
       "$ref": "#/$defs/boundedNestedObject"
-    },
-    "backupSourceModes": {
-      "type": "array",
-      "items": {
-        "enum": [
-          "staged_filesystem",
-          "provider_reference"
-        ]
-      },
-      "minItems": 0,
-      "maxItems": 2,
-      "uniqueItems": true
     },
     "requirementFinding": {
       "type": "object",
@@ -218,9 +206,6 @@
           },
           "minItems": 0,
           "maxItems": 32
-        },
-        "backupSourceModes": {
-          "$ref": "#/$defs/backupSourceModes"
         }
       },
       "required": [
@@ -228,8 +213,7 @@
         "supportState",
         "requirementFindings",
         "reasons",
-        "constraints",
-        "backupSourceModes"
+        "constraints"
       ],
       "additionalProperties": false,
       "allOf": [

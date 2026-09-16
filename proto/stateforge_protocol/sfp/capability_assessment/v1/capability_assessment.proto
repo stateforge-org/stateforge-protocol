@@ -145,6 +145,9 @@ message AssessCapabilitiesResponse {
 // secrets, credentials, customer data, or a StateForge project/component
 // assignment.
 message CapabilityFinding {
+  reserved 6;
+  reserved "backup_source_modes";
+
   // Exact operation identifier as requested.
   string operation_identifier = 1;
   // Bounded, normalized support outcome. Never UNSPECIFIED in a
@@ -162,15 +165,6 @@ message CapabilityFinding {
   // safely against this target, for example a required read-only mode or
   // a rate limit. Unique by constraint_id.
   repeated ConstraintDetail constraints = 5;
-  // Subset of the operation's accepted-manifest-declared
-  // backup_source_modes relevant to this target's current assessed state.
-  // Populated only when that manifest declaration explicitly claims a
-  // backup or disaster-recovery role via implements with a nonempty
-  // backup_source_modes; empty for ordinary operations. This is a direct
-  // echo of the P1 manifest's own vocabulary, never a new taxonomy:
-  // BackupEngine and Provider-reference staging mechanics are
-  // Agent-owned and are not modeled by this Protocol-only contract.
-  repeated string backup_source_modes = 6;
 }
 
 // RequirementFinding normalizes one named prerequisite for an operation.

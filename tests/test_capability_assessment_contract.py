@@ -73,12 +73,6 @@ def response():
 
 
 @pytest.fixture
-def backup_response():
-    path = _FIXTURES / "response-backup-source-modes.json"
-    return json.loads(path.read_text())
-
-
-@pytest.fixture
 def request_data():
     return json.loads((_FIXTURES / "request.json").read_text())
 
@@ -231,7 +225,6 @@ def test_every_support_state_round_trips(support_state) -> None:
         "requirementFindings": [],
         "reasons": [],
         "constraints": [],
-        "backupSourceModes": [],
     }
     if support_state == "SUPPORT_STATE_SUPPORTED_WITH_REQUIREMENTS":
         finding["constraints"] = [
@@ -268,7 +261,6 @@ def test_support_state_unspecified_is_invalid() -> None:
         "requirementFindings": [],
         "reasons": [],
         "constraints": [],
-        "backupSourceModes": [],
     }
     with pytest.raises(ValidationError):
         Draft202012Validator(_FINDING_SCHEMA).validate(finding)
@@ -318,16 +310,14 @@ def test_mixed_support_states_correlate_by_identifier(response) -> None:
     }
 
 
-@pytest.mark.parametrize("fixture_name", ["response", "backup_response"])
 def test_findings_cover_every_requested_operation_exactly_once(
-    request, request_data, fixture_name
+    response, request_data
 ) -> None:
     # JSON Schema cannot express request/response completeness; this is a
     # dedicated Python-level check of the invariant instead.
-    response_data = request.getfixturevalue(fixture_name)
     requested = request_data["operationIdentifiers"]
     returned = [
-        finding["operationIdentifier"] for finding in response_data["findings"]
+        finding["operationIdentifier"] for finding in response["findings"]
     ]
     assert returned == requested
     assert set(returned) == set(requested)
@@ -487,43 +477,19 @@ def test_constraint_detail_round_trips(response) -> None:
     )
 
 
-# -- Backup source modes ---------------------------------------------------
+# -- Operation-generic findings -------------------------------------------
 
 
-def test_ordinary_operation_has_empty_backup_source_modes(
-    backup_response,
-) -> None:
-    ordinary = next(
-        finding
-        for finding in backup_response["findings"]
-        if finding["operationIdentifier"]
-        == "stateforge.git/reference.resolve@1"
+def test_capability_finding_has_no_backup_specific_field() -> None:
+    fields = (
+        capability_assessment_pb2.CapabilityFinding.DESCRIPTOR.fields_by_name
     )
-    assert ordinary["backupSourceModes"] == []
 
-
-def test_backup_operation_carries_declared_source_modes(
-    backup_response,
-) -> None:
-    backup = next(
-        finding
-        for finding in backup_response["findings"]
-        if finding["operationIdentifier"] == "stateforge.git/backup.prepare@1"
+    assert "backup_source_modes" not in fields
+    assert (
+        "backupSourceModes"
+        not in _SCHEMA["$defs"]["capabilityFinding"]["properties"]
     )
-    assert backup["backupSourceModes"]
-    assert set(backup["backupSourceModes"]) <= {
-        "staged_filesystem",
-        "provider_reference",
-    }
-
-
-def test_backup_source_mode_outside_closed_vocabulary_is_rejected(
-    response, validator
-) -> None:
-    finding = response["findings"][3]
-    finding["backupSourceModes"] = ["full_snapshot"]
-    with pytest.raises(ValidationError):
-        validator.validate(response)
 
 
 # -- Identifiers, configuration, and secrecy -------------------------------
@@ -584,7 +550,6 @@ def test_invalid_request_declarations(request_data, field, value) -> None:
             "Not_Dotted",
         ),
         (("findings", 2, "reasons", 0, "reasonCode"), "not dotted"),
-        (("findings", 3, "backupSourceModes"), ["full_snapshot"]),
     ],
 )
 def test_invalid_or_incomplete_responses_are_rejected(
@@ -758,9 +723,8 @@ def test_response_schema_has_no_configuration_or_secret_field() -> None:
             assert "secret" not in lowered
 
 
-@pytest.mark.parametrize("fixture_name", ["response", "backup_response"])
-def test_secret_bearing_request_input_is_never_echoed_by_valid_fixtures(
-    request, request_data, fixture_name, manifest_response
+def test_secret_bearing_request_input_is_never_echoed_by_valid_fixture(
+    response, request_data, manifest_response
 ) -> None:
     sensitive_value = "stateforge-sensitive-value-never-echo"
     request_data["targetConfiguration"]["token"] = sensitive_value
@@ -768,8 +732,7 @@ def test_secret_bearing_request_input_is_never_echoed_by_valid_fixtures(
     Draft202012Validator(configuration_schema).validate(
         request_data["targetConfiguration"]
     )
-    response_data = request.getfixturevalue(fixture_name)
-    assert sensitive_value not in json.dumps(response_data)
+    assert sensitive_value not in json.dumps(response)
 
 
 # -- Bounds -----------------------------------------------------------------
@@ -903,12 +866,12 @@ def test_string_length_bounds_enforced(
 
 # -- Paired accepted-manifest conformance ----------------------------------
 #
-# request.json, response-mixed-states.json, and response-backup-source-modes
-# .json share identity, manifest revision, target kind, operation, and
-# configuration values with accepted-manifest.json, so they can be used
-# together as one interoperable conformance set: this is what a Provider or
-# Agent integration test actually pairs against, not a manifest fixture
-# declaring an unrelated single operation and a different identity/revision.
+# request.json and response-mixed-states.json share identity, manifest
+# revision, target kind, operation, and configuration values with
+# accepted-manifest.json, so they can be used together as one interoperable
+# conformance set: this is what a Provider or Agent integration test actually
+# pairs against, not a manifest fixture declaring an unrelated single
+# operation and a different identity/revision.
 
 
 def test_accepted_manifest_fixture_is_a_valid_p1_manifest(
@@ -934,11 +897,9 @@ def test_accepted_manifest_fixture_revision_is_recomputable(
     assert manifest_response["manifestRevision"] == expected
 
 
-@pytest.mark.parametrize("fixture_name", ["response", "backup_response"])
 def test_request_and_response_correlate_with_accepted_manifest(
-    request, request_data, fixture_name, manifest_response
+    response, request_data, manifest_response
 ) -> None:
-    response_data = request.getfixturevalue(fixture_name)
     assert (
         request_data["expectedProviderInstanceId"]
         == manifest_response["providerInstanceId"]
@@ -948,23 +909,21 @@ def test_request_and_response_correlate_with_accepted_manifest(
         == manifest_response["manifestRevision"]
     )
     assert (
-        response_data["providerInstanceId"]
+        response["providerInstanceId"]
         == manifest_response["providerInstanceId"]
     )
     assert (
-        response_data["manifestRevision"]
-        == manifest_response["manifestRevision"]
+        response["manifestRevision"] == manifest_response["manifestRevision"]
     )
     assert (
-        response_data["assessmentRequestId"]
-        == request_data["assessmentRequestId"]
+        response["assessmentRequestId"] == request_data["assessmentRequestId"]
     )
     assert (
-        response_data["endpointGeneration"]
+        response["endpointGeneration"]
         == request_data["expectedEndpointGeneration"]
     )
-    assert response_data["sessionId"] == request_data["expectedSessionId"]
-    assert response_data["assessmentId"] != request_data["assessmentRequestId"]
+    assert response["sessionId"] == request_data["expectedSessionId"]
+    assert response["assessmentId"] != request_data["assessmentRequestId"]
 
 
 def test_target_kind_is_declared_in_accepted_manifest(
@@ -996,21 +955,6 @@ def test_target_configuration_validates_against_accepted_manifest_schema(
     Draft202012Validator(configuration_schema).validate(
         request_data["targetConfiguration"]
     )
-
-
-@pytest.mark.parametrize("fixture_name", ["response", "backup_response"])
-def test_backup_source_modes_are_a_subset_of_accepted_manifest_declaration(
-    request, fixture_name, manifest_response
-) -> None:
-    data = request.getfixturevalue(fixture_name)
-    operations = manifest_response["manifest"]["operations"]
-    for finding in data["findings"]:
-        if not finding["backupSourceModes"]:
-            continue
-        declared = set(
-            operations[finding["operationIdentifier"]]["backupSourceModes"]
-        )
-        assert set(finding["backupSourceModes"]) <= declared
 
 
 def test_ordinary_operation_backup_relevance_is_absent_from_manifest_too(

@@ -293,7 +293,6 @@ class CapabilityFinding(_message.Message):
     REQUIREMENT_FINDINGS_FIELD_NUMBER: _builtins.int
     REASONS_FIELD_NUMBER: _builtins.int
     CONSTRAINTS_FIELD_NUMBER: _builtins.int
-    BACKUP_SOURCE_MODES_FIELD_NUMBER: _builtins.int
     operation_identifier: _builtins.str
     """Exact operation identifier as requested."""
     support_state: Global___SupportState.ValueType
@@ -321,18 +320,6 @@ class CapabilityFinding(_message.Message):
         a rate limit. Unique by constraint_id.
         """
 
-    @_builtins.property
-    def backup_source_modes(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """Subset of the operation's accepted-manifest-declared
-        backup_source_modes relevant to this target's current assessed state.
-        Populated only when that manifest declaration explicitly claims a
-        backup or disaster-recovery role via implements with a nonempty
-        backup_source_modes; empty for ordinary operations. This is a direct
-        echo of the P1 manifest's own vocabulary, never a new taxonomy:
-        BackupEngine and Provider-reference staging mechanics are
-        Agent-owned and are not modeled by this Protocol-only contract.
-        """
-
     def __init__(
         self,
         *,
@@ -341,11 +328,10 @@ class CapabilityFinding(_message.Message):
         requirement_findings: _abc.Iterable[Global___RequirementFinding] | None = ...,
         reasons: _abc.Iterable[Global___ReasonDetail] | None = ...,
         constraints: _abc.Iterable[Global___ConstraintDetail] | None = ...,
-        backup_source_modes: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["backup_source_modes", b"backup_source_modes", "constraints", b"constraints", "operation_identifier", b"operation_identifier", "reasons", b"reasons", "requirement_findings", b"requirement_findings", "support_state", b"support_state"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["constraints", b"constraints", "operation_identifier", b"operation_identifier", "reasons", b"reasons", "requirement_findings", b"requirement_findings", "support_state", b"support_state"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

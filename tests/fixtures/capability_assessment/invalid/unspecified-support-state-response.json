@@ -12,8 +12,7 @@
       "supportState": "SUPPORT_STATE_UNSPECIFIED",
       "requirementFindings": [],
       "reasons": [],
-      "constraints": [],
-      "backupSourceModes": []
+      "constraints": []
     }
   ]
 }

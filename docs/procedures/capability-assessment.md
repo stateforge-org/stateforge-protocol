@@ -89,7 +89,7 @@ requirement is never evidence of satisfaction, and an unverified
 
 | Message | Fields |
 | --- | --- |
-| `CapabilityFinding` | `operation_identifier` (exact requested identifier), `support_state`, `requirement_findings`, `reasons`, `constraints`, `backup_source_modes`. |
+| `CapabilityFinding` | `operation_identifier` (exact requested identifier), `support_state`, `requirement_findings`, `reasons`, `constraints`. |
 | `RequirementFinding` | `requirement_id` (stable, dotted, extensible), `state`, `description`, `version_constraint` (empty means no constraint; syntax is owned by the named requirement, mirroring `RuntimeRequirement.version_constraint`). |
 | `ReasonDetail` | `reason_code` (dotted, the discriminator), `explanation` (bounded, sanitized; never the discriminator). |
 | `ConstraintDetail` | `constraint_id` (stable, dotted), `value` (bounded, may be empty), `explanation` (bounded, sanitized). |
@@ -109,19 +109,6 @@ requirement is never evidence of satisfaction, and an unverified
   `constraints[*].constraint_id` are each unique within one finding. JSON
   Schema cannot express uniqueness by a sub-key over an array of objects;
   this rule is enforced by dedicated tests, not the packaged schema.
-
-### Backup source modes
-
-`backup_source_modes` is populated only when the accepted manifest's
-declaration for `operation_identifier` explicitly claims a backup or
-disaster-recovery role via `implements` with a nonempty
-`backup_source_modes`; it is empty for ordinary operations. Its values are
-the same closed schema-1 vocabulary as the manifest field it echoes —
-`staged_filesystem` and `provider_reference`, at most two unique values —
-never a new taxonomy. BackupEngine mechanics, staging shapes, and
-Provider-reference formats are Agent/BackupEngine-owned concepts (backup
-engines are in-process Agent tools and never SFP peers) and are not modeled
-by this Protocol-only contract.
 
 ### Reason-code vocabulary
 
@@ -170,11 +157,10 @@ These are structural ceilings only, not a model of legitimate configuration
 shapes. The Provider validates `target_configuration` against the accepted
 manifest's Provider-level `configuration_schema`; it validates `target_kind`
 membership separately. `execution_context` is not manifest-schema-validated.
-The capability schema likewise cannot verify that `backup_source_modes` is a
-subset of what the accepted manifest declared for that operation, or that a
-response contains exactly one finding per requested operation with no
-duplicates or omissions. Those checks are consumer and conformance-test
-responsibilities, not static-schema responsibilities.
+The capability schema likewise cannot verify that a response contains exactly
+one finding per requested operation with no duplicates or omissions. Those
+checks are consumer and conformance-test responsibilities, not static-schema
+responsibilities.
 
 | Limit | Maximum |
 | --- | ---: |
@@ -188,7 +174,6 @@ responsibilities, not static-schema responsibilities.
 | `requirement_findings` per finding | 64 entries, unique `requirement_id` |
 | `reasons` per finding | 16 entries, unique `reason_code` |
 | `constraints` per finding | 32 entries, unique `constraint_id` |
-| `backup_source_modes` per finding | 2 entries (matches P1 exactly) |
 | `explanation` | 1,024 characters |
 | `RequirementFinding.description` | 2,048 characters |
 | `version_constraint` | 255 characters (matches `RuntimeRequirement.version_constraint`) |
@@ -226,8 +211,8 @@ A successful response reports exactly one finding per requested operation
 identifier in request order for a deterministic projection. Consumers still
 correlate by `operation_identifier`, not position. The Agent validates a
 successful response against the active session and manifest before normalizing
-it for a consumer; a Provider response cannot add operations, roles, source
-modes, or target kinds absent from the accepted manifest. Later operation
+it for a consumer; a Provider response cannot add operations, roles, or target
+kinds absent from the accepted manifest. Later operation
 admission performs its own current validation and must not treat an old
 assessment as permission to dispatch.
 
@@ -259,11 +244,12 @@ identity.
 ## Compatibility and delivery boundary
 
 Keep bootstrap v1 and the P1 manifest contract unchanged — its schema 1,
-versioned string identifiers, explicit `implements` roles, backup
-source-mode declarations, and deterministic manifest revision rules are
-untouched by this milestone. Never reuse field numbers or silently change
-this package's meaning; new interoperability semantics require explicit
-versioning.
+versioned string identifiers, explicit `implements` roles, and deterministic
+manifest revision rules are untouched by this milestone. Capability assessment
+does not repeat operation-specific result variants: those belong to the
+versioned result schema of the operation that produces them. Never reuse field
+numbers or silently change this package's meaning; new interoperability
+semantics require explicit versioning.
 
 This procedure defines the Protocol-only capability-assessment contract.
 Provider runtime and author-facing assessment hooks, Agent client/SDK

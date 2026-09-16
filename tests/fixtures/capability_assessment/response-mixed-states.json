@@ -12,8 +12,7 @@
       "supportState": "SUPPORT_STATE_SUPPORTED",
       "requirementFindings": [],
       "reasons": [],
-      "constraints": [],
-      "backupSourceModes": []
+      "constraints": []
     },
     {
       "operationIdentifier": "stateforge.git/branch.list@1",
@@ -39,8 +38,7 @@
           "value": "",
           "explanation": "Only usable during the nightly maintenance window."
         }
-      ],
-      "backupSourceModes": []
+      ]
     },
     {
       "operationIdentifier": "stateforge.git/tag.list@1",
@@ -52,8 +50,7 @@
           "explanation": "The target repository has no tags configured."
         }
       ],
-      "constraints": [],
-      "backupSourceModes": []
+      "constraints": []
     },
     {
       "operationIdentifier": "stateforge.git/backup.prepare@1",
@@ -65,10 +62,7 @@
           "explanation": "Unable to confirm staging directory permissions for this target."
         }
       ],
-      "constraints": [],
-      "backupSourceModes": [
-        "provider_reference"
-      ]
+      "constraints": []
     }
   ]
 }
