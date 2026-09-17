@@ -923,6 +923,7 @@ def test_request_and_response_correlate_with_accepted_manifest(
         == request_data["expectedEndpointGeneration"]
     )
     assert response["sessionId"] == request_data["expectedSessionId"]
+    assert manifest_response["sessionId"] == request_data["expectedSessionId"]
     assert response["assessmentId"] != request_data["assessmentRequestId"]
 
 
@@ -963,5 +964,5 @@ def test_ordinary_operation_backup_relevance_is_absent_from_manifest_too(
     ordinary = manifest_response["manifest"]["operations"][
         "stateforge.git/reference.resolve@1"
     ]
-    assert ordinary["backupSourceModes"] == []
+    assert "backupSourceModes" not in ordinary
     assert ordinary["implements"] == []

@@ -1,0 +1,47 @@
+{
+  "sessions": {
+    "manifest-session-A": {
+      "providerInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c",
+      "endpointGeneration": "4",
+      "active": true
+    },
+    "manifest-session-B": {
+      "providerInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c",
+      "endpointGeneration": "4",
+      "active": true
+    },
+    "inactive-session": {
+      "providerInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c",
+      "endpointGeneration": "4",
+      "active": false
+    },
+    "other-instance-session": {
+      "providerInstanceId": "68d818de-3671-471d-a0ba-044cf60e2c8e",
+      "endpointGeneration": "4",
+      "active": true
+    },
+    "old-generation-session": {
+      "providerInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c",
+      "endpointGeneration": "3",
+      "active": true
+    }
+  },
+  "providerCases": [
+    {"sessionId": "manifest-session-A", "status": "OK"},
+    {"sessionId": "manifest-session-B", "status": "OK"},
+    {"sessionId": "unknown-session", "status": "FAILED_PRECONDITION"},
+    {"sessionId": "inactive-session", "status": "FAILED_PRECONDITION"},
+    {"sessionId": "other-instance-session", "status": "FAILED_PRECONDITION"},
+    {"sessionId": "old-generation-session", "status": "FAILED_PRECONDITION"},
+    {"sessionId": "", "status": "INVALID_ARGUMENT"},
+    {"sessionId": null, "status": "INVALID_ARGUMENT"},
+    {"status": "INVALID_ARGUMENT"}
+  ],
+  "agentCases": [
+    {"requestSession": "manifest-session-A", "responseSession": "manifest-session-A", "currentSession": "manifest-session-A", "accept": true},
+    {"requestSession": "manifest-session-B", "responseSession": "manifest-session-B", "currentSession": "manifest-session-B", "accept": true},
+    {"requestSession": "manifest-session-A", "responseSession": "manifest-session-B", "currentSession": "manifest-session-A", "accept": false},
+    {"requestSession": "manifest-session-A", "responseSession": "manifest-session-A", "currentSession": "manifest-session-B", "accept": false},
+    {"requestSession": "manifest-session-A", "responseSession": "manifest-session-B", "currentSession": "manifest-session-B", "accept": false}
+  ]
+}

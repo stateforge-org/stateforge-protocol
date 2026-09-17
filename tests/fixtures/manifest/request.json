@@ -1,0 +1,9 @@
+{
+  "expectedProviderInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c",
+  "expectedEndpointGeneration": "4",
+  "supportedManifestSchemaVersions": [
+    2,
+    1
+  ],
+  "expectedSessionId": "manifest-session-A"
+}

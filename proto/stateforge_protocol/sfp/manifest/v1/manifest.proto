@@ -13,7 +13,7 @@ service ManifestService {
   rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
 }
 
-// GetManifestRequest binds the read to the identity confirmed by Handshake.
+// GetManifestRequest binds the read to the session confirmed by Handshake.
 // Empty/default fields are invalid, not wildcards. At most 32 distinct positive
 // schema versions may be offered; order conveys no preference. Schema 1 is the
 // only manifest schema defined by this package today.
@@ -23,6 +23,12 @@ message GetManifestRequest {
   // Positive endpoint generation copied from Handshake, never a process ID.
   uint64 expected_endpoint_generation = 2;
   repeated uint32 supported_manifest_schema_versions = 3;
+  // Required opaque identifier copied unchanged from HandshakeResponse.session_id.
+  // 1-255 Unicode code points, case-sensitive; do not normalize or parse as UUID.
+  // Must name a known, active negotiated session for this instance/generation.
+  // Empty/malformed is INVALID_ARGUMENT; unknown/inactive/mismatched is
+  // FAILED_PRECONDITION. Endpoint identity alone never proves negotiation.
+  string expected_session_id = 4;
 }
 
 // GetManifestResponse is one atomic snapshot. A successful response always
@@ -37,11 +43,15 @@ message GetManifestResponse {
   uint32 manifest_schema_version = 3;
   // "sha256:" plus 64 lowercase hex digits. The normative preimage is RFC 8785
   // canonical JSON of {manifest, manifestSchemaVersion, providerInstanceId}.
-  // The manifest uses ProtoJSON with defaults emitted; generation is excluded.
+  // ProtoJSON defaults are emitted; generation and session ID are excluded.
   // Protobuf deterministic serialization is NOT a canonical hashing format.
   string manifest_revision = 4;
   // Required. At most 1 MiB of canonical JSON for the revision preimage.
   ProviderManifest manifest = 5;
+  // Echo the validated request's expected_session_id, never a global latest ID.
+  // The Agent must match it to both the request and its current session before
+  // accepting or reusing a cached declaration. Not part of manifest_revision.
+  string session_id = 6;
 }
 
 // ProviderManifest describes implementation-wide declarations, not configured

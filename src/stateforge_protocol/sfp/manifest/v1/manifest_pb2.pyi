@@ -21,7 +21,7 @@ DESCRIPTOR: _descriptor.FileDescriptor
 
 @_typing.final
 class GetManifestRequest(_message.Message):
-    """GetManifestRequest binds the read to the identity confirmed by Handshake.
+    """GetManifestRequest binds the read to the session confirmed by Handshake.
     Empty/default fields are invalid, not wildcards. At most 32 distinct positive
     schema versions may be offered; order conveys no preference. Schema 1 is the
     only manifest schema defined by this package today.
@@ -32,10 +32,18 @@ class GetManifestRequest(_message.Message):
     EXPECTED_PROVIDER_INSTANCE_ID_FIELD_NUMBER: _builtins.int
     EXPECTED_ENDPOINT_GENERATION_FIELD_NUMBER: _builtins.int
     SUPPORTED_MANIFEST_SCHEMA_VERSIONS_FIELD_NUMBER: _builtins.int
+    EXPECTED_SESSION_ID_FIELD_NUMBER: _builtins.int
     expected_provider_instance_id: _builtins.str
     """Canonical lowercase UUIDv4 of the installation, copied from Handshake."""
     expected_endpoint_generation: _builtins.int
     """Positive endpoint generation copied from Handshake, never a process ID."""
+    expected_session_id: _builtins.str
+    """Required opaque identifier copied unchanged from HandshakeResponse.session_id.
+    1-255 Unicode code points, case-sensitive; do not normalize or parse as UUID.
+    Must name a known, active negotiated session for this instance/generation.
+    Empty/malformed is INVALID_ARGUMENT; unknown/inactive/mismatched is
+    FAILED_PRECONDITION. Endpoint identity alone never proves negotiation.
+    """
     @_builtins.property
     def supported_manifest_schema_versions(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]: ...
     def __init__(
@@ -44,10 +52,11 @@ class GetManifestRequest(_message.Message):
         expected_provider_instance_id: _builtins.str = ...,
         expected_endpoint_generation: _builtins.int = ...,
         supported_manifest_schema_versions: _abc.Iterable[_builtins.int] | None = ...,
+        expected_session_id: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["expected_endpoint_generation", b"expected_endpoint_generation", "expected_provider_instance_id", b"expected_provider_instance_id", "supported_manifest_schema_versions", b"supported_manifest_schema_versions"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["expected_endpoint_generation", b"expected_endpoint_generation", "expected_provider_instance_id", b"expected_provider_instance_id", "expected_session_id", b"expected_session_id", "supported_manifest_schema_versions", b"supported_manifest_schema_versions"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -67,6 +76,7 @@ class GetManifestResponse(_message.Message):
     MANIFEST_SCHEMA_VERSION_FIELD_NUMBER: _builtins.int
     MANIFEST_REVISION_FIELD_NUMBER: _builtins.int
     MANIFEST_FIELD_NUMBER: _builtins.int
+    SESSION_ID_FIELD_NUMBER: _builtins.int
     provider_instance_id: _builtins.str
     """Must equal the request's expected identity and the negotiated session."""
     endpoint_generation: _builtins.int
@@ -76,8 +86,13 @@ class GetManifestResponse(_message.Message):
     manifest_revision: _builtins.str
     """"sha256:" plus 64 lowercase hex digits. The normative preimage is RFC 8785
     canonical JSON of {manifest, manifestSchemaVersion, providerInstanceId}.
-    The manifest uses ProtoJSON with defaults emitted; generation is excluded.
+    ProtoJSON defaults are emitted; generation and session ID are excluded.
     Protobuf deterministic serialization is NOT a canonical hashing format.
+    """
+    session_id: _builtins.str
+    """Echo the validated request's expected_session_id, never a global latest ID.
+    The Agent must match it to both the request and its current session before
+    accepting or reusing a cached declaration. Not part of manifest_revision.
     """
     @_builtins.property
     def manifest(self) -> Global___ProviderManifest:
@@ -91,10 +106,11 @@ class GetManifestResponse(_message.Message):
         manifest_schema_version: _builtins.int = ...,
         manifest_revision: _builtins.str = ...,
         manifest: Global___ProviderManifest | None = ...,
+        session_id: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["manifest", b"manifest"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["endpoint_generation", b"endpoint_generation", "manifest", b"manifest", "manifest_revision", b"manifest_revision", "manifest_schema_version", b"manifest_schema_version", "provider_instance_id", b"provider_instance_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["endpoint_generation", b"endpoint_generation", "manifest", b"manifest", "manifest_revision", b"manifest_revision", "manifest_schema_version", b"manifest_schema_version", "provider_instance_id", b"provider_instance_id", "session_id", b"session_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
