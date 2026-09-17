@@ -1,0 +1,18 @@
+{
+  "assessmentRequestId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "providerInstanceId": "550e8400-e29b-41d4-a716-446655440000",
+  "endpointGeneration": "4",
+  "sessionId": "session-3d19b6d2-4b7b-4f4a-9c9a-2f3f4f0c9a1b",
+  "manifestRevision": "sha256:b9c70f91b6c7c8f01beb01ff55e35d3fdbec9ea554a8bfc3d458c3fb4f5abbc3",
+  "assessmentId": "6ba7b810-9dad-41d1-80b4-00c04fd430c8",
+  "assessmentTimestamp": "2026-09-16T07:30:00Z",
+  "findings": [
+    {
+      "operationIdentifier": "stateforge.git/reference.resolve@1",
+      "supportState": "SUPPORT_STATE_UNSPECIFIED",
+      "requirementFindings": [],
+      "reasons": [],
+      "constraints": []
+    }
+  ]
+}

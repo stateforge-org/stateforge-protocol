@@ -1,0 +1,115 @@
+{
+  "providerInstanceId": "550e8400-e29b-41d4-a716-446655440000",
+  "endpointGeneration": "4",
+  "manifestSchemaVersion": 1,
+  "manifest": {
+    "providerIdentity": "stateforge.git",
+    "implementationVersion": "1.0.0",
+    "displayName": "Git Provider",
+    "operations": {
+      "stateforge.git/reference.resolve@1": {
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "resultSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "implements": [],
+        "backupSourceModes": []
+      },
+      "stateforge.git/branch.list@1": {
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "resultSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "implements": [],
+        "backupSourceModes": []
+      },
+      "stateforge.git/tag.list@1": {
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "resultSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "implements": [],
+        "backupSourceModes": []
+      },
+      "stateforge.git/backup.prepare@1": {
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "resultSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "implements": [
+          "stateforge.backup.v1.prepare"
+        ],
+        "backupSourceModes": [
+          "staged_filesystem",
+          "provider_reference"
+        ]
+      }
+    },
+    "targetKinds": [
+      "stateforge.git/repository@1"
+    ],
+    "runtimeRequirements": {
+      "executable.git": {
+        "description": "Git executable available to the Provider",
+        "versionConstraint": ">=2.40"
+      }
+    },
+    "platforms": [
+      {
+        "operatingSystem": "linux",
+        "architecture": "x86_64"
+      }
+    ],
+    "configurationSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repository"
+      ]
+    },
+    "triggers": {}
+  },
+  "manifestRevision": "sha256:b9c70f91b6c7c8f01beb01ff55e35d3fdbec9ea554a8bfc3d458c3fb4f5abbc3"
+}
