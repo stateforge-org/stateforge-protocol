@@ -59,7 +59,11 @@ def validate_structure(response: manifest_pb2.GetManifestResponse) -> None:
 The [manifest procedure](../procedures/provider-manifest.md) defines required
 session checks, schema negotiation, revision calculation, privacy, resource
 limits and caching behavior. Constructing a generated message does not enforce
-those requirements.
+those requirements. Populate `GetManifestRequest.expected_session_id` from
+`HandshakeResponse.session_id`. Before accepting a manifest, match the response
+`session_id` to both that request and the Agent's current session, even when
+reusing a cached manifest revision. JSON Schema checks the opaque string's
+shape; consumer runtimes enforce the active-session relationship.
 
 The same pattern validates a capability-assessment response:
 

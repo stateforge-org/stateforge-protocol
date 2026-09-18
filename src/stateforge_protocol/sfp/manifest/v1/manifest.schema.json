@@ -387,12 +387,16 @@
           "minItems": 1,
           "maxItems": 32,
           "uniqueItems": true
+        },
+        "expectedSessionId": {
+          "$ref": "#/$defs/sessionId"
         }
       },
       "required": [
         "expectedProviderInstanceId",
         "expectedEndpointGeneration",
-        "supportedManifestSchemaVersions"
+        "supportedManifestSchemaVersions",
+        "expectedSessionId"
       ],
       "additionalProperties": false
     },
@@ -413,6 +417,9 @@
         },
         "manifest": {
           "$ref": "#/$defs/providerManifest"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
         }
       },
       "required": [
@@ -420,9 +427,15 @@
         "endpointGeneration",
         "manifestSchemaVersion",
         "manifestRevision",
-        "manifest"
+        "manifest",
+        "sessionId"
       ],
       "additionalProperties": false
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
     }
   }
 }

@@ -80,6 +80,7 @@ def test_request_round_trip_and_offer_order() -> None:
         expected_provider_instance_id="7f7db7d8-68b4-4f71-9769-065b5c4f941c",
         expected_endpoint_generation=4,
         supported_manifest_schema_versions=[2, 1],
+        expected_session_id="manifest-session-A",
     )
     decoded = manifest_pb2.GetManifestRequest.FromString(
         request.SerializeToString()
@@ -113,6 +114,7 @@ def test_invalid_request_declarations(field, value) -> None:
         "expectedProviderInstanceId": ("7f7db7d8-68b4-4f71-9769-065b5c4f941c"),
         "expectedEndpointGeneration": "4",
         "supportedManifestSchemaVersions": [1],
+        "expectedSessionId": "manifest-session-A",
     }
     request[field] = value
     request_schema = {

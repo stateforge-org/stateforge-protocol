@@ -3,7 +3,7 @@
   "expectedProviderInstanceId": "550e8400-e29b-41d4-a716-446655440000",
   "expectedEndpointGeneration": "4",
   "expectedSessionId": "session-3d19b6d2-4b7b-4f4a-9c9a-2f3f4f0c9a1b",
-  "expectedManifestRevision": "sha256:b9c70f91b6c7c8f01beb01ff55e35d3fdbec9ea554a8bfc3d458c3fb4f5abbc3",
+  "expectedManifestRevision": "sha256:ab47bfc0879b8f86559b62acea54fa9788dbd566868d319aa3e280ca24337c86",
   "targetKind": "stateforge.git/repository@1",
   "targetConfiguration": {
     "repository": "https://example.com/repo.git"
