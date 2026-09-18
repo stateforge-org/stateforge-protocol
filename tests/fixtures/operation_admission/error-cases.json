@@ -1,0 +1,72 @@
+[
+  {
+    "condition": "malformed request, invalid identifier, or schema-invalid payload",
+    "grpcStatus": "INVALID_ARGUMENT",
+    "reason": "ADMISSION_ERROR_REASON_INVALID_OPERATION_REQUEST",
+    "retryable": false,
+    "createsAcceptedRecord": false
+  },
+  {
+    "condition": "operation identifier absent from the accepted manifest",
+    "grpcStatus": "UNIMPLEMENTED",
+    "reason": "ADMISSION_ERROR_REASON_OPERATION_NOT_DECLARED",
+    "retryable": false,
+    "createsAcceptedRecord": false
+  },
+  {
+    "condition": "target, schema, or required role is incompatible",
+    "grpcStatus": "FAILED_PRECONDITION",
+    "reason": "ADMISSION_ERROR_REASON_OPERATION_INCOMPATIBLE",
+    "retryable": false,
+    "createsAcceptedRecord": false
+  },
+  {
+    "condition": "session, generation, manifest, health, or current requirement is stale",
+    "grpcStatus": "FAILED_PRECONDITION",
+    "reason": "ADMISSION_ERROR_REASON_OPERATION_PRECONDITION_FAILED",
+    "retryable": true,
+    "createsAcceptedRecord": false
+  },
+  {
+    "condition": "Provider admission capacity is temporarily exhausted",
+    "grpcStatus": "RESOURCE_EXHAUSTED",
+    "reason": "ADMISSION_ERROR_REASON_PROVIDER_CAPACITY_EXHAUSTED",
+    "retryable": true,
+    "createsAcceptedRecord": false
+  },
+  {
+    "condition": "Provider is temporarily unavailable",
+    "grpcStatus": "UNAVAILABLE",
+    "reason": "ADMISSION_ERROR_REASON_PROVIDER_UNAVAILABLE",
+    "retryable": true,
+    "createsAcceptedRecord": false
+  },
+  {
+    "condition": "operation ID exists with a different fingerprint",
+    "grpcStatus": "ALREADY_EXISTS",
+    "reason": "ADMISSION_ERROR_REASON_IDEMPOTENCY_CONFLICT",
+    "retryable": false,
+    "createsAcceptedRecord": false
+  },
+  {
+    "condition": "execution deadline elapsed before a new record was admitted",
+    "grpcStatus": "DEADLINE_EXCEEDED",
+    "reason": "ADMISSION_ERROR_REASON_OPERATION_DEADLINE_EXPIRED",
+    "retryable": false,
+    "createsAcceptedRecord": false
+  },
+  {
+    "condition": "resolve-only request has no verifiably retained record",
+    "grpcStatus": "FAILED_PRECONDITION",
+    "reason": "ADMISSION_ERROR_REASON_OPERATION_RECORD_UNAVAILABLE",
+    "retryable": false,
+    "createsAcceptedRecord": false
+  },
+  {
+    "condition": "a retained tombstone proves the operation record expired",
+    "grpcStatus": "FAILED_PRECONDITION",
+    "reason": "ADMISSION_ERROR_REASON_OPERATION_RECORD_EXPIRED",
+    "retryable": false,
+    "createsAcceptedRecord": false
+  }
+]

@@ -31,5 +31,6 @@ mkdocs build --strict
 Generation preserves handwritten package files. The freshness check generates
 into a temporary directory and detects modified, missing, and stale generated
 modules. Keep source schemas, generated bindings, validation schemas and
-conformance vectors in the same change. See the manifest procedure and Python
-contract reference in `docs/` for schema-1 validation and canonical revisions.
+conformance vectors in the same change. See the procedure pages and Python
+contract reference in `docs/` for schema validation, canonical revisions, and
+operation fingerprints.

@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:stateforge:sfp:operation_admission:1",
+  "title": "SFP operation-admission schema 1 ProtoJSON validation",
+  "description": "Validate complete operation-admission ProtoJSON projections with lowerCamelCase field names and non-presence defaults emitted. The schema enforces structural bounds. Session activity, manifest membership, configuration and payload validation against accepted P1 schemas, timestamps, fingerprint recomputation, record lookup, atomic admission, and response correlation remain consumer/runtime checks described by the procedure and covered by conformance tests.",
+  "$ref": "#/$defs/startOperationResponse",
+  "$defs": {
+    "uuid4": {
+      "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+    },
+    "generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "pattern": "^[1-9][0-9]*(?![\\s\\S])"
+    },
+    "versionedIdentifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+/[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*@[1-9][0-9]*(?![\\s\\S])"
+    },
+    "dottedIdentifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+(?![\\s\\S])"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+    },
+    "fingerprint": {
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 30,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z(?![\\s\\S])"
+    },
+    "duration": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 22,
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,9})?s(?![\\s\\S])"
+    },
+    "boundedScalar": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "boolean"},
+        {"type": "number"},
+        {"type": "string", "maxLength": 65536}
+      ]
+    },
+    "boundedArray": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/boundedValue"},
+      "maxItems": 256
+    },
+    "boundedObject": {
+      "type": "object",
+      "maxProperties": 256,
+      "propertyNames": {"maxLength": 128},
+      "additionalProperties": {"$ref": "#/$defs/boundedValue"}
+    },
+    "boundedValue": {
+      "description": "A recursively nested JSON value. Aggregate nesting depth and serialized message size are enforced outside JSON Schema.",
+      "anyOf": [
+        {"$ref": "#/$defs/boundedScalar"},
+        {"$ref": "#/$defs/boundedArray"},
+        {"$ref": "#/$defs/boundedObject"}
+      ]
+    },
+    "admissionMode": {
+      "enum": [
+        "ADMISSION_MODE_ADMIT_OR_RESOLVE",
+        "ADMISSION_MODE_RESOLVE_ONLY"
+      ]
+    },
+    "admissionDisposition": {
+      "enum": [
+        "ADMISSION_DISPOSITION_ACCEPTED_NEW",
+        "ADMISSION_DISPOSITION_RESOLVED_EXISTING"
+      ]
+    },
+    "admissionErrorReason": {
+      "enum": [
+        "ADMISSION_ERROR_REASON_INVALID_OPERATION_REQUEST",
+        "ADMISSION_ERROR_REASON_OPERATION_NOT_DECLARED",
+        "ADMISSION_ERROR_REASON_OPERATION_INCOMPATIBLE",
+        "ADMISSION_ERROR_REASON_OPERATION_PRECONDITION_FAILED",
+        "ADMISSION_ERROR_REASON_PROVIDER_CAPACITY_EXHAUSTED",
+        "ADMISSION_ERROR_REASON_PROVIDER_UNAVAILABLE",
+        "ADMISSION_ERROR_REASON_IDEMPOTENCY_CONFLICT",
+        "ADMISSION_ERROR_REASON_OPERATION_DEADLINE_EXPIRED",
+        "ADMISSION_ERROR_REASON_OPERATION_RECORD_UNAVAILABLE",
+        "ADMISSION_ERROR_REASON_OPERATION_RECORD_EXPIRED"
+      ]
+    },
+    "operationSessionBinding": {
+      "type": "object",
+      "properties": {
+        "expectedProviderInstanceId": {"$ref": "#/$defs/uuid4"},
+        "expectedEndpointGeneration": {"$ref": "#/$defs/generation"},
+        "expectedSessionId": {"$ref": "#/$defs/sessionId"}
+      },
+      "required": [
+        "expectedProviderInstanceId",
+        "expectedEndpointGeneration",
+        "expectedSessionId"
+      ],
+      "additionalProperties": false
+    },
+    "operationTarget": {
+      "type": "object",
+      "properties": {
+        "targetKind": {"$ref": "#/$defs/versionedIdentifier"},
+        "configuration": {"$ref": "#/$defs/boundedObject"}
+      },
+      "required": ["targetKind", "configuration"],
+      "additionalProperties": false
+    },
+    "operationContractContext": {
+      "type": "object",
+      "properties": {
+        "manifestRevision": {"$ref": "#/$defs/revision"},
+        "requiredImplementationRoles": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/dottedIdentifier"},
+          "minItems": 0,
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      },
+      "required": ["manifestRevision", "requiredImplementationRoles"],
+      "additionalProperties": false
+    },
+    "operationInvocation": {
+      "type": "object",
+      "properties": {
+        "operationId": {"$ref": "#/$defs/uuid4"},
+        "operationIdentifier": {"$ref": "#/$defs/versionedIdentifier"},
+        "target": {"$ref": "#/$defs/operationTarget"},
+        "payload": {"$ref": "#/$defs/boundedObject"},
+        "executionDeadline": {"$ref": "#/$defs/timestamp"},
+        "contract": {"$ref": "#/$defs/operationContractContext"},
+        "executionContext": {"$ref": "#/$defs/boundedObject"}
+      },
+      "required": [
+        "operationId",
+        "operationIdentifier",
+        "target",
+        "payload",
+        "executionDeadline",
+        "contract",
+        "executionContext"
+      ],
+      "additionalProperties": false
+    },
+    "startOperationRequest": {
+      "type": "object",
+      "properties": {
+        "sessionBinding": {"$ref": "#/$defs/operationSessionBinding"},
+        "invocation": {"$ref": "#/$defs/operationInvocation"},
+        "admissionMode": {"$ref": "#/$defs/admissionMode"}
+      },
+      "required": ["sessionBinding", "invocation", "admissionMode"],
+      "additionalProperties": false
+    },
+    "operationAdmissionRecord": {
+      "type": "object",
+      "properties": {
+        "operationId": {"$ref": "#/$defs/uuid4"},
+        "requestFingerprint": {"$ref": "#/$defs/fingerprint"},
+        "admittedAt": {"$ref": "#/$defs/timestamp"},
+        "recordExpiresAt": {"$ref": "#/$defs/timestamp"},
+        "admittedEndpointGeneration": {"$ref": "#/$defs/generation"}
+      },
+      "required": [
+        "operationId",
+        "requestFingerprint",
+        "admittedAt",
+        "recordExpiresAt",
+        "admittedEndpointGeneration"
+      ],
+      "additionalProperties": false
+    },
+    "startOperationResponse": {
+      "type": "object",
+      "properties": {
+        "providerInstanceId": {"$ref": "#/$defs/uuid4"},
+        "endpointGeneration": {"$ref": "#/$defs/generation"},
+        "sessionId": {"$ref": "#/$defs/sessionId"},
+        "manifestRevision": {"$ref": "#/$defs/revision"},
+        "disposition": {"$ref": "#/$defs/admissionDisposition"},
+        "record": {"$ref": "#/$defs/operationAdmissionRecord"}
+      },
+      "required": [
+        "providerInstanceId",
+        "endpointGeneration",
+        "sessionId",
+        "manifestRevision",
+        "disposition",
+        "record"
+      ],
+      "additionalProperties": false
+    },
+    "operationAdmissionErrorDetail": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "anyOf": [
+            {"const": ""},
+            {"$ref": "#/$defs/uuid4"}
+          ]
+        },
+        "reason": {"$ref": "#/$defs/admissionErrorReason"},
+        "retryable": {"type": "boolean"},
+        "retryAfter": {"$ref": "#/$defs/duration"},
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": ["operationId", "reason", "retryable", "explanation"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["retryAfter"]
+          },
+          "then": {
+            "properties": {
+              "retryable": {"const": true}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

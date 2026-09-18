@@ -1,0 +1,7 @@
+{
+  "algorithm": "sha256",
+  "canonicalization": "RFC 8785",
+  "projection": "OperationInvocation ProtoJSON with defaults emitted and requiredImplementationRoles sorted lexicographically",
+  "canonicalJson": "{\"contract\":{\"manifestRevision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"requiredImplementationRoles\":[\"stateforge.operation.v1.audited\",\"stateforge.operation.v1.safe\"]},\"executionContext\":{\"authority\":\"policy-run-123\",\"requestedBy\":\"control-plane\"},\"executionDeadline\":\"2026-09-20T12:00:00Z\",\"operationId\":\"22222222-2222-4222-8222-222222222222\",\"operationIdentifier\":\"example.database/maintenance.compact@1\",\"payload\":{\"maxDurationSeconds\":300,\"mode\":\"online\"},\"target\":{\"configuration\":{\"cluster\":\"primary\",\"region\":\"eu-west-1\"},\"targetKind\":\"example.database/cluster@1\"}}",
+  "fingerprint": "sha256:295083e20a174097f948224bd164bd9bec1d5780a79bac47d63a31fa242dcef8"
+}

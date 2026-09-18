@@ -1,0 +1,66 @@
+[
+  {
+    "scenario": "first_admission",
+    "mode": "ADMISSION_MODE_ADMIT_OR_RESOLVE",
+    "recordState": "absent",
+    "fingerprintRelation": "not_applicable",
+    "expected": "ADMISSION_DISPOSITION_ACCEPTED_NEW",
+    "dispatchCount": 1
+  },
+  {
+    "scenario": "equivalent_retry",
+    "mode": "ADMISSION_MODE_ADMIT_OR_RESOLVE",
+    "recordState": "active",
+    "fingerprintRelation": "equal",
+    "expected": "ADMISSION_DISPOSITION_RESOLVED_EXISTING",
+    "dispatchCount": 0
+  },
+  {
+    "scenario": "concurrent_duplicate",
+    "mode": "ADMISSION_MODE_ADMIT_OR_RESOLVE",
+    "recordState": "simultaneously_absent",
+    "fingerprintRelation": "equal",
+    "expected": "one ACCEPTED_NEW and one RESOLVED_EXISTING",
+    "dispatchCount": 1
+  },
+  {
+    "scenario": "changed_target_payload_or_context",
+    "mode": "ADMISSION_MODE_ADMIT_OR_RESOLVE",
+    "recordState": "active",
+    "fingerprintRelation": "different",
+    "expected": "ADMISSION_ERROR_REASON_IDEMPOTENCY_CONFLICT",
+    "dispatchCount": 0
+  },
+  {
+    "scenario": "terminal_record_replay",
+    "mode": "ADMISSION_MODE_RESOLVE_ONLY",
+    "recordState": "terminal_retained",
+    "fingerprintRelation": "equal",
+    "expected": "ADMISSION_DISPOSITION_RESOLVED_EXISTING",
+    "dispatchCount": 0
+  },
+  {
+    "scenario": "deadline_before_admission",
+    "mode": "ADMISSION_MODE_ADMIT_OR_RESOLVE",
+    "recordState": "absent",
+    "fingerprintRelation": "not_applicable",
+    "expected": "ADMISSION_ERROR_REASON_OPERATION_DEADLINE_EXPIRED",
+    "dispatchCount": 0
+  },
+  {
+    "scenario": "lost_state_after_generation_change",
+    "mode": "ADMISSION_MODE_RESOLVE_ONLY",
+    "recordState": "unavailable",
+    "fingerprintRelation": "unknown",
+    "expected": "ADMISSION_ERROR_REASON_OPERATION_RECORD_UNAVAILABLE",
+    "dispatchCount": 0
+  },
+  {
+    "scenario": "expired_record",
+    "mode": "ADMISSION_MODE_RESOLVE_ONLY",
+    "recordState": "expired_tombstone",
+    "fingerprintRelation": "equal",
+    "expected": "ADMISSION_ERROR_REASON_OPERATION_RECORD_EXPIRED",
+    "dispatchCount": 0
+  }
+]
