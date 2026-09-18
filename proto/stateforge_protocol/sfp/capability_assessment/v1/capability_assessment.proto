@@ -29,8 +29,10 @@ enum SupportState {
   // The Provider obtained enough current evidence to support the operation
   // for this target and found no additional unmet requirement.
   SUPPORT_STATE_SUPPORTED = 1;
-  // Supportable only after the returned requirement_findings (or
-  // constraints) are satisfied.
+  // Supportable once every returned requirement_finding reaches SATISFIED
+  // (and constraints, where applicable, are met). requirement_findings may
+  // already include SATISFIED entries alongside the ones still blocking
+  // support.
   SUPPORT_STATE_SUPPORTED_WITH_REQUIREMENTS = 2;
   // Current evidence proves the operation is not supported for this valid
   // target or target state.
@@ -41,10 +43,10 @@ enum SupportState {
   SUPPORT_STATE_INDETERMINATE = 4;
 }
 
-// RequirementState is the bounded, normalized state of one named
-// requirement backing a SUPPORTED_WITH_REQUIREMENTS or INDETERMINATE
-// finding. Zero/UNSPECIFIED is never a valid finding value, for the same
-// reason as SupportState.
+// RequirementState is the bounded, normalized state (SATISFIED,
+// UNSATISFIED, or UNKNOWN) of one named requirement backing a
+// SUPPORTED_WITH_REQUIREMENTS or INDETERMINATE finding. Zero/UNSPECIFIED is
+// never a valid finding value, for the same reason as SupportState.
 enum RequirementState {
   REQUIREMENT_STATE_UNSPECIFIED = 0;
   REQUIREMENT_STATE_SATISFIED = 1;
@@ -154,8 +156,9 @@ message CapabilityFinding {
   // well-formed response.
   SupportState support_state = 2;
   // Zero or more normalized requirement findings backing a
-  // SUPPORTED_WITH_REQUIREMENTS or INDETERMINATE support_state. An unknown
-  // requirement is not evidence of satisfaction. Unique by requirement_id.
+  // SUPPORTED_WITH_REQUIREMENTS or INDETERMINATE support_state, including
+  // any already-SATISFIED requirements. An unknown requirement is not
+  // evidence of satisfaction. Unique by requirement_id.
   repeated RequirementFinding requirement_findings = 3;
   // Machine-readable reason codes paired with bounded, sanitized
   // human-readable explanations. Diagnostic text is not the discriminator;
