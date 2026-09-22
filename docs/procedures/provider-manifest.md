@@ -100,15 +100,22 @@ identifier, not interpreted by the protocol package. An unfamiliar requirement
 is not evidence that the Agent satisfies it; assessment/admission policy is
 owned by their later contracts.
 
-Compliance roles are explicit per-operation dotted identifiers such as
-`stateforge.backup.v1.prepare` and
-`stateforge.disaster_recovery.v1.reconstruct`. An operation named "backup"
-with an empty `implements` list makes no compliance claim. Unknown roles may
-be transported but cannot establish a recognized compliance profile. A known
-claim must be checked against that profile's exact versioned input/result
-schemas and semantic requirements before use. The versioned operation
-identifier identifies its input/result contract; an incompatible operation
-contract change requires a new identifier version.
+An operation's `implements` list contains zero or more **profile claims**:
+versioned semantic roles such as `stateforge.backup.v1.prepare` and
+`stateforge.disaster_recovery.v1.reconstruct`. A role is not a user permission,
+a Provider category, or an individual Control Plane contract. Multiple entries
+mean that one operation claims to satisfy multiple profiles; each claim must
+be validated independently. Different Control Plane contracts may later
+require the same profile without adding contract identifiers to `implements`.
+The Provider does not need to receive or interpret those contracts through
+this manifest.
+
+An operation named "backup" with an empty `implements` list makes no profile
+claim. Unknown roles may be transported but cannot establish a recognized
+compliance profile. A known claim must be checked against that profile's exact
+versioned input/result schemas and semantic requirements before use. The
+versioned operation identifier identifies its input/result contract; an
+incompatible operation contract change requires a new identifier version.
 
 Every operation declaration contains exactly `input_schema`, `result_schema`,
 and `implements`. The operation's `result_schema` is the only manifest-level

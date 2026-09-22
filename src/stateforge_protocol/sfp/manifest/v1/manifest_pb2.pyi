@@ -271,9 +271,13 @@ class OperationDeclaration(_message.Message):
 
     @_builtins.property
     def implements(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """Unique role identifiers, e.g. stateforge.backup.v1.prepare or
-        stateforge.disaster_recovery.v1.reconstruct. Empty means no compliance claim.
-        Never infer a role from the operation identifier or a Python method name.
+        """Zero or more distinct claims that this operation implements versioned
+        semantic/compliance profiles, e.g. stateforge.backup.v1.prepare or
+        stateforge.disaster_recovery.v1.reconstruct. Each claim must be validated
+        against its profile. These are not user permissions or a list of Control
+        Plane contracts; multiple contracts may rely on the same profile claim.
+        Empty means no profile claim. Never infer a role from the operation
+        identifier or a Python method name.
         """
 
     def __init__(
