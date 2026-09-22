@@ -7,14 +7,11 @@
   "invocation": {
     "operationId": "22222222-2222-4222-8222-222222222222",
     "operationIdentifier": "example.database/maintenance.compact@1",
-    "target": {
-      "targetKind": "example.database/cluster@1",
-      "configuration": {
+    "payload": {
+      "resource": {
         "cluster": "primary",
         "region": "eu-west-1"
-      }
-    },
-    "payload": {
+      },
       "maxDurationSeconds": 300,
       "mode": "online"
     },

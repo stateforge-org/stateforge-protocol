@@ -24,7 +24,7 @@
     "dispatchCount": 1
   },
   {
-    "scenario": "changed_target_payload_or_context",
+    "scenario": "changed_payload_or_context",
     "mode": "ADMISSION_MODE_ADMIT_OR_RESOLVE",
     "recordState": "active",
     "fingerprintRelation": "different",

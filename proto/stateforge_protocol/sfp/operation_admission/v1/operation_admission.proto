@@ -89,9 +89,8 @@ message OperationInvocation {
   string operation_id = 1;
   // Manifest-declared versioned identifier, namespace/name@major.
   string operation_identifier = 2;
-  // Required target kind and normalized target configuration.
-  OperationTarget target = 3;
-  // Required object validated against the operation's P1 input_schema.
+  // Required object validated against the operation's P1 input_schema. Any
+  // resource selection belongs here only when that operation requires one.
   google.protobuf.Struct payload = 4;
   // Absolute business-execution deadline selected by the Agent. It is part of
   // the immutable request, not the gRPC call deadline. A deadline that has
@@ -102,15 +101,6 @@ message OperationInvocation {
   // Required bounded, non-secret execution metadata. Authorization and policy
   // decisions remain outside SFP; this object carries only approved context.
   google.protobuf.Struct execution_context = 7;
-}
-
-// OperationTarget selects one manifest-declared target kind. Configuration is
-// normalized as JSON data before fingerprinting and validated against the
-// accepted Provider-level configuration schema. It is not a StateForge logical
-// project/component assignment.
-message OperationTarget {
-  string target_kind = 1;
-  google.protobuf.Struct configuration = 2;
 }
 
 // OperationContractContext pins the exact accepted declaration and optional
@@ -159,7 +149,7 @@ message OperationAdmissionRecord {
 
 // OperationAdmissionErrorDetail is packed as structured gRPC error detail for
 // every admission rejection when request decoding permits it. It never contains
-// secrets, payloads, target configuration, stack traces, or remote diagnostics.
+// secrets, payloads, stack traces, or remote diagnostics.
 message OperationAdmissionErrorDetail {
   // May be empty only when the request did not contain a valid operation ID.
   string operation_id = 1;

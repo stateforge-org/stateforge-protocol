@@ -5,9 +5,29 @@ most one Provider dispatch. The Agent assigns the operation identity before
 contact. The Provider validates the request, records a successful admission
 atomically, and only then calls Provider-specific behavior.
 
-[![Operation Admission and Idempotency sequence diagram](../assets/diagrams/operation-admission-and-idempotency.png)](../assets/diagrams/operation-admission-and-idempotency.png)
-
-_Select the diagram to open the full-resolution version._
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant RPC as Provider RPC library
+    participant Registry as Admission registry
+    participant Provider as Provider implementation
+    Agent->>RPC: StartOperation(id, operation identifier, payload)
+    Note over Agent,RPC: Resource selection, if needed, is inside the typed payload
+    RPC->>RPC: Validate session, declaration, roles, and input schema
+    RPC->>Registry: Compare operation ID and canonical fingerprint
+    alt Matching retained record
+        Registry-->>RPC: Existing admission record
+        RPC-->>Agent: RESOLVED_EXISTING (no dispatch)
+    else Same ID, different fingerprint
+        Registry-->>RPC: Conflict
+        RPC-->>Agent: ALREADY_EXISTS (no dispatch)
+    else No record and new admission allowed
+        RPC->>RPC: Check deadline, prerequisites, and capacity
+        RPC->>Registry: Atomically create admission record
+        RPC->>Provider: Dispatch once after record creation
+        RPC-->>Agent: ACCEPTED_NEW
+    end
+```
 
 ## Wire contract
 
@@ -60,14 +80,13 @@ fingerprint.
 | --- | --- |
 | `operation_id` | Agent-assigned canonical lowercase UUIDv4 allocated before first contact. A new authorized attempt gets a new ID. A terminal ID is never repurposed. |
 | `operation_identifier` | Exact P1 manifest key in `namespace/name@major` form. It remains an extensible string, not an enum. |
-| `target` | One manifest-declared `target_kind` plus a required JSON object containing normalized target configuration. The configuration is validated against the accepted Provider-level P1 `configuration_schema`. It is not a StateForge project or component assignment. |
-| `payload` | Required JSON object validated against the selected operation's P1 `input_schema` before admission. JSON Schema defaults are annotations and are not silently inserted. |
+| `payload` | Required JSON object validated against the selected operation's P1 `input_schema` before admission. An operation that acts on a resource identifies it here, using its own schema; an operation with no resource needs no placeholder. Provider-level `configuration_schema` does not validate operation input. JSON Schema defaults are annotations and are not silently inserted. |
 | `execution_deadline` | Absolute Agent-selected deadline for the business attempt. It is distinct from the gRPC call deadline and is immutable. |
 | `contract.manifest_revision` | Exact accepted P1 manifest revision. It pins the operation declaration and its input/result schemas. |
 | `contract.required_implementation_roles` | Zero or more distinct profile claims from the selected operation's P1 `implements` list that this invocation relies on. This may be a subset of all declared claims. Empty means this invocation requires no profile claim. These are not Control Plane contract identifiers or permissions. |
 | `execution_context` | Required bounded JSON object containing already-approved, non-secret execution metadata. SFP transports context; it does not make the policy or authorization decision. |
 
-The Agent and Provider must treat `target`, `payload`, and `execution_context`
+The Agent and Provider must treat `payload` and `execution_context`
 as exact JSON values. Reordering object members is not a semantic change;
 changing a value, adding or removing a member, or relying on an unmaterialized
 schema default is a semantic change. `required_implementation_roles` is a set:
@@ -100,7 +119,7 @@ The Provider computes one fingerprint before looking up `operation_id`:
 5. Compute SHA-256 over the canonical UTF-8 bytes.
 6. Encode the fingerprint as `sha256:` plus 64 lowercase hexadecimal digits.
 
-The fingerprint includes `operation_id`, operation identifier, target,
+The fingerprint includes `operation_id`, operation identifier, the complete
 payload, execution deadline, pinned manifest/profile context, and execution
 context. It excludes `session_binding` and `admission_mode`. A same-generation
 reconnect or switch to resolve-only therefore preserves the fingerprint, while
@@ -137,8 +156,8 @@ silently redispatch work:
    `admission_mode`.
 3. Validate the active handshake session, Provider identity, and generation.
 4. Match `contract.manifest_revision` to the Agent-accepted active manifest.
-   Confirm the operation and target are declared, every required role is
-   present, and target configuration and payload satisfy the accepted schemas.
+   Confirm the operation is declared, every required role is present, and the
+   complete payload satisfies the selected operation's accepted input schema.
 5. Compute the canonical invocation fingerprint.
 6. Look up `operation_id` before testing a new-admission deadline or capacity:
    - same fingerprint: return `RESOLVED_EXISTING` with the retained record;
@@ -199,9 +218,9 @@ delay, and sanitized explanation.
 
 | Condition | gRPC status | Structured reason | Retry guidance |
 | --- | --- | --- | --- |
-| Malformed fields, invalid identifiers, invalid bounds, or schema-invalid target/payload | `INVALID_ARGUMENT` | `INVALID_OPERATION_REQUEST` | Correct the request. Reusing the same ID is permitted only because the Provider explicitly rejected before admission. |
+| Malformed fields, invalid identifiers, invalid bounds, or schema-invalid payload | `INVALID_ARGUMENT` | `INVALID_OPERATION_REQUEST` | Correct the request. Reusing the same ID is permitted only because the Provider explicitly rejected before admission. |
 | Operation absent from the accepted manifest | `UNIMPLEMENTED` | `OPERATION_NOT_DECLARED` | Refresh declarations or choose declared work; do not reinterpret the identifier. |
-| Target, schema, or required profile role is incompatible | `FAILED_PRECONDITION` | `OPERATION_INCOMPATIBLE` | Obtain a compatible target/contract and use a new operation ID if semantic content changes. |
+| Selected operation schema or required profile role is incompatible | `FAILED_PRECONDITION` | `OPERATION_INCOMPATIBLE` | Obtain a compatible declaration or profile and use a new operation ID if semantic content changes. |
 | Session, generation, manifest, health, or current prerequisite is stale | `FAILED_PRECONDITION` | `OPERATION_PRECONDITION_FAILED` | Re-establish prerequisites. Reuse the ID only with identical invocation content. |
 | Admission capacity temporarily exhausted | `RESOURCE_EXHAUSTED` | `PROVIDER_CAPACITY_EXHAUSTED` | Retry the identical request with bounded backoff; honor `retry_after` when present. |
 | Whole Provider service temporarily unavailable | `UNAVAILABLE` | `PROVIDER_UNAVAILABLE` | Reconnect and revalidate before a bounded retry. |
@@ -255,7 +274,7 @@ generation zero, and `UNSPECIFIED` enums are invalid.
 | Serialized request | 8 MiB |
 | Serialized response | 1 MiB |
 | Serialized structured error detail | 4 KiB |
-| Target, payload, or execution-context aggregate nesting | 64 containers |
+| Payload or execution-context aggregate nesting | 64 containers |
 | Entries per JSON object or array | 256 |
 | JSON property name | 128 Unicode code points |
 | JSON string value | 65,536 Unicode code points |

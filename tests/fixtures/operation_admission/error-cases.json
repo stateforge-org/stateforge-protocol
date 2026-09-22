@@ -14,7 +14,7 @@
     "createsAcceptedRecord": false
   },
   {
-    "condition": "target, schema, or required role is incompatible",
+    "condition": "operation schema or required role is incompatible",
     "grpcStatus": "FAILED_PRECONDITION",
     "reason": "ADMISSION_ERROR_REASON_OPERATION_INCOMPATIBLE",
     "retryable": false,

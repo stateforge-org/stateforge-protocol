@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:stateforge:sfp:operation_admission:1",
   "title": "SFP operation-admission schema 1 ProtoJSON validation",
-  "description": "Validate complete operation-admission ProtoJSON projections with lowerCamelCase field names and non-presence defaults emitted. The schema enforces structural bounds. Session activity, manifest membership, configuration and payload validation against accepted P1 schemas, timestamps, fingerprint recomputation, record lookup, atomic admission, and response correlation remain consumer/runtime checks described by the procedure and covered by conformance tests.",
+  "description": "Validate complete operation-admission ProtoJSON projections with lowerCamelCase field names and non-presence defaults emitted. The schema enforces structural bounds. Session activity, manifest membership, operation payload validation against its accepted P1 input schema, timestamps, fingerprint recomputation, record lookup, atomic admission, and response correlation remain consumer/runtime checks described by the procedure and covered by conformance tests.",
   "$ref": "#/$defs/startOperationResponse",
   "$defs": {
     "uuid4": {
@@ -125,15 +125,6 @@
       ],
       "additionalProperties": false
     },
-    "operationTarget": {
-      "type": "object",
-      "properties": {
-        "targetKind": {"$ref": "#/$defs/versionedIdentifier"},
-        "configuration": {"$ref": "#/$defs/boundedObject"}
-      },
-      "required": ["targetKind", "configuration"],
-      "additionalProperties": false
-    },
     "operationContractContext": {
       "type": "object",
       "properties": {
@@ -154,7 +145,6 @@
       "properties": {
         "operationId": {"$ref": "#/$defs/uuid4"},
         "operationIdentifier": {"$ref": "#/$defs/versionedIdentifier"},
-        "target": {"$ref": "#/$defs/operationTarget"},
         "payload": {"$ref": "#/$defs/boundedObject"},
         "executionDeadline": {"$ref": "#/$defs/timestamp"},
         "contract": {"$ref": "#/$defs/operationContractContext"},
@@ -163,7 +153,6 @@
       "required": [
         "operationId",
         "operationIdentifier",
-        "target",
         "payload",
         "executionDeadline",
         "contract",

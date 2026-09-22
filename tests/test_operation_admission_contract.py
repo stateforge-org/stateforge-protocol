@@ -189,7 +189,6 @@ def test_invocation_and_session_controls_are_structurally_separate() -> None:
     assert {
         "operation_id",
         "operation_identifier",
-        "target",
         "payload",
         "execution_deadline",
         "contract",
@@ -202,6 +201,66 @@ def test_invocation_and_session_controls_are_structurally_separate() -> None:
             "admission_mode",
         }
         & invocation_fields
+    )
+
+
+def test_invocation_has_no_generic_target_field_or_message(
+    request_data,
+) -> None:
+    assert "target" not in (
+        operation_admission_pb2.OperationInvocation.DESCRIPTOR.fields_by_name
+    )
+    assert "OperationTarget" not in (
+        operation_admission_pb2.DESCRIPTOR.message_types_by_name
+    )
+    assert "operationTarget" not in _SCHEMA["$defs"]
+
+    obsolete = copy.deepcopy(request_data)
+    obsolete["invocation"]["target"] = {
+        "targetKind": "example.database/cluster@1",
+        "configuration": {},
+    }
+    with pytest.raises(ValidationError):
+        _REQUEST_VALIDATOR.validate(obsolete)
+    with pytest.raises(json_format.ParseError):
+        json_format.ParseDict(
+            obsolete,
+            operation_admission_pb2.StartOperationRequest(),
+        )
+
+
+def test_resource_selection_is_operation_specific_payload(
+    request_data,
+) -> None:
+    invocation = request_data["invocation"]
+    resource_schema = {
+        "type": "object",
+        "properties": {
+            "resource": {
+                "type": "object",
+                "properties": {"cluster": {"type": "string"}},
+                "required": ["cluster"],
+            }
+        },
+        "required": ["resource"],
+    }
+    Draft202012Validator(resource_schema).validate(invocation["payload"])
+
+    without_resource = copy.deepcopy(request_data)
+    without_resource["invocation"]["operationIdentifier"] = (
+        "example.utility/heartbeat.ping@1"
+    )
+    without_resource["invocation"]["payload"] = {}
+    without_resource["invocation"]["contract"][
+        "requiredImplementationRoles"
+    ] = []
+    _REQUEST_VALIDATOR.validate(without_resource)
+    json_format.ParseDict(
+        without_resource,
+        operation_admission_pb2.StartOperationRequest(),
+    )
+    Draft202012Validator({"type": "object", "maxProperties": 0}).validate(
+        without_resource["invocation"]["payload"]
     )
 
 
@@ -268,8 +327,8 @@ def test_required_role_order_is_not_semantic(request_data) -> None:
     [
         (("operationId",), "33333333-3333-4333-8333-333333333333"),
         (("operationIdentifier",), "example.database/index.rebuild@1"),
-        (("target", "targetKind"), "example.database/instance@1"),
-        (("target", "configuration", "cluster"), "secondary"),
+        (("payload", "resource", "cluster"), "secondary"),
+        (("payload", "resource", "region"), "us-east-1"),
         (("payload", "mode"), "offline"),
         (("executionDeadline",), "2026-09-20T13:00:00Z"),
         (
@@ -417,7 +476,7 @@ def test_scenarios_cover_required_idempotency_boundaries() -> None:
         "first_admission",
         "equivalent_retry",
         "concurrent_duplicate",
-        "changed_target_payload_or_context",
+        "changed_payload_or_context",
         "terminal_record_replay",
         "deadline_before_admission",
         "lost_state_after_generation_change",

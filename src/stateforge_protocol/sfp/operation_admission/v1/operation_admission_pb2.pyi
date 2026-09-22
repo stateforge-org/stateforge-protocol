@@ -194,7 +194,6 @@ class OperationInvocation(_message.Message):
 
     OPERATION_ID_FIELD_NUMBER: _builtins.int
     OPERATION_IDENTIFIER_FIELD_NUMBER: _builtins.int
-    TARGET_FIELD_NUMBER: _builtins.int
     PAYLOAD_FIELD_NUMBER: _builtins.int
     EXECUTION_DEADLINE_FIELD_NUMBER: _builtins.int
     CONTRACT_FIELD_NUMBER: _builtins.int
@@ -206,12 +205,10 @@ class OperationInvocation(_message.Message):
     operation_identifier: _builtins.str
     """Manifest-declared versioned identifier, namespace/name@major."""
     @_builtins.property
-    def target(self) -> Global___OperationTarget:
-        """Required target kind and normalized target configuration."""
-
-    @_builtins.property
     def payload(self) -> _struct_pb2.Struct:
-        """Required object validated against the operation's P1 input_schema."""
+        """Required object validated against the operation's P1 input_schema. Any
+        resource selection belongs here only when that operation requires one.
+        """
 
     @_builtins.property
     def execution_deadline(self) -> _timestamp_pb2.Timestamp:
@@ -235,48 +232,18 @@ class OperationInvocation(_message.Message):
         *,
         operation_id: _builtins.str = ...,
         operation_identifier: _builtins.str = ...,
-        target: Global___OperationTarget | None = ...,
         payload: _struct_pb2.Struct | None = ...,
         execution_deadline: _timestamp_pb2.Timestamp | None = ...,
         contract: Global___OperationContractContext | None = ...,
         execution_context: _struct_pb2.Struct | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["contract", b"contract", "execution_context", b"execution_context", "execution_deadline", b"execution_deadline", "payload", b"payload", "target", b"target"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["contract", b"contract", "execution_context", b"execution_context", "execution_deadline", b"execution_deadline", "payload", b"payload"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["contract", b"contract", "execution_context", b"execution_context", "execution_deadline", b"execution_deadline", "operation_id", b"operation_id", "operation_identifier", b"operation_identifier", "payload", b"payload", "target", b"target"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["contract", b"contract", "execution_context", b"execution_context", "execution_deadline", b"execution_deadline", "operation_id", b"operation_id", "operation_identifier", b"operation_identifier", "payload", b"payload"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___OperationInvocation: _TypeAlias = OperationInvocation  # noqa: Y015
-
-@_typing.final
-class OperationTarget(_message.Message):
-    """OperationTarget selects one manifest-declared target kind. Configuration is
-    normalized as JSON data before fingerprinting and validated against the
-    accepted Provider-level configuration schema. It is not a StateForge logical
-    project/component assignment.
-    """
-
-    DESCRIPTOR: _descriptor.Descriptor
-
-    TARGET_KIND_FIELD_NUMBER: _builtins.int
-    CONFIGURATION_FIELD_NUMBER: _builtins.int
-    target_kind: _builtins.str
-    @_builtins.property
-    def configuration(self) -> _struct_pb2.Struct: ...
-    def __init__(
-        self,
-        *,
-        target_kind: _builtins.str = ...,
-        configuration: _struct_pb2.Struct | None = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["configuration", b"configuration"]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["configuration", b"configuration", "target_kind", b"target_kind"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___OperationTarget: _TypeAlias = OperationTarget  # noqa: Y015
 
 @_typing.final
 class OperationContractContext(_message.Message):
@@ -407,7 +374,7 @@ Global___OperationAdmissionRecord: _TypeAlias = OperationAdmissionRecord  # noqa
 class OperationAdmissionErrorDetail(_message.Message):
     """OperationAdmissionErrorDetail is packed as structured gRPC error detail for
     every admission rejection when request decoding permits it. It never contains
-    secrets, payloads, target configuration, stack traces, or remote diagnostics.
+    secrets, payloads, stack traces, or remote diagnostics.
     """
 
     DESCRIPTOR: _descriptor.Descriptor
