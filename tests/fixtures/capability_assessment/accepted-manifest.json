@@ -70,9 +70,6 @@
         ]
       }
     },
-    "targetKinds": [
-      "stateforge.git/repository@1"
-    ],
     "runtimeRequirements": {
       "executable.git": {
         "description": "Git executable available to the Provider",
@@ -104,6 +101,6 @@
     },
     "triggers": {}
   },
-  "manifestRevision": "sha256:ab47bfc0879b8f86559b62acea54fa9788dbd566868d319aa3e280ca24337c86",
+  "manifestRevision": "sha256:f5648d269aa40ce80ec6efd05c7314249b021c777293ef63a167a1c5bf4cef12",
   "sessionId": "session-3d19b6d2-4b7b-4f4a-9c9a-2f3f4f0c9a1b"
 }

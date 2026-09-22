@@ -30,7 +30,7 @@ _MESSAGES = {
     "getManifestResponse": manifest_pb2.GetManifestResponse,
 }
 _GOLDEN = (
-    "sha256:34f54f69855f1fbebef4d3d6bb74c0238785e0f8ef43f9efb1a12e6b4353183d"
+    "sha256:6bfdf3aedc2d4e45d77d4787cc0e744a488208b2510d81788291f51d24a623e8"
 )
 
 

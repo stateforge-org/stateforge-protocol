@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n2stateforge_protocol/sfp/manifest/v1/manifest.proto\x12\x1astateforge.sfp.manifest.v1\x1a\x1cgoogle/protobuf/struct.proto\"\x96\x02\n\x12GetManifestRequest\x12\x41\n\x1d\x65xpected_provider_instance_id\x18\x01 \x01(\tR\x1a\x65xpectedProviderInstanceId\x12@\n\x1c\x65xpected_endpoint_generation\x18\x02 \x01(\x04R\x1a\x65xpectedEndpointGeneration\x12K\n\"supported_manifest_schema_versions\x18\x03 \x03(\rR\x1fsupportedManifestSchemaVersions\x12.\n\x13\x65xpected_session_id\x18\x04 \x01(\tR\x11\x65xpectedSessionId\"\xc6\x02\n\x13GetManifestResponse\x12\x30\n\x14provider_instance_id\x18\x01 \x01(\tR\x12providerInstanceId\x12/\n\x13\x65ndpoint_generation\x18\x02 \x01(\x04R\x12\x65ndpointGeneration\x12\x36\n\x17manifest_schema_version\x18\x03 \x01(\rR\x15manifestSchemaVersion\x12+\n\x11manifest_revision\x18\x04 \x01(\tR\x10manifestRevision\x12H\n\x08manifest\x18\x05 \x01(\x0b\x32,.stateforge.sfp.manifest.v1.ProviderManifestR\x08manifest\x12\x1d\n\nsession_id\x18\x06 \x01(\tR\tsessionId\"\xdf\x07\n\x10ProviderManifest\x12+\n\x11provider_identity\x18\x01 \x01(\tR\x10providerIdentity\x12\x35\n\x16implementation_version\x18\x02 \x01(\tR\x15implementationVersion\x12!\n\x0c\x64isplay_name\x18\x03 \x01(\tR\x0b\x64isplayName\x12\\\n\noperations\x18\x04 \x03(\x0b\x32<.stateforge.sfp.manifest.v1.ProviderManifest.OperationsEntryR\noperations\x12!\n\x0ctarget_kinds\x18\x05 \x03(\tR\x0btargetKinds\x12x\n\x14runtime_requirements\x18\x06 \x03(\x0b\x32\x45.stateforge.sfp.manifest.v1.ProviderManifest.RuntimeRequirementsEntryR\x13runtimeRequirements\x12O\n\tplatforms\x18\x07 \x03(\x0b\x32\x31.stateforge.sfp.manifest.v1.PlatformCompatibilityR\tplatforms\x12J\n\x14\x63onfiguration_schema\x18\x08 \x01(\x0b\x32\x17.google.protobuf.StructR\x13\x63onfigurationSchema\x12V\n\x08triggers\x18\t \x03(\x0b\x32:.stateforge.sfp.manifest.v1.ProviderManifest.TriggersEntryR\x08triggers\x1ao\n\x0fOperationsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x46\n\x05value\x18\x02 \x01(\x0b\x32\x30.stateforge.sfp.manifest.v1.OperationDeclarationR\x05value:\x02\x38\x01\x1av\n\x18RuntimeRequirementsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x44\n\x05value\x18\x02 \x01(\x0b\x32..stateforge.sfp.manifest.v1.RuntimeRequirementR\x05value:\x02\x38\x01\x1ak\n\rTriggersEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x44\n\x05value\x18\x02 \x01(\x0b\x32..stateforge.sfp.manifest.v1.TriggerDeclarationR\x05value:\x02\x38\x01\"\xcb\x01\n\x14OperationDeclaration\x12:\n\x0cinput_schema\x18\x01 \x01(\x0b\x32\x17.google.protobuf.StructR\x0binputSchema\x12<\n\rresult_schema\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x0cresultSchema\x12\x1e\n\nimplements\x18\x03 \x03(\tR\nimplementsJ\x04\x08\x04\x10\x05R\x13\x62\x61\x63kup_source_modes\"e\n\x12RuntimeRequirement\x12 \n\x0b\x64\x65scription\x18\x01 \x01(\tR\x0b\x64\x65scription\x12-\n\x12version_constraint\x18\x02 \x01(\tR\x11versionConstraint\"f\n\x15PlatformCompatibility\x12)\n\x10operating_system\x18\x01 \x01(\tR\x0foperatingSystem\x12\"\n\x0c\x61rchitecture\x18\x02 \x01(\tR\x0c\x61rchitecture\"T\n\x12TriggerDeclaration\x12>\n\x0epayload_schema\x18\x01 \x01(\x0b\x32\x17.google.protobuf.StructR\rpayloadSchema2\x81\x01\n\x0fManifestService\x12n\n\x0bGetManifest\x12..stateforge.sfp.manifest.v1.GetManifestRequest\x1a/.stateforge.sfp.manifest.v1.GetManifestResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n2stateforge_protocol/sfp/manifest/v1/manifest.proto\x12\x1astateforge.sfp.manifest.v1\x1a\x1cgoogle/protobuf/struct.proto\"\x96\x02\n\x12GetManifestRequest\x12\x41\n\x1d\x65xpected_provider_instance_id\x18\x01 \x01(\tR\x1a\x65xpectedProviderInstanceId\x12@\n\x1c\x65xpected_endpoint_generation\x18\x02 \x01(\x04R\x1a\x65xpectedEndpointGeneration\x12K\n\"supported_manifest_schema_versions\x18\x03 \x03(\rR\x1fsupportedManifestSchemaVersions\x12.\n\x13\x65xpected_session_id\x18\x04 \x01(\tR\x11\x65xpectedSessionId\"\xc6\x02\n\x13GetManifestResponse\x12\x30\n\x14provider_instance_id\x18\x01 \x01(\tR\x12providerInstanceId\x12/\n\x13\x65ndpoint_generation\x18\x02 \x01(\x04R\x12\x65ndpointGeneration\x12\x36\n\x17manifest_schema_version\x18\x03 \x01(\rR\x15manifestSchemaVersion\x12+\n\x11manifest_revision\x18\x04 \x01(\tR\x10manifestRevision\x12H\n\x08manifest\x18\x05 \x01(\x0b\x32,.stateforge.sfp.manifest.v1.ProviderManifestR\x08manifest\x12\x1d\n\nsession_id\x18\x06 \x01(\tR\tsessionId\"\xbc\x07\n\x10ProviderManifest\x12+\n\x11provider_identity\x18\x01 \x01(\tR\x10providerIdentity\x12\x35\n\x16implementation_version\x18\x02 \x01(\tR\x15implementationVersion\x12!\n\x0c\x64isplay_name\x18\x03 \x01(\tR\x0b\x64isplayName\x12\\\n\noperations\x18\x04 \x03(\x0b\x32<.stateforge.sfp.manifest.v1.ProviderManifest.OperationsEntryR\noperations\x12x\n\x14runtime_requirements\x18\x06 \x03(\x0b\x32\x45.stateforge.sfp.manifest.v1.ProviderManifest.RuntimeRequirementsEntryR\x13runtimeRequirements\x12O\n\tplatforms\x18\x07 \x03(\x0b\x32\x31.stateforge.sfp.manifest.v1.PlatformCompatibilityR\tplatforms\x12J\n\x14\x63onfiguration_schema\x18\x08 \x01(\x0b\x32\x17.google.protobuf.StructR\x13\x63onfigurationSchema\x12V\n\x08triggers\x18\t \x03(\x0b\x32:.stateforge.sfp.manifest.v1.ProviderManifest.TriggersEntryR\x08triggers\x1ao\n\x0fOperationsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x46\n\x05value\x18\x02 \x01(\x0b\x32\x30.stateforge.sfp.manifest.v1.OperationDeclarationR\x05value:\x02\x38\x01\x1av\n\x18RuntimeRequirementsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x44\n\x05value\x18\x02 \x01(\x0b\x32..stateforge.sfp.manifest.v1.RuntimeRequirementR\x05value:\x02\x38\x01\x1ak\n\rTriggersEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x44\n\x05value\x18\x02 \x01(\x0b\x32..stateforge.sfp.manifest.v1.TriggerDeclarationR\x05value:\x02\x38\x01\"\xcb\x01\n\x14OperationDeclaration\x12:\n\x0cinput_schema\x18\x01 \x01(\x0b\x32\x17.google.protobuf.StructR\x0binputSchema\x12<\n\rresult_schema\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x0cresultSchema\x12\x1e\n\nimplements\x18\x03 \x03(\tR\nimplementsJ\x04\x08\x04\x10\x05R\x13\x62\x61\x63kup_source_modes\"e\n\x12RuntimeRequirement\x12 \n\x0b\x64\x65scription\x18\x01 \x01(\tR\x0b\x64\x65scription\x12-\n\x12version_constraint\x18\x02 \x01(\tR\x11versionConstraint\"f\n\x15PlatformCompatibility\x12)\n\x10operating_system\x18\x01 \x01(\tR\x0foperatingSystem\x12\"\n\x0c\x61rchitecture\x18\x02 \x01(\tR\x0c\x61rchitecture\"T\n\x12TriggerDeclaration\x12>\n\x0epayload_schema\x18\x01 \x01(\x0b\x32\x17.google.protobuf.StructR\rpayloadSchema2\x81\x01\n\x0fManifestService\x12n\n\x0bGetManifest\x12..stateforge.sfp.manifest.v1.GetManifestRequest\x1a/.stateforge.sfp.manifest.v1.GetManifestResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -43,21 +43,21 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETMANIFESTRESPONSE']._serialized_start=394
   _globals['_GETMANIFESTRESPONSE']._serialized_end=720
   _globals['_PROVIDERMANIFEST']._serialized_start=723
-  _globals['_PROVIDERMANIFEST']._serialized_end=1714
-  _globals['_PROVIDERMANIFEST_OPERATIONSENTRY']._serialized_start=1374
-  _globals['_PROVIDERMANIFEST_OPERATIONSENTRY']._serialized_end=1485
-  _globals['_PROVIDERMANIFEST_RUNTIMEREQUIREMENTSENTRY']._serialized_start=1487
-  _globals['_PROVIDERMANIFEST_RUNTIMEREQUIREMENTSENTRY']._serialized_end=1605
-  _globals['_PROVIDERMANIFEST_TRIGGERSENTRY']._serialized_start=1607
-  _globals['_PROVIDERMANIFEST_TRIGGERSENTRY']._serialized_end=1714
-  _globals['_OPERATIONDECLARATION']._serialized_start=1717
-  _globals['_OPERATIONDECLARATION']._serialized_end=1920
-  _globals['_RUNTIMEREQUIREMENT']._serialized_start=1922
-  _globals['_RUNTIMEREQUIREMENT']._serialized_end=2023
-  _globals['_PLATFORMCOMPATIBILITY']._serialized_start=2025
-  _globals['_PLATFORMCOMPATIBILITY']._serialized_end=2127
-  _globals['_TRIGGERDECLARATION']._serialized_start=2129
-  _globals['_TRIGGERDECLARATION']._serialized_end=2213
-  _globals['_MANIFESTSERVICE']._serialized_start=2216
-  _globals['_MANIFESTSERVICE']._serialized_end=2345
+  _globals['_PROVIDERMANIFEST']._serialized_end=1679
+  _globals['_PROVIDERMANIFEST_OPERATIONSENTRY']._serialized_start=1339
+  _globals['_PROVIDERMANIFEST_OPERATIONSENTRY']._serialized_end=1450
+  _globals['_PROVIDERMANIFEST_RUNTIMEREQUIREMENTSENTRY']._serialized_start=1452
+  _globals['_PROVIDERMANIFEST_RUNTIMEREQUIREMENTSENTRY']._serialized_end=1570
+  _globals['_PROVIDERMANIFEST_TRIGGERSENTRY']._serialized_start=1572
+  _globals['_PROVIDERMANIFEST_TRIGGERSENTRY']._serialized_end=1679
+  _globals['_OPERATIONDECLARATION']._serialized_start=1682
+  _globals['_OPERATIONDECLARATION']._serialized_end=1885
+  _globals['_RUNTIMEREQUIREMENT']._serialized_start=1887
+  _globals['_RUNTIMEREQUIREMENT']._serialized_end=1988
+  _globals['_PLATFORMCOMPATIBILITY']._serialized_start=1990
+  _globals['_PLATFORMCOMPATIBILITY']._serialized_end=2092
+  _globals['_TRIGGERDECLARATION']._serialized_start=2094
+  _globals['_TRIGGERDECLARATION']._serialized_end=2178
+  _globals['_MANIFESTSERVICE']._serialized_start=2181
+  _globals['_MANIFESTSERVICE']._serialized_end=2310
 # @@protoc_insertion_point(module_scope)

@@ -26,9 +26,6 @@
         ]
       }
     },
-    "targetKinds": [
-      "stateforge.git/repository@1"
-    ],
     "runtimeRequirements": {
       "executable.git": {
         "description": "Git executable available to the Provider",

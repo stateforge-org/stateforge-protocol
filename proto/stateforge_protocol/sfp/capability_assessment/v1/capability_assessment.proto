@@ -6,36 +6,35 @@ import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 // CapabilityAssessmentService lets an Agent ask whether manifest-declared
-// operations are currently usable against one concrete third-party target
+// operations are currently usable by the Provider
 // before admitting or executing work. It shares the Agent-established local
 // SFP channel and runs only after handshake, manifest acceptance, and
 // Provider readiness. This read-only service never admits, dispatches,
-// reserves, or mutates target state; a returned finding is point-in-time
+// reserves, or mutates resource state; a returned finding is point-in-time
 // evidence, not authorization.
 service CapabilityAssessmentService {
   // AssessCapabilities returns one normalized finding per requested
-  // operation identifier for one declared target. See
+  // operation identifier. See
   // docs/procedures/capability-assessment.md for validation, findings,
   // failure mapping, deadlines, and retries.
   rpc AssessCapabilities(AssessCapabilitiesRequest) returns (AssessCapabilitiesResponse);
 }
 
 // SupportState is the bounded, normalized outcome of assessing one
-// operation against one target. Zero/UNSPECIFIED is never a valid finding
+// operation. Zero/UNSPECIFIED is never a valid finding
 // value; it exists only as the proto3 default that a well-formed response
 // must not contain.
 enum SupportState {
   SUPPORT_STATE_UNSPECIFIED = 0;
   // The Provider obtained enough current evidence to support the operation
-  // for this target and found no additional unmet requirement.
+  // and found no additional unmet requirement.
   SUPPORT_STATE_SUPPORTED = 1;
   // Supportable once every returned requirement_finding reaches SATISFIED
   // (and constraints, where applicable, are met). requirement_findings may
   // already include SATISFIED entries alongside the ones still blocking
   // support.
   SUPPORT_STATE_SUPPORTED_WITH_REQUIREMENTS = 2;
-  // Current evidence proves the operation is not supported for this valid
-  // target or target state.
+  // Current evidence proves the operation is not supported.
   SUPPORT_STATE_UNSUPPORTED = 3;
   // Support cannot be established or ruled out from available evidence, for
   // example because inspection, access, permissions, or vendor state is
@@ -63,7 +62,7 @@ enum RequirementState {
 message AssessCapabilitiesRequest {
   // Agent-assigned immutable correlation identity for this exact semantic
   // request, canonical lowercase UUIDv4. Reusing the ID correlates a retry
-  // of the same semantic request; changed target/operations/context
+  // of the same semantic request; changed operations/context
   // require a new ID. The Provider keeps no persistent idempotency ledger
   // for it in this milestone.
   string assessment_request_id = 1;
@@ -82,21 +81,10 @@ message AssessCapabilitiesRequest {
   // changed declarations) must reject the request rather than assess
   // against a manifest the Agent never validated.
   string expected_manifest_revision = 5;
-  // Single declared target kind, namespace/name@major, e.g.
-  // stateforge.git/repository@1. Must be one of the accepted manifest's
-  // target_kinds.
-  string target_kind = 6;
-  // Target-specific configuration needed for inspection. Structurally must
-  // be an object; its contents are validated against the accepted
-  // manifest's Provider-level configuration_schema. target_kind membership
-  // is validated separately. writeOnly-declared fields (secrets) may be
-  // supplied here; the Provider must never copy them into the response,
-  // reasons, logs, identity, or diagnostics.
-  google.protobuf.Struct target_configuration = 7;
   // Bounded, non-secret situational metadata the Provider inspection may
   // use to refine a finding, for example locale or invoking-automation
-  // hints. Not validated against any manifest schema and never treated as
-  // part of the target's identity or configuration.
+  // hints. Not validated against any manifest schema and never a substitute
+  // for operation-specific resource input.
   google.protobuf.Struct execution_context = 8;
   // Bounded, nonempty set of unique versioned operation identifiers,
   // namespace/name@major. Every entry must be declared in the accepted
@@ -128,7 +116,7 @@ message AssessCapabilitiesResponse {
   string manifest_revision = 5;
   // Distinct, Provider-minted identity for this produced result, canonical
   // lowercase UUIDv4. Never derived from assessment_request_id: a
-  // read-only retry of the same request may legally observe newer target
+  // read-only retry of the same request may legally observe newer Provider
   // state and therefore yields a new assessment_id even when the request
   // is unchanged.
   string assessment_id = 6;
@@ -143,7 +131,7 @@ message AssessCapabilitiesResponse {
 }
 
 // CapabilityFinding is the normalized result for one requested operation
-// identifier against the request's target. It never contains configuration
+// identifier. It never contains configuration
 // secrets, credentials, customer data, or a StateForge project/component
 // assignment.
 message CapabilityFinding {
@@ -165,7 +153,7 @@ message CapabilityFinding {
   // reason codes are. Unique by reason_code.
   repeated ReasonDetail reasons = 4;
   // Structured constraints and limitations required to use the operation
-  // safely against this target, for example a required read-only mode or
+  // safely, for example a required read-only mode or
   // a rate limit. Unique by constraint_id.
   repeated ConstraintDetail constraints = 5;
 }
@@ -190,7 +178,7 @@ message RequirementFinding {
 
 // ReasonDetail pairs a machine-readable reason code with a bounded,
 // sanitized explanation. It never carries a stack trace, secret, or raw
-// target payload.
+// operation payload.
 message ReasonDetail {
   // Extensible dotted reason-code identifier. See
   // docs/procedures/capability-assessment.md for the canonical core
@@ -201,7 +189,7 @@ message ReasonDetail {
 }
 
 // ConstraintDetail is one structured, machine-consumable constraint or
-// limitation required to use an operation safely against this target.
+// limitation required to use an operation safely.
 message ConstraintDetail {
   // Stable dotted identifier for this constraint.
   string constraint_id = 1;

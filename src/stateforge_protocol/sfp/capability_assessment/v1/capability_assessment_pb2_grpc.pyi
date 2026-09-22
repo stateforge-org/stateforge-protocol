@@ -28,11 +28,11 @@ GRPC_VERSION: str
 
 class CapabilityAssessmentServiceStub:
     """CapabilityAssessmentService lets an Agent ask whether manifest-declared
-    operations are currently usable against one concrete third-party target
+    operations are currently usable by the Provider
     before admitting or executing work. It shares the Agent-established local
     SFP channel and runs only after handshake, manifest acceptance, and
     Provider readiness. This read-only service never admits, dispatches,
-    reserves, or mutates target state; a returned finding is point-in-time
+    reserves, or mutates resource state; a returned finding is point-in-time
     evidence, not authorization.
     """
 
@@ -42,7 +42,7 @@ class CapabilityAssessmentServiceStub:
     def __new__(cls, channel: _aio.Channel) -> CapabilityAssessmentServiceAsyncStub: ...
     AssessCapabilities: _grpc.UnaryUnaryMultiCallable[_capability_assessment_pb2.AssessCapabilitiesRequest, _capability_assessment_pb2.AssessCapabilitiesResponse]
     """AssessCapabilities returns one normalized finding per requested
-    operation identifier for one declared target. See
+    operation identifier. See
     docs/procedures/capability-assessment.md for validation, findings,
     failure mapping, deadlines, and retries.
     """
@@ -50,29 +50,29 @@ class CapabilityAssessmentServiceStub:
 @_typing.type_check_only
 class CapabilityAssessmentServiceAsyncStub(CapabilityAssessmentServiceStub):
     """CapabilityAssessmentService lets an Agent ask whether manifest-declared
-    operations are currently usable against one concrete third-party target
+    operations are currently usable by the Provider
     before admitting or executing work. It shares the Agent-established local
     SFP channel and runs only after handshake, manifest acceptance, and
     Provider readiness. This read-only service never admits, dispatches,
-    reserves, or mutates target state; a returned finding is point-in-time
+    reserves, or mutates resource state; a returned finding is point-in-time
     evidence, not authorization.
     """
 
     def __init__(self, channel: _aio.Channel) -> None: ...
     AssessCapabilities: _aio.UnaryUnaryMultiCallable[_capability_assessment_pb2.AssessCapabilitiesRequest, _capability_assessment_pb2.AssessCapabilitiesResponse]  # type: ignore[assignment]
     """AssessCapabilities returns one normalized finding per requested
-    operation identifier for one declared target. See
+    operation identifier. See
     docs/procedures/capability-assessment.md for validation, findings,
     failure mapping, deadlines, and retries.
     """
 
 class CapabilityAssessmentServiceServicer(metaclass=_abc_1.ABCMeta):
     """CapabilityAssessmentService lets an Agent ask whether manifest-declared
-    operations are currently usable against one concrete third-party target
+    operations are currently usable by the Provider
     before admitting or executing work. It shares the Agent-established local
     SFP channel and runs only after handshake, manifest acceptance, and
     Provider readiness. This read-only service never admits, dispatches,
-    reserves, or mutates target state; a returned finding is point-in-time
+    reserves, or mutates resource state; a returned finding is point-in-time
     evidence, not authorization.
     """
 
@@ -83,7 +83,7 @@ class CapabilityAssessmentServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_capability_assessment_pb2.AssessCapabilitiesResponse, _abc.Awaitable[_capability_assessment_pb2.AssessCapabilitiesResponse]]:
         """AssessCapabilities returns one normalized finding per requested
-        operation identifier for one declared target. See
+        operation identifier. See
         docs/procedures/capability-assessment.md for validation, findings,
         failure mapping, deadlines, and retries.
         """

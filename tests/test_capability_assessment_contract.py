@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import rfc8785
-from google.protobuf import json_format
+from google.protobuf import descriptor_pb2, json_format
 from jsonschema import Draft202012Validator, ValidationError
 
 from stateforge_protocol.sfp.capability_assessment.v1 import (
@@ -186,6 +186,19 @@ def test_request_message_has_no_deadline_or_dispatch_fields() -> None:
     request_type = capability_assessment_pb2.AssessCapabilitiesRequest
     for name in request_type.DESCRIPTOR.fields_by_name:
         assert not any(token in name for token in forbidden)
+
+
+def test_request_has_no_generic_target_fields() -> None:
+    descriptor = capability_assessment_pb2.AssessCapabilitiesRequest.DESCRIPTOR
+    assert "target_kind" not in descriptor.fields_by_name
+    assert "target_configuration" not in descriptor.fields_by_name
+    message = descriptor_pb2.DescriptorProto()
+    descriptor.CopyToProto(message)
+    assert not message.reserved_range
+    assert not message.reserved_name
+    properties = _SCHEMA["$defs"]["assessCapabilitiesRequest"]["properties"]
+    assert "targetKind" not in properties
+    assert "targetConfiguration" not in properties
 
 
 def test_session_id_fences_independently_of_instance_and_generation(
@@ -492,7 +505,7 @@ def test_capability_finding_has_no_backup_specific_field() -> None:
     )
 
 
-# -- Identifiers, configuration, and secrecy -------------------------------
+# -- Identifiers, context, and secrecy -------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -505,7 +518,7 @@ def test_capability_finding_has_no_backup_specific_field() -> None:
         ("expectedEndpointGeneration", "01"),
         ("expectedSessionId", ""),
         ("expectedManifestRevision", "sha256:bad"),
-        ("targetKind", "repository"),
+        ("targetKind", "stateforge.git/repository@1"),
         ("targetConfiguration", "not-an-object"),
         ("targetConfiguration", []),
         ("executionContext", "not-an-object"),
@@ -582,36 +595,6 @@ def test_success_requires_complete_response(response, validator, field):
         validator.validate(response)
 
 
-@pytest.mark.parametrize(
-    "identifier",
-    [
-        "repository",
-        "example.vendor/foo@0",
-        "example.vendor/foo@01",
-        "example.vendor/Foo@1",
-        "example.vendor/foo@1\n",
-    ],
-)
-def test_invalid_target_kind_identifiers(request_data, identifier) -> None:
-    request_data["targetKind"] = identifier
-    with pytest.raises(ValidationError):
-        _REQUEST_VALIDATOR.validate(request_data)
-
-
-def test_undeclared_target_kind_passes_structural_validation(
-    request_data, manifest_response
-) -> None:
-    # Whether target_kind is actually declared by the accepted manifest is a
-    # FAILED_PRECONDITION check the Provider performs at runtime; this
-    # static schema can only enforce identifier syntax.
-    request_data["targetKind"] = "example.vendor/unknown_target@1"
-    _REQUEST_VALIDATOR.validate(request_data)
-    assert (
-        request_data["targetKind"]
-        not in manifest_response["manifest"]["targetKinds"]
-    )
-
-
 def test_undeclared_operation_passes_structure_but_fails_manifest_check(
     request_data, manifest_response
 ) -> None:
@@ -636,7 +619,6 @@ def test_custom_reason_and_requirement_identifiers_are_extensible(
         "stateforge.capability_assessment.v1.permission_uncertain",
         "stateforge.capability_assessment.v1.unsupported_vendor_state",
         "stateforge.capability_assessment.v1.insufficient_evidence",
-        "stateforge.capability_assessment.v1.target_not_found",
         "stateforge.capability_assessment.v1.requirement_unmet",
     ],
 )
@@ -647,23 +629,15 @@ def test_canonical_reason_codes_validate(
     validator.validate(response)
 
 
-@pytest.mark.parametrize("field", ["targetConfiguration", "executionContext"])
 @pytest.mark.parametrize("value", ["not-an-object", [], 1, True, None])
-def test_target_configuration_and_execution_context_must_be_objects(
-    request_data, field, value
-) -> None:
-    request_data[field] = value
+def test_execution_context_must_be_an_object(request_data, value) -> None:
+    request_data["executionContext"] = value
     with pytest.raises(ValidationError):
         _REQUEST_VALIDATOR.validate(request_data)
 
 
-@pytest.mark.parametrize("field", ["targetConfiguration", "executionContext"])
-def test_target_configuration_and_execution_context_accept_objects(
-    request_data, field
-) -> None:
-    # P1 configuration schemas may legitimately contain nested objects and
-    # arrays of objects. The capability envelope must preserve that shape.
-    request_data[field] = {
+def test_execution_context_accepts_nested_objects(request_data) -> None:
+    request_data["executionContext"] = {
         "auth": {
             "oauth": {
                 "clientId": "stateforge",
@@ -675,35 +649,40 @@ def test_target_configuration_and_execution_context_accept_objects(
     _REQUEST_VALIDATOR.validate(request_data)
 
 
-@pytest.mark.parametrize("field", ["targetConfiguration", "executionContext"])
 def test_context_nesting_limit_is_a_consumer_check_not_a_schema_restriction(
-    request_data, field
+    request_data,
 ) -> None:
-    request_data[field] = _nested_context(_MAX_CONTEXT_NESTING)
+    request_data["executionContext"] = _nested_context(_MAX_CONTEXT_NESTING)
     _REQUEST_VALIDATOR.validate(request_data)
-    assert _container_depth(request_data[field]) == _MAX_CONTEXT_NESTING
+    assert (
+        _container_depth(request_data["executionContext"])
+        == _MAX_CONTEXT_NESTING
+    )
 
     # JSON Schema cannot express an aggregate recursive-depth ceiling. The
     # consumer's cheap pre-validation walk rejects the next container.
-    request_data[field] = _nested_context(_MAX_CONTEXT_NESTING + 1)
+    request_data["executionContext"] = _nested_context(
+        _MAX_CONTEXT_NESTING + 1
+    )
     _REQUEST_VALIDATOR.validate(request_data)
-    assert _container_depth(request_data[field]) > _MAX_CONTEXT_NESTING
+    assert (
+        _container_depth(request_data["executionContext"])
+        > _MAX_CONTEXT_NESTING
+    )
 
 
-@pytest.mark.parametrize("field", ["targetConfiguration", "executionContext"])
-def test_target_configuration_and_execution_context_bound_leaf_length(
-    request_data, field
+def test_execution_context_bounds_leaf_length(
+    request_data,
 ) -> None:
-    request_data[field] = {"huge": "x" * 1_000_000}
+    request_data["executionContext"] = {"huge": "x" * 1_000_000}
     with pytest.raises(ValidationError):
         _REQUEST_VALIDATOR.validate(request_data)
 
 
-@pytest.mark.parametrize("field", ["targetConfiguration", "executionContext"])
-def test_target_configuration_and_execution_context_bound_breadth(
-    request_data, field
+def test_execution_context_bounds_breadth(
+    request_data,
 ) -> None:
-    request_data[field] = {f"key_{i}": "value" for i in range(33)}
+    request_data["executionContext"] = {f"key_{i}": "value" for i in range(33)}
     with pytest.raises(ValidationError):
         _REQUEST_VALIDATOR.validate(request_data)
 
@@ -721,18 +700,6 @@ def test_response_schema_has_no_configuration_or_secret_field() -> None:
             lowered = property_name.lower()
             assert "configuration" not in lowered
             assert "secret" not in lowered
-
-
-def test_secret_bearing_request_input_is_never_echoed_by_valid_fixture(
-    response, request_data, manifest_response
-) -> None:
-    sensitive_value = "stateforge-sensitive-value-never-echo"
-    request_data["targetConfiguration"]["token"] = sensitive_value
-    configuration_schema = manifest_response["manifest"]["configurationSchema"]
-    Draft202012Validator(configuration_schema).validate(
-        request_data["targetConfiguration"]
-    )
-    assert sensitive_value not in json.dumps(response)
 
 
 # -- Bounds -----------------------------------------------------------------
@@ -803,7 +770,6 @@ def test_serialized_resource_limits_are_independent_of_schema_bounds(
     # structurally valid but deliberately exceeds the independent wire cap.
     leaf = "\U0001f600" * 2048
     large_context = {f"key_{index}": [leaf] * 32 for index in range(32)}
-    request_data["targetConfiguration"] = large_context
     request_data["executionContext"] = large_context
     _REQUEST_VALIDATOR.validate(request_data)
     oversized_message = json_format.ParseDict(
@@ -867,7 +833,7 @@ def test_string_length_bounds_enforced(
 # -- Paired accepted-manifest conformance ----------------------------------
 #
 # request.json and response-mixed-states.json share identity, manifest
-# revision, target kind, operation, and configuration values with
+# revision and operation values with
 # accepted-manifest.json, so they can be used together as one interoperable
 # conformance set: this is what a Provider or Agent integration test actually
 # pairs against, not a manifest fixture declaring an unrelated single
@@ -895,6 +861,36 @@ def test_accepted_manifest_fixture_revision_is_recomputable(
     )
     expected = "sha256:" + hashlib.sha256(preimage).hexdigest()
     assert manifest_response["manifestRevision"] == expected
+
+
+def test_assessment_does_not_require_operation_resource_input(
+    request_data, manifest_response
+) -> None:
+    operations = manifest_response["manifest"]["operations"]
+    resource_input = operations["stateforge.git/branch.list@1"]["inputSchema"]
+    resource_input["properties"] = {"repository": {"type": "string"}}
+    resource_input["required"] = ["repository"]
+    ordinary_input = operations["stateforge.git/reference.resolve@1"][
+        "inputSchema"
+    ]
+    preimage = rfc8785.dumps(
+        {
+            key: manifest_response[key]
+            for key in (
+                "manifest",
+                "manifestSchemaVersion",
+                "providerInstanceId",
+            )
+        }
+    )
+    revision = "sha256:" + hashlib.sha256(preimage).hexdigest()
+    manifest_response["manifestRevision"] = revision
+    request_data["expectedManifestRevision"] = revision
+    Draft202012Validator(_MANIFEST_SCHEMA).validate(manifest_response)
+    _REQUEST_VALIDATOR.validate(request_data)
+    assert ordinary_input["properties"] == {}
+    assert resource_input["required"] == ["repository"]
+    assert "repository" not in request_data["executionContext"]
 
 
 def test_request_and_response_correlate_with_accepted_manifest(
@@ -927,35 +923,12 @@ def test_request_and_response_correlate_with_accepted_manifest(
     assert response["assessmentId"] != request_data["assessmentRequestId"]
 
 
-def test_target_kind_is_declared_in_accepted_manifest(
-    request_data, manifest_response
-) -> None:
-    assert (
-        request_data["targetKind"]
-        in manifest_response["manifest"]["targetKinds"]
-    )
-
-
 def test_operation_identifiers_are_declared_in_accepted_manifest(
     request_data, manifest_response
 ) -> None:
     declared = set(manifest_response["manifest"]["operations"])
     requested = set(request_data["operationIdentifiers"])
     assert requested <= declared
-
-
-def test_target_configuration_validates_against_accepted_manifest_schema(
-    request_data, manifest_response
-) -> None:
-    # This is the semantic check the packaged capability-assessment schema
-    # explicitly cannot perform on its own (see "Structural and semantic
-    # validation" in the procedure page): validating target_configuration's
-    # actual contents against the accepted manifest's Provider-level
-    # configuration_schema. Target-kind membership is checked separately.
-    configuration_schema = manifest_response["manifest"]["configurationSchema"]
-    Draft202012Validator(configuration_schema).validate(
-        request_data["targetConfiguration"]
-    )
 
 
 def test_ordinary_operation_backup_relevance_is_absent_from_manifest_too(

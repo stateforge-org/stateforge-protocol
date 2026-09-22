@@ -311,15 +311,6 @@
           "minProperties": 0,
           "maxProperties": 1024
         },
-        "targetKinds": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/identifier"
-          },
-          "minItems": 1,
-          "maxItems": 1024,
-          "uniqueItems": true
-        },
         "runtimeRequirements": {
           "type": "object",
           "propertyNames": {
@@ -360,7 +351,6 @@
         "implementationVersion",
         "displayName",
         "operations",
-        "targetKinds",
         "runtimeRequirements",
         "platforms",
         "configurationSchema",
