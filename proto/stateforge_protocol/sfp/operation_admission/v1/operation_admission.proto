@@ -118,9 +118,12 @@ message OperationTarget {
 message OperationContractContext {
   // Exact accepted GetManifestResponse.manifest_revision.
   string manifest_revision = 1;
-  // Unique dotted role identifiers that must appear in the selected operation's
-  // P1 implements list. Empty means no compliance-profile requirement. Ordering
-  // is semantically irrelevant and is sorted in the fingerprint projection.
+  // Distinct profile claims this invocation relies on: a subset of the selected
+  // operation's P1 implements list, not a list of Control Plane contracts or
+  // permissions. The Agent validates recognized profiles before relying on
+  // them; the Provider checks that each requested claim is declared. Empty
+  // means no profile claim is required for this invocation. Ordering is
+  // semantically irrelevant and is sorted in the fingerprint projection.
   repeated string required_implementation_roles = 2;
 }
 

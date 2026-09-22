@@ -64,7 +64,7 @@ fingerprint.
 | `payload` | Required JSON object validated against the selected operation's P1 `input_schema` before admission. JSON Schema defaults are annotations and are not silently inserted. |
 | `execution_deadline` | Absolute Agent-selected deadline for the business attempt. It is distinct from the gRPC call deadline and is immutable. |
 | `contract.manifest_revision` | Exact accepted P1 manifest revision. It pins the operation declaration and its input/result schemas. |
-| `contract.required_implementation_roles` | Unique optional P1 `implements` roles that this invocation requires. Every value must be declared by the operation. Empty means the operation needs no compliance-profile claim. |
+| `contract.required_implementation_roles` | Zero or more distinct profile claims from the selected operation's P1 `implements` list that this invocation relies on. This may be a subset of all declared claims. Empty means this invocation requires no profile claim. These are not Control Plane contract identifiers or permissions. |
 | `execution_context` | Required bounded JSON object containing already-approved, non-secret execution metadata. SFP transports context; it does not make the policy or authorization decision. |
 
 The Agent and Provider must treat `target`, `payload`, and `execution_context`
@@ -72,6 +72,14 @@ as exact JSON values. Reordering object members is not a semantic change;
 changing a value, adding or removing a member, or relying on an unmaterialized
 schema default is a semantic change. `required_implementation_roles` is a set:
 order is not semantic, duplicates are invalid.
+
+A role names a versioned semantic/compliance profile, not a particular Control
+Plane contract. An operation can claim multiple profiles in its P1 manifest;
+the Agent validates any recognized profile it relies on, and admission checks
+that each role requested here appears in that operation's declaration. This
+membership check is not authorization or proof that the Provider's behavior
+complies with the profile. A future Control Plane contract may require a
+profile, but its contract identity is not sent as a role through SFP.
 
 Configuration or payload fields declared `writeOnly` may contain secrets. The
 Provider must not copy them into responses, error details, diagnostics,
