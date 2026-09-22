@@ -153,6 +153,18 @@ def test_operation_identifiers_are_string_map_keys() -> None:
     )
 
 
+def test_provider_manifest_has_no_generic_target_kinds() -> None:
+    descriptor = manifest_pb2.ProviderManifest.DESCRIPTOR
+    assert "target_kinds" not in descriptor.fields_by_name
+    message = descriptor_pb2.DescriptorProto()
+    descriptor.CopyToProto(message)
+    assert not message.reserved_range
+    assert not message.reserved_name
+    schema = _SCHEMA["$defs"]["providerManifest"]
+    assert "targetKinds" not in schema["properties"]
+    assert "targetKinds" not in schema["required"]
+
+
 @pytest.mark.parametrize(
     ("path", "value"),
     [
@@ -168,8 +180,7 @@ def test_operation_identifiers_are_string_map_keys() -> None:
         (("manifest", "implementationVersion"), "1.0.0-01"),
         (("manifest", "displayName"), ""),
         (("manifest", "platforms"), []),
-        (("manifest", "targetKinds"), ["repository"]),
-        (("manifest", "targetKinds"), ["stateforge.git/repository@1"] * 2),
+        (("manifest", "targetKinds"), ["stateforge.git/repository@1"]),
         (("manifest", "configuration"), {"token": "must-not-be-sent"}),
         (("manifest", "configurationSchema", "type"), "invalid-type"),
         (("manifest", "configurationSchema", "required"), "repository"),

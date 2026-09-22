@@ -2,7 +2,7 @@
 
 After a successful handshake, the Agent retrieves the Provider's effective
 manifest over the negotiated SFP service. The exchange confirms identity,
-manifest schema compatibility, operations, contracts, triggers, target kinds,
+manifest schema compatibility, operations, contracts, triggers,
 runtime requirements, and configuration schema without transferring secrets.
 
 [![Provider Manifest Exchange sequence diagram](../assets/diagrams/provider-manifest-exchange.png)](../assets/diagrams/provider-manifest-exchange.png)
@@ -80,13 +80,12 @@ authors do not construct protobuf messages or calculate revisions themselves.
 | `implementation_version` | SemVer 2.0.0 of the running Provider implementation. |
 | `display_name` | Nonempty human-readable name. |
 | `operations` | Map from extensible operation identifier to Draft 2020-12 input schema, result schema, and explicit `implements` roles. |
-| `target_kinds` | Nonempty set of supported third-party kinds, without configured targets or StateForge component bindings. |
 | `runtime_requirements` | Map of dotted requirement identifiers to descriptions and version constraints. These are declarations, not installed-state observations or commands to execute. |
 | `platforms` | Nonempty list of explicit operating-system/architecture pairs, such as `linux` / `x86_64`. No wildcard or implied Cartesian product. |
 | `configuration_schema` | JSON Schema Draft 2020-12 object schema describing configuration shape. |
 | `triggers` | Map from declared trigger identifier to a payload schema. No streaming or acknowledgement behavior is defined here. |
 
-Operation, trigger, and target-kind identifiers use
+Operation and trigger identifiers use
 `namespace/name@major`, for example `stateforge.git/reference.resolve@1`.
 The namespace contains at least two dotted lowercase segments. Name segments
 are lowercase and may be dotted; segments start with a letter and may contain
@@ -159,7 +158,6 @@ enforce the following limits before accepting a snapshot:
 | Serialized response | 2 MiB |
 | Canonical revision preimage | 1 MiB |
 | Each operations, triggers, or requirements map | 1,024 entries |
-| Target kinds | 1,024 unique identifiers |
 | Platform pairs | 256 unique pairs |
 | Compliance roles per operation | 64 unique roles |
 | Embedded JSON nesting | 64 containers |
@@ -282,43 +280,26 @@ revision. Diagnostic text is not a machine-readable error discriminator; this
 contract uses standard gRPC statuses and introduces no separate error-detail
 schema.
 
-## Compatibility and delivery boundary
+## Contract boundary
 
-The earlier generic-operation correction revised manifest schema 1 in place:
-it removed `backup_source_modes` / `backupSourceModes` and updated the validation
-schema, fixture, and golden revision together. That was a breaking schema/API
-correction, not a backward-compatible projection. Consumers of the earlier schema-1
-shape must update together and discard their previously validated manifest
-cache entries. The existing negotiated version remains 1, so negotiation
-cannot distinguish old and corrected schema-1 implementations. There is no
-second manifest package, negotiation RPC, or legacy adapter.
+Manifest schema 1 is the only schema defined by this package. A request names
+the expected Provider instance, endpoint generation, and negotiated session;
+the response echoes that session and carries one complete declaration and its
+revision. Unknown manifest schema versions are not interpreted as schema 1.
 
-The session-binding correction adds request field 4 and response field 6;
-bootstrap v1 and `ProviderManifest` remain unchanged. These protobuf additions
-are wire-additive, but both fields are required by the current ProtoJSON schema
-and semantic contract. Older senders omit them and decode to empty defaults;
-that is an invalid exchange, not a legacy bypass. Older receivers may ignore
-unknown fields and therefore cannot enforce this contract. Update both
-consuming runtimes together; a passing Buf compatibility check alone does not
-establish semantic interoperability. The negotiated manifest version remains
-1 and cannot distinguish these consumer implementations.
+`ProviderManifest` describes Provider-wide identity, operations, runtime and
+platform requirements, Provider configuration shape, and triggers. It contains
+no generic target-kind declaration or configured resource. An operation's
+`input_schema` defines any resource information that operation needs. The
+manifest contains schemas, not configuration values or operation inputs.
 
-Session fields do not alter declaration revisions or their canonical preimages.
-Regenerate bindings and update packaged validation schemas and envelope fixtures
-together. The removed operation field number 4 and name remain reserved in
-`OperationDeclaration`; protobuf field numbers are scoped to their message.
-Unknown manifest versions are rejected rather than interpreted as schema 1.
-Future interoperability changes should use a separately negotiated contract
-unless another explicit breaking revision is agreed.
+The `manifest_revision` hashes the canonical declaration, schema version, and
+Provider instance identity. Session ID and endpoint generation are not part of
+that preimage. Consumers must validate the full response and revision before
+caching it; a changed declaration has a different revision.
 
-This procedure provides the contract for Provider-runtime manifest construction
-and subsequent Agent integration. Capability assessment, operation admission,
-trigger transport, backup/DR execution, SF-AOP, and Control Plane behavior are
-implemented in their own planned steps.
-
-The portable `tests/fixtures/manifest/request.json`, `response.json`, and
-`session-binding.json` vectors cover session headers, two active sessions on
-one endpoint, inactive/unknown/mismatched sessions, and late Agent responses.
-The conformance tests specify consumer obligations; they do not implement
-Provider session storage or an Agent client. Provider R1 consumes this
-correction after it lands; capability-assessment wire semantics are unchanged.
+This package defines wire messages, validation schemas, and conformance
+vectors, not Provider session storage or an Agent client. The portable
+`tests/fixtures/manifest/request.json`, `response.json`, and
+`session-binding.json` fixtures exercise the current schema and session
+binding.

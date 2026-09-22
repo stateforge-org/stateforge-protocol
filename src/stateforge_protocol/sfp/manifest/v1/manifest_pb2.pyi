@@ -193,7 +193,6 @@ class ProviderManifest(_message.Message):
     IMPLEMENTATION_VERSION_FIELD_NUMBER: _builtins.int
     DISPLAY_NAME_FIELD_NUMBER: _builtins.int
     OPERATIONS_FIELD_NUMBER: _builtins.int
-    TARGET_KINDS_FIELD_NUMBER: _builtins.int
     RUNTIME_REQUIREMENTS_FIELD_NUMBER: _builtins.int
     PLATFORMS_FIELD_NUMBER: _builtins.int
     CONFIGURATION_SCHEMA_FIELD_NUMBER: _builtins.int
@@ -208,10 +207,6 @@ class ProviderManifest(_message.Message):
         """Keys are extensible versioned identifiers, e.g.
         stateforge.git/reference.resolve@1. They are not a closed operation enum.
         """
-
-    @_builtins.property
-    def target_kinds(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """Unique versioned identifiers for supported third-party target kinds."""
 
     @_builtins.property
     def runtime_requirements(self) -> _containers.MessageMap[_builtins.str, Global___RuntimeRequirement]:
@@ -238,7 +233,6 @@ class ProviderManifest(_message.Message):
         implementation_version: _builtins.str = ...,
         display_name: _builtins.str = ...,
         operations: _abc.Mapping[_builtins.str, Global___OperationDeclaration] | None = ...,
-        target_kinds: _abc.Iterable[_builtins.str] | None = ...,
         runtime_requirements: _abc.Mapping[_builtins.str, Global___RuntimeRequirement] | None = ...,
         platforms: _abc.Iterable[Global___PlatformCompatibility] | None = ...,
         configuration_schema: _struct_pb2.Struct | None = ...,
@@ -246,7 +240,7 @@ class ProviderManifest(_message.Message):
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["configuration_schema", b"configuration_schema"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["configuration_schema", b"configuration_schema", "display_name", b"display_name", "implementation_version", b"implementation_version", "operations", b"operations", "platforms", b"platforms", "provider_identity", b"provider_identity", "runtime_requirements", b"runtime_requirements", "target_kinds", b"target_kinds", "triggers", b"triggers"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["configuration_schema", b"configuration_schema", "display_name", b"display_name", "implementation_version", b"implementation_version", "operations", b"operations", "platforms", b"platforms", "provider_identity", b"provider_identity", "runtime_requirements", b"runtime_requirements", "triggers", b"triggers"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

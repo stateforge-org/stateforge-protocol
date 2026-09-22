@@ -30,16 +30,16 @@ class _SupportStateEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_SupportS
     SUPPORT_STATE_UNSPECIFIED: _SupportState.ValueType  # 0
     SUPPORT_STATE_SUPPORTED: _SupportState.ValueType  # 1
     """The Provider obtained enough current evidence to support the operation
-    for this target and found no additional unmet requirement.
+    and found no additional unmet requirement.
     """
     SUPPORT_STATE_SUPPORTED_WITH_REQUIREMENTS: _SupportState.ValueType  # 2
-    """Supportable only after the returned requirement_findings (or
-    constraints) are satisfied.
+    """Supportable once every returned requirement_finding reaches SATISFIED
+    (and constraints, where applicable, are met). requirement_findings may
+    already include SATISFIED entries alongside the ones still blocking
+    support.
     """
     SUPPORT_STATE_UNSUPPORTED: _SupportState.ValueType  # 3
-    """Current evidence proves the operation is not supported for this valid
-    target or target state.
-    """
+    """Current evidence proves the operation is not supported."""
     SUPPORT_STATE_INDETERMINATE: _SupportState.ValueType  # 4
     """Support cannot be established or ruled out from available evidence, for
     example because inspection, access, permissions, or vendor state is
@@ -48,7 +48,7 @@ class _SupportStateEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_SupportS
 
 class SupportState(_SupportState, metaclass=_SupportStateEnumTypeWrapper):
     """SupportState is the bounded, normalized outcome of assessing one
-    operation against one target. Zero/UNSPECIFIED is never a valid finding
+    operation. Zero/UNSPECIFIED is never a valid finding
     value; it exists only as the proto3 default that a well-formed response
     must not contain.
     """
@@ -56,16 +56,16 @@ class SupportState(_SupportState, metaclass=_SupportStateEnumTypeWrapper):
 SUPPORT_STATE_UNSPECIFIED: SupportState.ValueType  # 0
 SUPPORT_STATE_SUPPORTED: SupportState.ValueType  # 1
 """The Provider obtained enough current evidence to support the operation
-for this target and found no additional unmet requirement.
+and found no additional unmet requirement.
 """
 SUPPORT_STATE_SUPPORTED_WITH_REQUIREMENTS: SupportState.ValueType  # 2
-"""Supportable only after the returned requirement_findings (or
-constraints) are satisfied.
+"""Supportable once every returned requirement_finding reaches SATISFIED
+(and constraints, where applicable, are met). requirement_findings may
+already include SATISFIED entries alongside the ones still blocking
+support.
 """
 SUPPORT_STATE_UNSUPPORTED: SupportState.ValueType  # 3
-"""Current evidence proves the operation is not supported for this valid
-target or target state.
-"""
+"""Current evidence proves the operation is not supported."""
 SUPPORT_STATE_INDETERMINATE: SupportState.ValueType  # 4
 """Support cannot be established or ruled out from available evidence, for
 example because inspection, access, permissions, or vendor state is
@@ -88,10 +88,10 @@ class _RequirementStateEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Requ
     """
 
 class RequirementState(_RequirementState, metaclass=_RequirementStateEnumTypeWrapper):
-    """RequirementState is the bounded, normalized state of one named
-    requirement backing a SUPPORTED_WITH_REQUIREMENTS or INDETERMINATE
-    finding. Zero/UNSPECIFIED is never a valid finding value, for the same
-    reason as SupportState.
+    """RequirementState is the bounded, normalized state (SATISFIED,
+    UNSATISFIED, or UNKNOWN) of one named requirement backing a
+    SUPPORTED_WITH_REQUIREMENTS or INDETERMINATE finding. Zero/UNSPECIFIED is
+    never a valid finding value, for the same reason as SupportState.
     """
 
 REQUIREMENT_STATE_UNSPECIFIED: RequirementState.ValueType  # 0
@@ -118,14 +118,12 @@ class AssessCapabilitiesRequest(_message.Message):
     EXPECTED_ENDPOINT_GENERATION_FIELD_NUMBER: _builtins.int
     EXPECTED_SESSION_ID_FIELD_NUMBER: _builtins.int
     EXPECTED_MANIFEST_REVISION_FIELD_NUMBER: _builtins.int
-    TARGET_KIND_FIELD_NUMBER: _builtins.int
-    TARGET_CONFIGURATION_FIELD_NUMBER: _builtins.int
     EXECUTION_CONTEXT_FIELD_NUMBER: _builtins.int
     OPERATION_IDENTIFIERS_FIELD_NUMBER: _builtins.int
     assessment_request_id: _builtins.str
     """Agent-assigned immutable correlation identity for this exact semantic
     request, canonical lowercase UUIDv4. Reusing the ID correlates a retry
-    of the same semantic request; changed target/operations/context
+    of the same semantic request; changed operations/context
     require a new ID. The Provider keeps no persistent idempotency ledger
     for it in this milestone.
     """
@@ -147,27 +145,12 @@ class AssessCapabilitiesRequest(_message.Message):
     changed declarations) must reject the request rather than assess
     against a manifest the Agent never validated.
     """
-    target_kind: _builtins.str
-    """Single declared target kind, namespace/name@major, e.g.
-    stateforge.git/repository@1. Must be one of the accepted manifest's
-    target_kinds.
-    """
-    @_builtins.property
-    def target_configuration(self) -> _struct_pb2.Struct:
-        """Target-specific configuration needed for inspection. Structurally must
-        be an object; its contents are validated against the accepted
-        manifest's Provider-level configuration_schema. target_kind membership
-        is validated separately. writeOnly-declared fields (secrets) may be
-        supplied here; the Provider must never copy them into the response,
-        reasons, logs, identity, or diagnostics.
-        """
-
     @_builtins.property
     def execution_context(self) -> _struct_pb2.Struct:
         """Bounded, non-secret situational metadata the Provider inspection may
         use to refine a finding, for example locale or invoking-automation
-        hints. Not validated against any manifest schema and never treated as
-        part of the target's identity or configuration.
+        hints. Not validated against any manifest schema and never a substitute
+        for operation-specific resource input.
         """
 
     @_builtins.property
@@ -186,14 +169,12 @@ class AssessCapabilitiesRequest(_message.Message):
         expected_endpoint_generation: _builtins.int = ...,
         expected_session_id: _builtins.str = ...,
         expected_manifest_revision: _builtins.str = ...,
-        target_kind: _builtins.str = ...,
-        target_configuration: _struct_pb2.Struct | None = ...,
         execution_context: _struct_pb2.Struct | None = ...,
         operation_identifiers: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["execution_context", b"execution_context", "target_configuration", b"target_configuration"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["execution_context", b"execution_context"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["assessment_request_id", b"assessment_request_id", "execution_context", b"execution_context", "expected_endpoint_generation", b"expected_endpoint_generation", "expected_manifest_revision", b"expected_manifest_revision", "expected_provider_instance_id", b"expected_provider_instance_id", "expected_session_id", b"expected_session_id", "operation_identifiers", b"operation_identifiers", "target_configuration", b"target_configuration", "target_kind", b"target_kind"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["assessment_request_id", b"assessment_request_id", "execution_context", b"execution_context", "expected_endpoint_generation", b"expected_endpoint_generation", "expected_manifest_revision", b"expected_manifest_revision", "expected_provider_instance_id", b"expected_provider_instance_id", "expected_session_id", b"expected_session_id", "operation_identifiers", b"operation_identifiers"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -240,7 +221,7 @@ class AssessCapabilitiesResponse(_message.Message):
     assessment_id: _builtins.str
     """Distinct, Provider-minted identity for this produced result, canonical
     lowercase UUIDv4. Never derived from assessment_request_id: a
-    read-only retry of the same request may legally observe newer target
+    read-only retry of the same request may legally observe newer Provider
     state and therefore yields a new assessment_id even when the request
     is unchanged.
     """
@@ -281,7 +262,7 @@ Global___AssessCapabilitiesResponse: _TypeAlias = AssessCapabilitiesResponse  # 
 @_typing.final
 class CapabilityFinding(_message.Message):
     """CapabilityFinding is the normalized result for one requested operation
-    identifier against the request's target. It never contains configuration
+    identifier. It never contains configuration
     secrets, credentials, customer data, or a StateForge project/component
     assignment.
     """
@@ -302,8 +283,9 @@ class CapabilityFinding(_message.Message):
     @_builtins.property
     def requirement_findings(self) -> _containers.RepeatedCompositeFieldContainer[Global___RequirementFinding]:
         """Zero or more normalized requirement findings backing a
-        SUPPORTED_WITH_REQUIREMENTS or INDETERMINATE support_state. An unknown
-        requirement is not evidence of satisfaction. Unique by requirement_id.
+        SUPPORTED_WITH_REQUIREMENTS or INDETERMINATE support_state, including
+        any already-SATISFIED requirements. An unknown requirement is not
+        evidence of satisfaction. Unique by requirement_id.
         """
 
     @_builtins.property
@@ -316,7 +298,7 @@ class CapabilityFinding(_message.Message):
     @_builtins.property
     def constraints(self) -> _containers.RepeatedCompositeFieldContainer[Global___ConstraintDetail]:
         """Structured constraints and limitations required to use the operation
-        safely against this target, for example a required read-only mode or
+        safely, for example a required read-only mode or
         a rate limit. Unique by constraint_id.
         """
 
@@ -384,7 +366,7 @@ Global___RequirementFinding: _TypeAlias = RequirementFinding  # noqa: Y015
 class ReasonDetail(_message.Message):
     """ReasonDetail pairs a machine-readable reason code with a bounded,
     sanitized explanation. It never carries a stack trace, secret, or raw
-    target payload.
+    operation payload.
     """
 
     DESCRIPTOR: _descriptor.Descriptor
@@ -415,7 +397,7 @@ Global___ReasonDetail: _TypeAlias = ReasonDetail  # noqa: Y015
 @_typing.final
 class ConstraintDetail(_message.Message):
     """ConstraintDetail is one structured, machine-consumable constraint or
-    limitation required to use an operation safely against this target.
+    limitation required to use an operation safely.
     """
 
     DESCRIPTOR: _descriptor.Descriptor

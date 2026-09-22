@@ -67,8 +67,6 @@ message ProviderManifest {
   // Keys are extensible versioned identifiers, e.g.
   // stateforge.git/reference.resolve@1. They are not a closed operation enum.
   map<string, OperationDeclaration> operations = 4;
-  // Unique versioned identifiers for supported third-party target kinds.
-  repeated string target_kinds = 5;
   // Keys identify declared requirements, e.g. runtime.python or executable.git.
   map<string, RuntimeRequirement> runtime_requirements = 6;
   // Explicit supported OS/architecture pairs. Empty does not mean universal.
