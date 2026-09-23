@@ -1,0 +1,621 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:stateforge:sfp:operation_lifecycle:1",
+  "title": "SFP operation-lifecycle v1 ProtoJSON validation",
+  "description": "Validate complete default-emitting ProtoJSON. State transitions, active sessions, uint64 upper bounds, timestamp validity, cursor comparisons, gaps, immutable history, JSON depth/bytes, pinned result schema, and truthfulness/sanitization require the procedure semantic checks. P4 definitions are embedded unchanged for offline validation.",
+  "$ref": "#/$defs/watchOperationResponse",
+  "$defs": {
+    "uuid4": {
+      "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+    },
+    "generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "pattern": "^[1-9][0-9]*(?![\\s\\S])"
+    },
+    "versionedIdentifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+/[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*@[1-9][0-9]*(?![\\s\\S])"
+    },
+    "dottedIdentifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+(?![\\s\\S])"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+    },
+    "fingerprint": {
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 30,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z(?![\\s\\S])"
+    },
+    "boundedScalar": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "maxLength": 65536
+        }
+      ]
+    },
+    "boundedArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/boundedValue"
+      },
+      "maxItems": 256
+    },
+    "boundedObject": {
+      "type": "object",
+      "maxProperties": 256,
+      "propertyNames": {
+        "maxLength": 128
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/boundedValue"
+      }
+    },
+    "boundedValue": {
+      "description": "A recursively nested JSON value. Aggregate nesting depth and serialized message size are enforced outside JSON Schema.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/boundedScalar"
+        },
+        {
+          "$ref": "#/$defs/boundedArray"
+        },
+        {
+          "$ref": "#/$defs/boundedObject"
+        }
+      ]
+    },
+    "operationSessionBinding": {
+      "type": "object",
+      "properties": {
+        "expectedProviderInstanceId": {
+          "$ref": "#/$defs/uuid4"
+        },
+        "expectedEndpointGeneration": {
+          "$ref": "#/$defs/generation"
+        },
+        "expectedSessionId": {
+          "$ref": "#/$defs/sessionId"
+        }
+      },
+      "required": [
+        "expectedProviderInstanceId",
+        "expectedEndpointGeneration",
+        "expectedSessionId"
+      ],
+      "additionalProperties": false
+    },
+    "operationAdmissionRecord": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "$ref": "#/$defs/uuid4"
+        },
+        "requestFingerprint": {
+          "$ref": "#/$defs/fingerprint"
+        },
+        "admittedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "recordExpiresAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "admittedEndpointGeneration": {
+          "$ref": "#/$defs/generation"
+        }
+      },
+      "required": [
+        "operationId",
+        "requestFingerprint",
+        "admittedAt",
+        "recordExpiresAt",
+        "admittedEndpointGeneration"
+      ],
+      "additionalProperties": false
+    },
+    "sequence": {
+      "$ref": "#/$defs/generation"
+    },
+    "cursor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "pattern": "^(0|[1-9][0-9]*)(?![\\s\\S])"
+    },
+    "explanation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "operationState": {
+      "enum": [
+        "OPERATION_STATE_ACCEPTED",
+        "OPERATION_STATE_RUNNING",
+        "OPERATION_STATE_CANCELLATION_REQUESTED",
+        "OPERATION_STATE_SUCCEEDED",
+        "OPERATION_STATE_FAILED",
+        "OPERATION_STATE_CANCELLED"
+      ]
+    },
+    "cancellationDisposition": {
+      "enum": [
+        "CANCELLATION_DISPOSITION_REQUESTED",
+        "CANCELLATION_DISPOSITION_ALREADY_REQUESTED",
+        "CANCELLATION_DISPOSITION_UNSUPPORTED",
+        "CANCELLATION_DISPOSITION_ALREADY_TERMINAL"
+      ]
+    },
+    "lifecycleErrorReason": {
+      "enum": [
+        "LIFECYCLE_ERROR_REASON_INVALID_REQUEST",
+        "LIFECYCLE_ERROR_REASON_SESSION_PRECONDITION_FAILED",
+        "LIFECYCLE_ERROR_REASON_OPERATION_RECORD_UNAVAILABLE",
+        "LIFECYCLE_ERROR_REASON_OPERATION_RECORD_EXPIRED",
+        "LIFECYCLE_ERROR_REASON_FINGERPRINT_MISMATCH",
+        "LIFECYCLE_ERROR_REASON_CURSOR_AHEAD",
+        "LIFECYCLE_ERROR_REASON_OBSERVER_CAPACITY_EXHAUSTED",
+        "LIFECYCLE_ERROR_REASON_SLOW_OBSERVER",
+        "LIFECYCLE_ERROR_REASON_PROVIDER_UNAVAILABLE",
+        "LIFECYCLE_ERROR_REASON_OPERATION_STATE_UNAVAILABLE"
+      ]
+    },
+    "operationEffects": {
+      "type": "object",
+      "properties": {
+        "sideEffects": {
+          "enum": [
+            "SIDE_EFFECT_STATE_NONE",
+            "SIDE_EFFECT_STATE_PRESENT",
+            "SIDE_EFFECT_STATE_UNKNOWN"
+          ]
+        },
+        "cleanup": {
+          "enum": [
+            "CLEANUP_STATE_NOT_REQUIRED",
+            "CLEANUP_STATE_COMPLETED",
+            "CLEANUP_STATE_INCOMPLETE",
+            "CLEANUP_STATE_UNKNOWN"
+          ]
+        },
+        "explanation": {
+          "$ref": "#/$defs/explanation"
+        }
+      },
+      "required": [
+        "sideEffects",
+        "cleanup",
+        "explanation"
+      ],
+      "additionalProperties": false
+    },
+    "operationProgress": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "$ref": "#/$defs/sequence"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "sequence",
+        "updatedAt",
+        "message"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "percentage"
+          ]
+        },
+        {
+          "properties": {
+            "message": {
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "operationSuccess": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "$ref": "#/$defs/boundedObject"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "operationFailure": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/dottedIdentifier"
+        },
+        "explanation": {
+          "$ref": "#/$defs/explanation"
+        },
+        "effects": {
+          "$ref": "#/$defs/operationEffects"
+        }
+      },
+      "required": [
+        "code",
+        "explanation",
+        "effects"
+      ],
+      "additionalProperties": false
+    },
+    "operationCancellation": {
+      "type": "object",
+      "properties": {
+        "effects": {
+          "$ref": "#/$defs/operationEffects"
+        }
+      },
+      "required": [
+        "effects"
+      ],
+      "additionalProperties": false
+    },
+    "operationSnapshot": {
+      "type": "object",
+      "properties": {
+        "admissionRecord": {
+          "$ref": "#/$defs/operationAdmissionRecord"
+        },
+        "operationIdentifier": {
+          "$ref": "#/$defs/versionedIdentifier"
+        },
+        "manifestRevision": {
+          "$ref": "#/$defs/revision"
+        },
+        "sequence": {
+          "$ref": "#/$defs/sequence"
+        },
+        "state": {
+          "$ref": "#/$defs/operationState"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "progress": {
+          "$ref": "#/$defs/operationProgress"
+        },
+        "success": {
+          "$ref": "#/$defs/operationSuccess"
+        },
+        "failure": {
+          "$ref": "#/$defs/operationFailure"
+        },
+        "cancellation": {
+          "$ref": "#/$defs/operationCancellation"
+        }
+      },
+      "required": [
+        "admissionRecord",
+        "operationIdentifier",
+        "manifestRevision",
+        "sequence",
+        "state",
+        "updatedAt"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "state": {
+              "enum": [
+                "OPERATION_STATE_ACCEPTED",
+                "OPERATION_STATE_RUNNING",
+                "OPERATION_STATE_CANCELLATION_REQUESTED"
+              ]
+            },
+            "success": false,
+            "failure": false,
+            "cancellation": false
+          }
+        },
+        {
+          "properties": {
+            "state": {
+              "enum": [
+                "OPERATION_STATE_SUCCEEDED"
+              ]
+            },
+            "failure": false,
+            "cancellation": false
+          },
+          "required": [
+            "success"
+          ]
+        },
+        {
+          "properties": {
+            "state": {
+              "enum": [
+                "OPERATION_STATE_FAILED"
+              ]
+            },
+            "success": false,
+            "cancellation": false
+          },
+          "required": [
+            "failure"
+          ]
+        },
+        {
+          "properties": {
+            "state": {
+              "enum": [
+                "OPERATION_STATE_CANCELLED"
+              ]
+            },
+            "success": false,
+            "failure": false
+          },
+          "required": [
+            "cancellation"
+          ]
+        }
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "OPERATION_STATE_ACCEPTED"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "sequence": {
+                "const": "1"
+              },
+              "progress": false
+            }
+          }
+        }
+      ]
+    },
+    "watchOperationRequest": {
+      "type": "object",
+      "properties": {
+        "sessionBinding": {
+          "$ref": "#/$defs/operationSessionBinding"
+        },
+        "operationId": {
+          "$ref": "#/$defs/uuid4"
+        },
+        "expectedRequestFingerprint": {
+          "$ref": "#/$defs/fingerprint"
+        },
+        "afterSequence": {
+          "$ref": "#/$defs/cursor"
+        }
+      },
+      "required": [
+        "sessionBinding",
+        "operationId",
+        "expectedRequestFingerprint",
+        "afterSequence"
+      ],
+      "additionalProperties": false
+    },
+    "cancelOperationRequest": {
+      "type": "object",
+      "properties": {
+        "sessionBinding": {
+          "$ref": "#/$defs/operationSessionBinding"
+        },
+        "operationId": {
+          "$ref": "#/$defs/uuid4"
+        },
+        "expectedRequestFingerprint": {
+          "$ref": "#/$defs/fingerprint"
+        }
+      },
+      "required": [
+        "sessionBinding",
+        "operationId",
+        "expectedRequestFingerprint"
+      ],
+      "additionalProperties": false
+    },
+    "watchOperationResponse": {
+      "type": "object",
+      "properties": {
+        "providerInstanceId": {
+          "$ref": "#/$defs/uuid4"
+        },
+        "endpointGeneration": {
+          "$ref": "#/$defs/generation"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/operationSnapshot"
+        },
+        "updatesSkipped": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "providerInstanceId",
+        "endpointGeneration",
+        "sessionId",
+        "snapshot",
+        "updatesSkipped"
+      ],
+      "additionalProperties": false
+    },
+    "cancelOperationResponse": {
+      "type": "object",
+      "properties": {
+        "providerInstanceId": {
+          "$ref": "#/$defs/uuid4"
+        },
+        "endpointGeneration": {
+          "$ref": "#/$defs/generation"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "disposition": {
+          "$ref": "#/$defs/cancellationDisposition"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/operationSnapshot"
+        }
+      },
+      "required": [
+        "providerInstanceId",
+        "endpointGeneration",
+        "sessionId",
+        "disposition",
+        "snapshot"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "disposition": {
+              "enum": [
+                "CANCELLATION_DISPOSITION_REQUESTED",
+                "CANCELLATION_DISPOSITION_ALREADY_REQUESTED"
+              ]
+            },
+            "snapshot": {
+              "properties": {
+                "state": {
+                  "enum": [
+                    "OPERATION_STATE_CANCELLATION_REQUESTED"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "disposition": {
+              "enum": [
+                "CANCELLATION_DISPOSITION_UNSUPPORTED"
+              ]
+            },
+            "snapshot": {
+              "properties": {
+                "state": {
+                  "enum": [
+                    "OPERATION_STATE_ACCEPTED",
+                    "OPERATION_STATE_RUNNING"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "disposition": {
+              "enum": [
+                "CANCELLATION_DISPOSITION_ALREADY_TERMINAL"
+              ]
+            },
+            "snapshot": {
+              "properties": {
+                "state": {
+                  "enum": [
+                    "OPERATION_STATE_SUCCEEDED",
+                    "OPERATION_STATE_FAILED",
+                    "OPERATION_STATE_CANCELLED"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "operationLifecycleErrorDetail": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "anyOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/uuid4"
+            }
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/lifecycleErrorReason"
+        },
+        "explanation": {
+          "$ref": "#/$defs/explanation"
+        }
+      },
+      "required": [
+        "operationId",
+        "reason",
+        "explanation"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

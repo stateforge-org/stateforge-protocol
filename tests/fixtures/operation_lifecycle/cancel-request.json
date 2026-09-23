@@ -1,0 +1,9 @@
+{
+  "sessionBinding": {
+    "expectedProviderInstanceId": "11111111-1111-4111-8111-111111111111",
+    "expectedEndpointGeneration": "42",
+    "expectedSessionId": "session-admission-42"
+  },
+  "operationId": "22222222-2222-4222-8222-222222222222",
+  "expectedRequestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df"
+}
