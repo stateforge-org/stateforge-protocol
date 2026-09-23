@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:stateforge:sfp:capability_assessment:1",
+  "title": "SFP capability-assessment schema 1 ProtoJSON validation",
+  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure, executionContext breadth and string bounds, and the finding-level support/reason invariants; transport byte limits, aggregate nesting depth, session binding, manifest-revision fencing, per-operation completeness (one finding per requested operation, no duplicates or omissions), and uniqueness of requirementId/reasonCode/constraintId within one finding require consumer checks described in the procedure specification and are exercised by dedicated tests instead.",
+  "$ref": "#/$defs/assessCapabilitiesResponse",
+  "$defs": {
+    "instanceId": {
+      "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+    },
+    "generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "pattern": "^[1-9][0-9]*(?![\\s\\S])"
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+/[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*@[1-9][0-9]*(?![\\s\\S])"
+    },
+    "dottedIdentifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+(?![\\s\\S])"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 30,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z(?![\\s\\S])"
+    },
+    "supportState": {
+      "enum": [
+        "SUPPORT_STATE_SUPPORTED",
+        "SUPPORT_STATE_SUPPORTED_WITH_REQUIREMENTS",
+        "SUPPORT_STATE_UNSUPPORTED",
+        "SUPPORT_STATE_INDETERMINATE"
+      ]
+    },
+    "requirementState": {
+      "enum": [
+        "REQUIREMENT_STATE_SATISFIED",
+        "REQUIREMENT_STATE_UNSATISFIED",
+        "REQUIREMENT_STATE_UNKNOWN"
+      ]
+    },
+    "boundedScalar": {
+      "type": [
+        "null",
+        "boolean",
+        "number",
+        "string"
+      ],
+      "maxLength": 2048
+    },
+    "boundedArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/boundedValue"
+      },
+      "maxItems": 32
+    },
+    "boundedNestedObject": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": {
+        "maxLength": 128
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/boundedValue"
+      }
+    },
+    "boundedValue": {
+      "description": "A recursively nested JSON value. Every array/object is breadth-bounded and every string is length-bounded here. Aggregate nesting depth and serialized message size are consumer-enforced limits because JSON Schema cannot portably express either one.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/boundedScalar"
+        },
+        {
+          "$ref": "#/$defs/boundedArray"
+        },
+        {
+          "$ref": "#/$defs/boundedNestedObject"
+        }
+      ]
+    },
+    "boundedContext": {
+      "$ref": "#/$defs/boundedNestedObject"
+    },
+    "requirementFinding": {
+      "type": "object",
+      "properties": {
+        "requirementId": {
+          "$ref": "#/$defs/dottedIdentifier"
+        },
+        "state": {
+          "$ref": "#/$defs/requirementState"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "versionConstraint": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 255
+        }
+      },
+      "required": [
+        "requirementId",
+        "state",
+        "description",
+        "versionConstraint"
+      ],
+      "additionalProperties": false
+    },
+    "reasonDetail": {
+      "type": "object",
+      "properties": {
+        "reasonCode": {
+          "$ref": "#/$defs/dottedIdentifier"
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": [
+        "reasonCode",
+        "explanation"
+      ],
+      "additionalProperties": false
+    },
+    "constraintDetail": {
+      "type": "object",
+      "properties": {
+        "constraintId": {
+          "$ref": "#/$defs/dottedIdentifier"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 512
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": [
+        "constraintId",
+        "value",
+        "explanation"
+      ],
+      "additionalProperties": false
+    },
+    "capabilityFinding": {
+      "type": "object",
+      "properties": {
+        "operationIdentifier": {
+          "$ref": "#/$defs/identifier"
+        },
+        "supportState": {
+          "$ref": "#/$defs/supportState"
+        },
+        "requirementFindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/requirementFinding"
+          },
+          "minItems": 0,
+          "maxItems": 64
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reasonDetail"
+          },
+          "minItems": 0,
+          "maxItems": 16
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/constraintDetail"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "operationIdentifier",
+        "supportState",
+        "requirementFindings",
+        "reasons",
+        "constraints"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "SUPPORTED must not carry an unsatisfied or unknown requirement finding.",
+          "if": {
+            "properties": {
+              "supportState": {
+                "const": "SUPPORT_STATE_SUPPORTED"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "properties": {
+                "requirementFindings": {
+                  "contains": {
+                    "properties": {
+                      "state": {
+                        "enum": [
+                          "REQUIREMENT_STATE_UNSATISFIED",
+                          "REQUIREMENT_STATE_UNKNOWN"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "SUPPORTED_WITH_REQUIREMENTS needs at least one unmet (unsatisfied or unknown) requirement finding, or at least one constraint; an all-satisfied requirement list with no constraints leaves nothing actually pending and does not justify this state.",
+          "if": {
+            "properties": {
+              "supportState": {
+                "const": "SUPPORT_STATE_SUPPORTED_WITH_REQUIREMENTS"
+              }
+            }
+          },
+          "then": {
+            "anyOf": [
+              {
+                "properties": {
+                  "requirementFindings": {
+                    "contains": {
+                      "properties": {
+                        "state": {
+                          "enum": [
+                            "REQUIREMENT_STATE_UNSATISFIED",
+                            "REQUIREMENT_STATE_UNKNOWN"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "constraints": {
+                    "minItems": 1
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "description": "UNSUPPORTED or INDETERMINATE needs at least one machine-readable reason.",
+          "if": {
+            "properties": {
+              "supportState": {
+                "enum": [
+                  "SUPPORT_STATE_UNSUPPORTED",
+                  "SUPPORT_STATE_INDETERMINATE"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reasons": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "assessCapabilitiesRequest": {
+      "type": "object",
+      "properties": {
+        "assessmentRequestId": {
+          "$ref": "#/$defs/instanceId"
+        },
+        "expectedProviderInstanceId": {
+          "$ref": "#/$defs/instanceId"
+        },
+        "expectedEndpointGeneration": {
+          "$ref": "#/$defs/generation"
+        },
+        "expectedSessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "expectedManifestRevision": {
+          "$ref": "#/$defs/revision"
+        },
+        "executionContext": {
+          "$ref": "#/$defs/boundedContext"
+        },
+        "operationIdentifiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "assessmentRequestId",
+        "expectedProviderInstanceId",
+        "expectedEndpointGeneration",
+        "expectedSessionId",
+        "expectedManifestRevision",
+        "executionContext",
+        "operationIdentifiers"
+      ],
+      "additionalProperties": false
+    },
+    "assessCapabilitiesResponse": {
+      "type": "object",
+      "properties": {
+        "assessmentRequestId": {
+          "$ref": "#/$defs/instanceId"
+        },
+        "providerInstanceId": {
+          "$ref": "#/$defs/instanceId"
+        },
+        "endpointGeneration": {
+          "$ref": "#/$defs/generation"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "manifestRevision": {
+          "$ref": "#/$defs/revision"
+        },
+        "assessmentId": {
+          "$ref": "#/$defs/instanceId"
+        },
+        "assessmentTimestamp": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capabilityFinding"
+          },
+          "minItems": 1,
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "assessmentRequestId",
+        "providerInstanceId",
+        "endpointGeneration",
+        "sessionId",
+        "manifestRevision",
+        "assessmentId",
+        "assessmentTimestamp",
+        "findings"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

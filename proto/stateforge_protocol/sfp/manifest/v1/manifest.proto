@@ -13,7 +13,7 @@ service ManifestService {
   rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
 }
 
-// GetManifestRequest binds the read to the identity confirmed by Handshake.
+// GetManifestRequest binds the read to the session confirmed by Handshake.
 // Empty/default fields are invalid, not wildcards. At most 32 distinct positive
 // schema versions may be offered; order conveys no preference. Schema 1 is the
 // only manifest schema defined by this package today.
@@ -23,6 +23,12 @@ message GetManifestRequest {
   // Positive endpoint generation copied from Handshake, never a process ID.
   uint64 expected_endpoint_generation = 2;
   repeated uint32 supported_manifest_schema_versions = 3;
+  // Required opaque identifier copied unchanged from HandshakeResponse.session_id.
+  // 1-255 Unicode code points, case-sensitive; do not normalize or parse as UUID.
+  // Must name a known, active negotiated session for this instance/generation.
+  // Empty/malformed is INVALID_ARGUMENT; unknown/inactive/mismatched is
+  // FAILED_PRECONDITION. Endpoint identity alone never proves negotiation.
+  string expected_session_id = 4;
 }
 
 // GetManifestResponse is one atomic snapshot. A successful response always
@@ -37,11 +43,15 @@ message GetManifestResponse {
   uint32 manifest_schema_version = 3;
   // "sha256:" plus 64 lowercase hex digits. The normative preimage is RFC 8785
   // canonical JSON of {manifest, manifestSchemaVersion, providerInstanceId}.
-  // The manifest uses ProtoJSON with defaults emitted; generation is excluded.
+  // ProtoJSON defaults are emitted; generation and session ID are excluded.
   // Protobuf deterministic serialization is NOT a canonical hashing format.
   string manifest_revision = 4;
   // Required. At most 1 MiB of canonical JSON for the revision preimage.
   ProviderManifest manifest = 5;
+  // Echo the validated request's expected_session_id, never a global latest ID.
+  // The Agent must match it to both the request and its current session before
+  // accepting or reusing a cached declaration. Not part of manifest_revision.
+  string session_id = 6;
 }
 
 // ProviderManifest describes implementation-wide declarations, not configured
@@ -57,8 +67,6 @@ message ProviderManifest {
   // Keys are extensible versioned identifiers, e.g.
   // stateforge.git/reference.resolve@1. They are not a closed operation enum.
   map<string, OperationDeclaration> operations = 4;
-  // Unique versioned identifiers for supported third-party target kinds.
-  repeated string target_kinds = 5;
   // Keys identify declared requirements, e.g. runtime.python or executable.git.
   map<string, RuntimeRequirement> runtime_requirements = 6;
   // Explicit supported OS/architecture pairs. Empty does not mean universal.
@@ -75,16 +83,23 @@ message ProviderManifest {
 // against the referenced profile. No StartOperation or execution behavior is
 // introduced by this message.
 message OperationDeclaration {
+  // Removed operation-specific result metadata; never reuse its number/name.
+  reserved 4;
+  reserved "backup_source_modes";
+
   // Required Draft 2020-12 object schemas for typed input and terminal result.
   google.protobuf.Struct input_schema = 1;
+  // The sole declaration of terminal result shape for this versioned operation.
+  // Recognized compliance roles require the exact schemas of their profile.
   google.protobuf.Struct result_schema = 2;
-  // Unique role identifiers, e.g. stateforge.backup.v1.prepare or
-  // stateforge.disaster_recovery.v1.reconstruct. Empty means no compliance claim.
-  // Never infer a role from the operation identifier or a Python method name.
+  // Zero or more distinct claims that this operation implements versioned
+  // semantic/compliance profiles, e.g. stateforge.backup.v1.prepare or
+  // stateforge.disaster_recovery.v1.reconstruct. Each claim must be validated
+  // against its profile. These are not user permissions or a list of Control
+  // Plane contracts; multiple contracts may rely on the same profile claim.
+  // Empty means no profile claim. Never infer a role from the operation
+  // identifier or a Python method name.
   repeated string implements = 3;
-  // Declared backup source modes; empty unless an explicit backup/DR role is
-  // claimed. Profile-specific validation belongs to the corresponding contract.
-  repeated string backup_source_modes = 4;
 }
 
 // RuntimeRequirement describes a dependency or prerequisite without transferring

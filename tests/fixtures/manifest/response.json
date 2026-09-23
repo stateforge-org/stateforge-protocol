@@ -20,13 +20,9 @@
           "properties": {},
           "additionalProperties": false
         },
-        "implements": [],
-        "backupSourceModes": []
+        "implements": []
       }
     },
-    "targetKinds": [
-      "stateforge.git/repository@1"
-    ],
     "runtimeRequirements": {
       "executable.git": {
         "description": "Git executable available to the Provider",
@@ -58,5 +54,6 @@
     },
     "triggers": {}
   },
-  "manifestRevision": "sha256:c9778345b616fa0396b923586d236cdc18f83221db8da73443f1b2f36fb8b928"
+  "manifestRevision": "sha256:6bfdf3aedc2d4e45d77d4787cc0e744a488208b2510d81788291f51d24a623e8",
+  "sessionId": "manifest-session-A"
 }

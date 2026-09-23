@@ -1,0 +1,200 @@
+syntax = "proto3";
+
+package stateforge.sfp.capability_assessment.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// CapabilityAssessmentService lets an Agent ask whether manifest-declared
+// operations are currently usable by the Provider
+// before admitting or executing work. It shares the Agent-established local
+// SFP channel and runs only after handshake, manifest acceptance, and
+// Provider readiness. This read-only service never admits, dispatches,
+// reserves, or mutates resource state; a returned finding is point-in-time
+// evidence, not authorization.
+service CapabilityAssessmentService {
+  // AssessCapabilities returns one normalized finding per requested
+  // operation identifier. See
+  // docs/procedures/capability-assessment.md for validation, findings,
+  // failure mapping, deadlines, and retries.
+  rpc AssessCapabilities(AssessCapabilitiesRequest) returns (AssessCapabilitiesResponse);
+}
+
+// SupportState is the bounded, normalized outcome of assessing one
+// operation. Zero/UNSPECIFIED is never a valid finding
+// value; it exists only as the proto3 default that a well-formed response
+// must not contain.
+enum SupportState {
+  SUPPORT_STATE_UNSPECIFIED = 0;
+  // The Provider obtained enough current evidence to support the operation
+  // and found no additional unmet requirement.
+  SUPPORT_STATE_SUPPORTED = 1;
+  // Supportable once every returned requirement_finding reaches SATISFIED
+  // (and constraints, where applicable, are met). requirement_findings may
+  // already include SATISFIED entries alongside the ones still blocking
+  // support.
+  SUPPORT_STATE_SUPPORTED_WITH_REQUIREMENTS = 2;
+  // Current evidence proves the operation is not supported.
+  SUPPORT_STATE_UNSUPPORTED = 3;
+  // Support cannot be established or ruled out from available evidence, for
+  // example because inspection, access, permissions, or vendor state is
+  // insufficient.
+  SUPPORT_STATE_INDETERMINATE = 4;
+}
+
+// RequirementState is the bounded, normalized state (SATISFIED,
+// UNSATISFIED, or UNKNOWN) of one named requirement backing a
+// SUPPORTED_WITH_REQUIREMENTS or INDETERMINATE finding. Zero/UNSPECIFIED is
+// never a valid finding value, for the same reason as SupportState.
+enum RequirementState {
+  REQUIREMENT_STATE_UNSPECIFIED = 0;
+  REQUIREMENT_STATE_SATISFIED = 1;
+  REQUIREMENT_STATE_UNSATISFIED = 2;
+  // A known requirement whose satisfaction the Provider could not
+  // establish. An unknown requirement is never evidence of satisfaction.
+  REQUIREMENT_STATE_UNKNOWN = 3;
+}
+
+// AssessCapabilitiesRequest binds the read to the session confirmed by
+// Handshake and the manifest revision accepted by the Agent. A stale
+// session or stale manifest revision must not produce an apparently
+// current assessment. Empty/default fields are invalid, not wildcards.
+message AssessCapabilitiesRequest {
+  // Agent-assigned immutable correlation identity for this exact semantic
+  // request, canonical lowercase UUIDv4. Reusing the ID correlates a retry
+  // of the same semantic request; changed operations/context
+  // require a new ID. The Provider keeps no persistent idempotency ledger
+  // for it in this milestone.
+  string assessment_request_id = 1;
+  // Canonical lowercase UUIDv4 of the installation, copied from Handshake.
+  string expected_provider_instance_id = 2;
+  // Positive endpoint generation copied from Handshake, never a process
+  // ID.
+  uint64 expected_endpoint_generation = 3;
+  // HandshakeResponse.session_id copied from the negotiated session.
+  // provider_instance_id and endpoint_generation alone identify only an
+  // endpoint generation, not one specific negotiated session: this is the
+  // field that actually fences the request to that session.
+  string expected_session_id = 4;
+  // Copied from the Agent's currently accepted GetManifestResponse. A
+  // Provider whose active manifest revision differs (reload, restart with
+  // changed declarations) must reject the request rather than assess
+  // against a manifest the Agent never validated.
+  string expected_manifest_revision = 5;
+  // Bounded, non-secret situational metadata the Provider inspection may
+  // use to refine a finding, for example locale or invoking-automation
+  // hints. Not validated against any manifest schema and never a substitute
+  // for operation-specific resource input.
+  google.protobuf.Struct execution_context = 8;
+  // Bounded, nonempty set of unique versioned operation identifiers,
+  // namespace/name@major. Every entry must be declared in the accepted
+  // manifest's operations map. Order conveys no preference. Duplicates are
+  // invalid, not silently deduplicated.
+  repeated string operation_identifiers = 9;
+}
+
+// AssessCapabilitiesResponse is one atomic, point-in-time evidence
+// snapshot. It is not authorization, a reservation, a lease, a health
+// guarantee, or a promise of future admission success. A successful
+// response always reports exactly one finding per requested operation
+// identifier.
+message AssessCapabilitiesResponse {
+  // Echoes the request's assessment_request_id unchanged.
+  string assessment_request_id = 1;
+  // Must equal the request's expected identity and the negotiated
+  // session.
+  string provider_instance_id = 2;
+  // Must equal the request's expected generation and the negotiated
+  // session.
+  uint64 endpoint_generation = 3;
+  // Must equal the request's expected_session_id. This, not
+  // provider_instance_id/endpoint_generation, is the actual session-level
+  // fence.
+  string session_id = 4;
+  // Must equal the request's expected_manifest_revision: the manifest
+  // revision this assessment was evaluated against.
+  string manifest_revision = 5;
+  // Distinct, Provider-minted identity for this produced result, canonical
+  // lowercase UUIDv4. Never derived from assessment_request_id: a
+  // read-only retry of the same request may legally observe newer Provider
+  // state and therefore yields a new assessment_id even when the request
+  // is unchanged.
+  string assessment_id = 6;
+  // Provider-clock time this assessment's evidence was captured. Point-in-
+  // time evidence only, never a trusted ordering or authorization
+  // mechanism across sessions or Providers.
+  google.protobuf.Timestamp assessment_timestamp = 7;
+  // Exactly one finding per requested operation identifier, in the
+  // request's operation_identifiers order. Consumers must correlate
+  // findings by CapabilityFinding.operation_identifier, not position.
+  repeated CapabilityFinding findings = 8;
+}
+
+// CapabilityFinding is the normalized result for one requested operation
+// identifier. It never contains configuration
+// secrets, credentials, customer data, or a StateForge project/component
+// assignment.
+message CapabilityFinding {
+  reserved 6;
+  reserved "backup_source_modes";
+
+  // Exact operation identifier as requested.
+  string operation_identifier = 1;
+  // Bounded, normalized support outcome. Never UNSPECIFIED in a
+  // well-formed response.
+  SupportState support_state = 2;
+  // Zero or more normalized requirement findings backing a
+  // SUPPORTED_WITH_REQUIREMENTS or INDETERMINATE support_state, including
+  // any already-SATISFIED requirements. An unknown requirement is not
+  // evidence of satisfaction. Unique by requirement_id.
+  repeated RequirementFinding requirement_findings = 3;
+  // Machine-readable reason codes paired with bounded, sanitized
+  // human-readable explanations. Diagnostic text is not the discriminator;
+  // reason codes are. Unique by reason_code.
+  repeated ReasonDetail reasons = 4;
+  // Structured constraints and limitations required to use the operation
+  // safely, for example a required read-only mode or
+  // a rate limit. Unique by constraint_id.
+  repeated ConstraintDetail constraints = 5;
+}
+
+// RequirementFinding normalizes one named prerequisite for an operation.
+message RequirementFinding {
+  // Stable dotted identifier for this requirement, for example
+  // stateforge.capability_assessment.v1.write_permission. Requirement IDs
+  // are extensible; this package does not define a closed set.
+  string requirement_id = 1;
+  // Explicit satisfied/unsatisfied/unknown state. Never UNSPECIFIED in a
+  // well-formed response.
+  RequirementState state = 2;
+  // Bounded, sanitized human-readable description of the requirement.
+  string description = 3;
+  // Version constraint syntax owned by the named requirement, mirroring
+  // RuntimeRequirement.version_constraint. Empty means the declaration
+  // imposes no version constraint. An unverified constraint is never
+  // evidence of satisfaction.
+  string version_constraint = 4;
+}
+
+// ReasonDetail pairs a machine-readable reason code with a bounded,
+// sanitized explanation. It never carries a stack trace, secret, or raw
+// operation payload.
+message ReasonDetail {
+  // Extensible dotted reason-code identifier. See
+  // docs/procedures/capability-assessment.md for the canonical core
+  // vocabulary and the Provider-namespacing rule for custom codes.
+  string reason_code = 1;
+  // Bounded, sanitized human-readable explanation. Not the discriminator.
+  string explanation = 2;
+}
+
+// ConstraintDetail is one structured, machine-consumable constraint or
+// limitation required to use an operation safely.
+message ConstraintDetail {
+  // Stable dotted identifier for this constraint.
+  string constraint_id = 1;
+  // Bounded structured value where applicable; may be empty.
+  string value = 2;
+  // Bounded, sanitized human-readable explanation.
+  string explanation = 3;
+}

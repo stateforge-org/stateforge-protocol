@@ -1,0 +1,19 @@
+{
+  "sessionBinding": {
+    "expectedProviderInstanceId": "",
+    "expectedEndpointGeneration": "0",
+    "expectedSessionId": ""
+  },
+  "invocation": {
+    "operationId": "",
+    "operationIdentifier": "",
+    "payload": {},
+    "executionDeadline": "1970-01-01T00:00:00Z",
+    "contract": {
+      "manifestRevision": "",
+      "requiredImplementationRoles": []
+    },
+    "executionContext": {}
+  },
+  "admissionMode": "ADMISSION_MODE_UNSPECIFIED"
+}

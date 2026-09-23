@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package stateforge.sfp.operation_admission.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// OperationAdmissionService atomically admits one immutable, manifest-declared
+// operation before Provider-specific behavior starts. It shares the negotiated
+// local SFP channel. Progress, terminal results, and cancellation belong to the
+// operation-lifecycle procedure, not this service.
+service OperationAdmissionService {
+  // StartOperation either creates one retained admission record and dispatches
+  // once, or resolves an existing matching record without dispatching again.
+  // Rejections create no accepted operation record. See
+  // docs/procedures/operation-admission.md for ordering, errors, and retries.
+  rpc StartOperation(StartOperationRequest) returns (StartOperationResponse);
+}
+
+// AdmissionMode tells the Provider whether absence of a retained record may
+// create work. It is a transport/recovery control and is excluded from the
+// immutable invocation fingerprint.
+enum AdmissionMode {
+  ADMISSION_MODE_UNSPECIFIED = 0;
+  // Admit when no record exists; otherwise resolve the matching record. Use for
+  // the first submission and an unchanged retry while the original Provider
+  // generation is still authoritative.
+  ADMISSION_MODE_ADMIT_OR_RESOLVE = 1;
+  // Resolve only. Never dispatch when the record is absent. Agents use this
+  // after an uncertain submission crosses a generation or retention boundary.
+  ADMISSION_MODE_RESOLVE_ONLY = 2;
+}
+
+// AdmissionDisposition is the complete successful result set. Rejections use a
+// gRPC status plus OperationAdmissionErrorDetail, never another disposition.
+enum AdmissionDisposition {
+  ADMISSION_DISPOSITION_UNSPECIFIED = 0;
+  // One record was atomically created before one dispatch.
+  ADMISSION_DISPOSITION_ACCEPTED_NEW = 1;
+  // A retained record with the same operation ID and fingerprint was returned.
+  ADMISSION_DISPOSITION_RESOLVED_EXISTING = 2;
+}
+
+// AdmissionErrorReason is the stable core reason carried with a non-OK gRPC
+// status. The status remains the transport discriminator; explanations are
+// sanitized diagnostics and must not be parsed.
+enum AdmissionErrorReason {
+  ADMISSION_ERROR_REASON_UNSPECIFIED = 0;
+  ADMISSION_ERROR_REASON_INVALID_OPERATION_REQUEST = 1;
+  ADMISSION_ERROR_REASON_OPERATION_NOT_DECLARED = 2;
+  ADMISSION_ERROR_REASON_OPERATION_INCOMPATIBLE = 3;
+  ADMISSION_ERROR_REASON_OPERATION_PRECONDITION_FAILED = 4;
+  ADMISSION_ERROR_REASON_PROVIDER_CAPACITY_EXHAUSTED = 5;
+  ADMISSION_ERROR_REASON_PROVIDER_UNAVAILABLE = 6;
+  ADMISSION_ERROR_REASON_IDEMPOTENCY_CONFLICT = 7;
+  ADMISSION_ERROR_REASON_OPERATION_DEADLINE_EXPIRED = 8;
+  ADMISSION_ERROR_REASON_OPERATION_RECORD_UNAVAILABLE = 9;
+  ADMISSION_ERROR_REASON_OPERATION_RECORD_EXPIRED = 10;
+}
+
+// StartOperationRequest separates the semantic invocation from channel/session
+// controls. Updating session_binding after reconnect does not change the
+// invocation fingerprint. invocation itself is immutable for operation_id.
+message StartOperationRequest {
+  OperationSessionBinding session_binding = 1;
+  OperationInvocation invocation = 2;
+  AdmissionMode admission_mode = 3;
+}
+
+// OperationSessionBinding fences one call to a currently negotiated session.
+// These values are not semantic operation content and are excluded from the
+// request fingerprint. Empty/default fields are invalid, not wildcards.
+message OperationSessionBinding {
+  // Canonical lowercase UUIDv4 of the installation, copied from Handshake.
+  string expected_provider_instance_id = 1;
+  // Positive endpoint generation copied from Handshake, never a process ID.
+  uint64 expected_endpoint_generation = 2;
+  // Required opaque HandshakeResponse.session_id for the active session.
+  string expected_session_id = 3;
+}
+
+// OperationInvocation is the immutable semantic request identified by
+// operation_id. Its complete ProtoJSON projection, with defaults emitted and
+// required_implementation_roles sorted, is the canonical fingerprint preimage.
+message OperationInvocation {
+  // Agent-assigned canonical lowercase UUIDv4 allocated before first contact.
+  // A genuinely new authorized attempt receives a new operation ID.
+  string operation_id = 1;
+  // Manifest-declared versioned identifier, namespace/name@major.
+  string operation_identifier = 2;
+  // Required object validated against the operation's P1 input_schema. Any
+  // resource selection belongs here only when that operation requires one.
+  google.protobuf.Struct payload = 4;
+  // Absolute business-execution deadline selected by the Agent. It is part of
+  // the immutable request, not the gRPC call deadline. A deadline that has
+  // elapsed rejects a new admission but does not erase a retained record.
+  google.protobuf.Timestamp execution_deadline = 5;
+  // Pins the declaration/schema/profile expectations authorized by the Agent.
+  OperationContractContext contract = 6;
+  // Required bounded, non-secret execution metadata. Authorization and policy
+  // decisions remain outside SFP; this object carries only approved context.
+  google.protobuf.Struct execution_context = 7;
+}
+
+// OperationContractContext pins the exact accepted declaration and optional
+// compliance roles needed by this invocation without changing P1 schema 1.
+message OperationContractContext {
+  // Exact accepted GetManifestResponse.manifest_revision.
+  string manifest_revision = 1;
+  // Distinct profile claims this invocation relies on: a subset of the selected
+  // operation's P1 implements list, not a list of Control Plane contracts or
+  // permissions. The Agent validates recognized profiles before relying on
+  // them; the Provider checks that each requested claim is declared. Empty
+  // means no profile claim is required for this invocation. Ordering is
+  // semantically irrelevant and is sorted in the fingerprint projection.
+  repeated string required_implementation_roles = 2;
+}
+
+// StartOperationResponse reports only the admission-layer record. The later
+// lifecycle contract owns progress, terminal outcomes, results, and cancellation.
+message StartOperationResponse {
+  // Current validated Provider/session values, echoed for response fencing.
+  string provider_instance_id = 1;
+  uint64 endpoint_generation = 2;
+  string session_id = 3;
+  // Exact manifest revision pinned by invocation.contract.
+  string manifest_revision = 4;
+  AdmissionDisposition disposition = 5;
+  OperationAdmissionRecord record = 6;
+}
+
+// OperationAdmissionRecord is created atomically before Provider-specific work
+// begins and remains immutable while retained. Resolving an active or terminal
+// operation returns this same admission record and never dispatches again.
+message OperationAdmissionRecord {
+  string operation_id = 1;
+  // "sha256:" followed by the lowercase SHA-256 of the RFC 8785 canonical
+  // invocation ProtoJSON projection.
+  string request_fingerprint = 2;
+  google.protobuf.Timestamp admitted_at = 3;
+  // Policy expiry for this record. It is an observable resolution boundary,
+  // not a promise that an in-memory Provider survives process failure.
+  google.protobuf.Timestamp record_expires_at = 4;
+  // Endpoint generation that first admitted the operation. A later generation
+  // may return the record only when it verifiably retained/recovered it.
+  uint64 admitted_endpoint_generation = 5;
+}
+
+// OperationAdmissionErrorDetail is packed as structured gRPC error detail for
+// every admission rejection when request decoding permits it. It never contains
+// secrets, payloads, stack traces, or remote diagnostics.
+message OperationAdmissionErrorDetail {
+  // May be empty only when the request did not contain a valid operation ID.
+  string operation_id = 1;
+  AdmissionErrorReason reason = 2;
+  bool retryable = 3;
+  // Present only when the Provider can supply bounded retry guidance.
+  google.protobuf.Duration retry_after = 4;
+  // Bounded, sanitized diagnostic text. Never the discriminator.
+  string explanation = 5;
+}

@@ -1,0 +1,15 @@
+{
+  "assessmentRequestId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "expectedProviderInstanceId": "550e8400-e29b-41d4-a716-446655440000",
+  "expectedEndpointGeneration": "4",
+  "expectedSessionId": "session-3d19b6d2-4b7b-4f4a-9c9a-2f3f4f0c9a1b",
+  "expectedManifestRevision": "sha256:f5648d269aa40ce80ec6efd05c7314249b021c777293ef63a167a1c5bf4cef12",
+  "executionContext": {
+    "locale": "en-US"
+  },
+  "operationIdentifiers": [
+    "stateforge.git/reference.resolve@1",
+    "stateforge.git/reference.resolve@1",
+    "stateforge.git/branch.list@1"
+  ]
+}
