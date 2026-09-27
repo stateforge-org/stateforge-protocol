@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package stateforge.sfp.trigger_publication.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// TriggerPublicationService carries Provider-originated, manifest-declared
+// triggers over the existing Agent-established SFP channel. The Agent opens
+// the bidirectional stream, acknowledges publications on the request side, and
+// consumes Provider publications on the response side. This service does not
+// evaluate policies, assign StateForge components, or define SF-AOP delivery.
+service TriggerPublicationService {
+  // StreamTriggers binds one stream to an active negotiated session and exact
+  // accepted manifest revision. The first request must be open; the first
+  // response must be ready. Later requests are acknowledgements and later
+  // responses are publications. See docs/procedures/triggers.md for validation,
+  // idempotency, retry, ordering, flow-control, and termination semantics.
+  rpc StreamTriggers(stream StreamTriggersRequest) returns (stream StreamTriggersResponse);
+}
+
+// StreamTriggersRequest is sent from the Agent client to the Provider server.
+// Exactly one member must be set. open is valid only as the first message;
+// acknowledgement is valid only after TriggerStreamReady.
+message StreamTriggersRequest {
+  oneof message {
+    TriggerStreamOpen open = 1;
+    TriggerAcknowledgement acknowledgement = 2;
+  }
+}
+
+// StreamTriggersResponse is sent from the Provider server to the Agent client.
+// Exactly one member must be set. ready is valid only as the first response;
+// publication is valid only after a successful ready response.
+message StreamTriggersResponse {
+  oneof message {
+    TriggerStreamReady ready = 1;
+    TriggerPublication publication = 2;
+  }
+}
+
+// TriggerStreamOpen binds the stream to current endpoint, session, and
+// declaration state. Empty/default fields are invalid, not wildcards.
+message TriggerStreamOpen {
+  TriggerSessionBinding session_binding = 1;
+  // Positive Agent-selected receive window. The Provider may select a smaller
+  // positive value in TriggerStreamReady and must never exceed it. Range 1-1024.
+  uint32 requested_max_in_flight_publications = 2;
+}
+
+// TriggerSessionBinding fences the stream to the active handshake and exact
+// manifest whose trigger schemas the Agent accepted.
+message TriggerSessionBinding {
+  // Canonical lowercase UUIDv4 of the Provider installation from Handshake.
+  string expected_provider_instance_id = 1;
+  // Positive endpoint generation from Handshake, never a process ID.
+  uint64 expected_endpoint_generation = 2;
+  // Required opaque HandshakeResponse.session_id for the active session.
+  string expected_session_id = 3;
+  // Exact accepted GetManifestResponse.manifest_revision. The corresponding
+  // trigger declarations and payload schemas govern this stream.
+  string expected_manifest_revision = 4;
+}
+
+// TriggerStreamReady confirms that the Provider accepted the stream binding.
+// Publications must not precede this response.
+message TriggerStreamReady {
+  string provider_instance_id = 1;
+  uint64 endpoint_generation = 2;
+  string session_id = 3;
+  string manifest_revision = 4;
+  // Selected positive receive window, no greater than the requested value.
+  uint32 maximum_in_flight_publications = 5;
+}
+
+// TriggerPublication is one immutable logical event. Provider identity is
+// supplied by the authenticated stream and is deliberately absent here. There
+// is no generic target, source, resource, project, or component identity;
+// trigger-specific identity belongs inside the declared payload schema.
+message TriggerPublication {
+  // Provider-generated canonical lowercase UUIDv4 allocated before the first
+  // transmission and preserved unchanged for every retry of this publication.
+  string publication_id = 1;
+  // Exact versioned key from the accepted ProviderManifest.triggers map. The
+  // key selects the Draft 2020-12 schema used to validate payload.
+  string trigger_identifier = 2;
+  // Time the Provider observed the source event. This is event data, not a
+  // trusted ordering authority across Providers or sessions.
+  google.protobuf.Timestamp observed_at = 3;
+  // Required object validated against the selected TriggerDeclaration's
+  // payload_schema. It may contain trigger-specific source/resource identity.
+  // Its RFC 8785 canonical JSON is limited to 1 MiB, nesting depth 64, 256
+  // members per object or items per array, and 128 UTF-8 bytes per property
+  // name. The complete serialized stream response is limited to 2 MiB.
+  google.protobuf.Struct payload = 4;
+}
+
+// TriggerAcknowledgement is the Agent's terminal delivery decision for one
+// publication transmission. publication_id provides correlation even when
+// acknowledgements are not sent in publication order.
+message TriggerAcknowledgement {
+  string publication_id = 1;
+  TriggerAcknowledgementDisposition disposition = 2;
+  // Required only for REJECTED and forbidden for accepted dispositions.
+  TriggerRejection rejection = 3;
+}
+
+// TriggerAcknowledgementDisposition is the complete acknowledgement result.
+// Zero/UNSPECIFIED is invalid in a well-formed acknowledgement.
+enum TriggerAcknowledgementDisposition {
+  TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_UNSPECIFIED = 0;
+  // This exact publication was durably accepted and the Agent assumed delivery
+  // responsibility before sending the acknowledgement.
+  TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_ACCEPTED_NEW = 1;
+  // The same Provider installation and publication ID were already durably
+  // accepted with identical canonical content. No second event was created.
+  TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_ACCEPTED_DUPLICATE = 2;
+  // The publication was not accepted. rejection explains the stable reason and
+  // whether an unchanged retry can be useful.
+  TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_REJECTED = 3;
+}
+
+// TriggerRejection describes a publication-level rejection without terminating
+// an otherwise valid stream. It never contains payloads, secrets, stack traces,
+// or raw third-party diagnostics.
+message TriggerRejection {
+  TriggerRejectionReason reason = 1;
+  bool retryable = 2;
+  // Present only with retryable=true and only when bounded guidance is known.
+  // When present, it must be positive and no greater than 24 hours.
+  google.protobuf.Duration retry_after = 3;
+  // Bounded, sanitized diagnostic text, at most 1024 UTF-8 bytes. Never the
+  // discriminator.
+  string explanation = 4;
+}
+
+// TriggerRejectionReason is the stable core rejection vocabulary. Invalid
+// stream framing/session state uses stream termination rather than this enum.
+enum TriggerRejectionReason {
+  TRIGGER_REJECTION_REASON_UNSPECIFIED = 0;
+  TRIGGER_REJECTION_REASON_INVALID_PUBLICATION = 1;
+  TRIGGER_REJECTION_REASON_TRIGGER_NOT_DECLARED = 2;
+  TRIGGER_REJECTION_REASON_PAYLOAD_SCHEMA_VIOLATION = 3;
+  TRIGGER_REJECTION_REASON_IDEMPOTENCY_CONFLICT = 4;
+  TRIGGER_REJECTION_REASON_AGENT_CAPACITY_EXHAUSTED = 5;
+  TRIGGER_REJECTION_REASON_DELIVERY_RESPONSIBILITY_UNAVAILABLE = 6;
+}

@@ -1,0 +1,9 @@
+{
+  "ready": {
+    "providerInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c",
+    "endpointGeneration": "4",
+    "sessionId": "trigger-session-A",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "maximumInFlightPublications": 32
+  }
+}

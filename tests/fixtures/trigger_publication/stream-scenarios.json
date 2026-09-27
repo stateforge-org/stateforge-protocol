@@ -1,0 +1,32 @@
+[
+  {
+    "scenario": "valid_open",
+    "firstAgentMessage": "open",
+    "firstProviderMessage": "ready",
+    "expectedStatus": "OK"
+  },
+  {
+    "scenario": "acknowledgement_before_open",
+    "firstAgentMessage": "acknowledgement",
+    "firstProviderMessage": "none",
+    "expectedStatus": "INVALID_ARGUMENT"
+  },
+  {
+    "scenario": "publication_before_ready",
+    "firstAgentMessage": "open",
+    "firstProviderMessage": "publication",
+    "expectedStatus": "INTERNAL"
+  },
+  {
+    "scenario": "stale_session_or_manifest",
+    "firstAgentMessage": "open",
+    "firstProviderMessage": "none",
+    "expectedStatus": "FAILED_PRECONDITION"
+  },
+  {
+    "scenario": "receive_window_exceeded",
+    "firstAgentMessage": "open",
+    "firstProviderMessage": "ready",
+    "expectedStatus": "RESOURCE_EXHAUSTED"
+  }
+]

@@ -1,0 +1,32 @@
+[
+  {
+    "reason": "TRIGGER_REJECTION_REASON_INVALID_PUBLICATION",
+    "retryable": false,
+    "condition": "The envelope is structurally invalid."
+  },
+  {
+    "reason": "TRIGGER_REJECTION_REASON_TRIGGER_NOT_DECLARED",
+    "retryable": false,
+    "condition": "The exact versioned trigger identifier is absent from the accepted manifest."
+  },
+  {
+    "reason": "TRIGGER_REJECTION_REASON_PAYLOAD_SCHEMA_VIOLATION",
+    "retryable": false,
+    "condition": "The payload does not satisfy the selected trigger declaration schema."
+  },
+  {
+    "reason": "TRIGGER_REJECTION_REASON_IDEMPOTENCY_CONFLICT",
+    "retryable": false,
+    "condition": "The publication identity was already used with different canonical content."
+  },
+  {
+    "reason": "TRIGGER_REJECTION_REASON_AGENT_CAPACITY_EXHAUSTED",
+    "retryable": true,
+    "condition": "The bounded Agent acceptance queue cannot currently assume responsibility."
+  },
+  {
+    "reason": "TRIGGER_REJECTION_REASON_DELIVERY_RESPONSIBILITY_UNAVAILABLE",
+    "retryable": true,
+    "condition": "The Agent cannot currently establish durable delivery responsibility."
+  }
+]
