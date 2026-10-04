@@ -5,8 +5,9 @@
     These modules are generated from Protocol Buffers. Treat the `.proto`
     schema as the authoritative contract and never edit generated modules.
 
-The bootstrap, manifest, capability-assessment, operation-admission, and
-trigger-publication schemas generate these Python modules:
+The bootstrap, manifest, capability-assessment, operation-admission,
+operation-lifecycle, and trigger-publication schemas generate these Python
+modules:
 
 ```python
 from stateforge_protocol.sfp.bootstrap.v1 import bootstrap_pb2
@@ -24,6 +25,10 @@ from stateforge_protocol.sfp.operation_admission.v1 import (
 )
 from stateforge_protocol.sfp.operation_admission.v1 import (
     operation_admission_pb2_grpc,
+)
+from stateforge_protocol.sfp.operation_lifecycle.v1 import (
+    operation_lifecycle_pb2,
+    operation_lifecycle_pb2_grpc,
 )
 from stateforge_protocol.sfp.trigger_publication.v1 import (
     trigger_publication_pb2,
@@ -43,10 +48,27 @@ typed finding, requirement, reason, and constraint messages.
 Operation-admission bindings expose
 `OperationAdmissionService.StartOperation`, the immutable invocation and
 session-binding messages, admission record, dispositions, modes, and structured
-error detail. Trigger-publication bindings expose the bidirectional
+error detail.
+Operation-lifecycle bindings expose
+`OperationLifecycleService.WatchOperation` (server streaming) and
+`CancelOperation` (unary), complete operation snapshots, typed terminal
+outcomes, progress, cancellation dispositions, and structured RPC error detail.
+They reuse the Operation Admission session-binding and admission-record types.
+Trigger-publication bindings expose the bidirectional
 `TriggerPublicationService.StreamTriggers` stream, session/manifest binding,
 schema-bound publication envelope, acknowledgements, and structured rejection
 reasons.
+
+The versioned Operation Lifecycle `contract` module exposes normative procedure
+limits that consuming runtimes must enforce outside ordinary protobuf or JSON
+Schema validation. For example:
+
+```python
+from stateforge_protocol.sfp.operation_lifecycle.v1 import contract
+
+server_receive_limit = contract.MAX_REQUEST_BYTES
+server_send_limit = contract.MAX_RESPONSE_BYTES
+```
 
 Use the packaged validation schema with a Draft 2020-12 validator when building
 the consuming runtime. Validation libraries are development dependencies here;
@@ -125,6 +147,18 @@ the canonical RFC 8785 fingerprint, current-session checks, validation order,
 atomic admission behavior, retry modes, retention, and structured error
 mapping. Constructing a generated message does not implement an operation
 registry or make dispatch idempotent by itself.
+
+For lifecycle messages, load `operation_lifecycle.schema.json` from
+`stateforge_protocol.sfp.operation_lifecycle.v1`. Its root validates a
+`WatchOperationResponse`; select `$defs.watchOperationRequest`,
+`$defs.cancelOperationRequest`, or `$defs.cancelOperationResponse` for other
+messages, retaining the complete `$defs` map. The
+[lifecycle procedure](../procedures/progress-results-cancellation.md) defines
+session/fingerprint checks, sequence gaps, immutable terminal outcomes,
+cancellation races, and bounded retention. Validate a success result against
+the originally admitted operation's pinned result schema as a separate step.
+These bindings do not provide an execution manager or enforce runtime state
+transitions, sanitization, or backpressure.
 
 Trigger-publication stream messages are validated with the schema packaged
 beside `trigger_publication_pb2`. The

@@ -1,0 +1,112 @@
+[
+  {
+    "name": "invalid-session",
+    "grpcCode": "INVALID_ARGUMENT",
+    "detail": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "reason": "LIFECYCLE_ERROR_REASON_INVALID_REQUEST",
+      "explanation": "Invalid session."
+    },
+    "dispatches": 0,
+    "operationOutcome": "indeterminate"
+  },
+  {
+    "name": "stale-session",
+    "grpcCode": "FAILED_PRECONDITION",
+    "detail": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "reason": "LIFECYCLE_ERROR_REASON_SESSION_PRECONDITION_FAILED",
+      "explanation": "Stale session."
+    },
+    "dispatches": 0,
+    "operationOutcome": "indeterminate"
+  },
+  {
+    "name": "unknown-operation",
+    "grpcCode": "FAILED_PRECONDITION",
+    "detail": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "reason": "LIFECYCLE_ERROR_REASON_OPERATION_RECORD_UNAVAILABLE",
+      "explanation": "Unknown operation."
+    },
+    "dispatches": 0,
+    "operationOutcome": "indeterminate"
+  },
+  {
+    "name": "evicted-with-tombstone",
+    "grpcCode": "FAILED_PRECONDITION",
+    "detail": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "reason": "LIFECYCLE_ERROR_REASON_OPERATION_RECORD_EXPIRED",
+      "explanation": "Evicted with tombstone."
+    },
+    "dispatches": 0,
+    "operationOutcome": "indeterminate"
+  },
+  {
+    "name": "recovered-admission-without-state",
+    "grpcCode": "FAILED_PRECONDITION",
+    "detail": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "reason": "LIFECYCLE_ERROR_REASON_OPERATION_STATE_UNAVAILABLE",
+      "explanation": "Recovered admission without state."
+    },
+    "dispatches": 0,
+    "operationOutcome": "indeterminate"
+  },
+  {
+    "name": "different-invocation",
+    "grpcCode": "FAILED_PRECONDITION",
+    "detail": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "reason": "LIFECYCLE_ERROR_REASON_FINGERPRINT_MISMATCH",
+      "explanation": "Different invocation."
+    },
+    "dispatches": 0,
+    "operationOutcome": "indeterminate"
+  },
+  {
+    "name": "cursor-ahead",
+    "grpcCode": "OUT_OF_RANGE",
+    "detail": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "reason": "LIFECYCLE_ERROR_REASON_CURSOR_AHEAD",
+      "explanation": "Cursor ahead."
+    },
+    "dispatches": 0,
+    "operationOutcome": "indeterminate"
+  },
+  {
+    "name": "observer-limit",
+    "grpcCode": "RESOURCE_EXHAUSTED",
+    "detail": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "reason": "LIFECYCLE_ERROR_REASON_OBSERVER_CAPACITY_EXHAUSTED",
+      "explanation": "Observer limit."
+    },
+    "dispatches": 0,
+    "operationOutcome": "indeterminate"
+  },
+  {
+    "name": "stalled-delivery",
+    "grpcCode": "RESOURCE_EXHAUSTED",
+    "detail": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "reason": "LIFECYCLE_ERROR_REASON_SLOW_OBSERVER",
+      "explanation": "Stalled delivery."
+    },
+    "dispatches": 0,
+    "operationOutcome": "indeterminate"
+  },
+  {
+    "name": "provider-unavailable",
+    "grpcCode": "UNAVAILABLE",
+    "detail": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "reason": "LIFECYCLE_ERROR_REASON_PROVIDER_UNAVAILABLE",
+      "explanation": "Provider unavailable."
+    },
+    "dispatches": 0,
+    "operationOutcome": "indeterminate"
+  }
+]

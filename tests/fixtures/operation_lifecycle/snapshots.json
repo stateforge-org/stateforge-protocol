@@ -1,0 +1,341 @@
+{
+  "accepted": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "1",
+    "state": "OPERATION_STATE_ACCEPTED",
+    "updatedAt": "2026-09-19T12:00:00Z"
+  },
+  "running": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "2",
+    "state": "OPERATION_STATE_RUNNING",
+    "updatedAt": "2026-09-19T12:00:01Z"
+  },
+  "progress-25": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "3",
+    "state": "OPERATION_STATE_RUNNING",
+    "updatedAt": "2026-09-19T12:00:02Z",
+    "progress": {
+      "sequence": "3",
+      "updatedAt": "2026-09-19T12:00:02Z",
+      "message": "Compacting partitions.",
+      "percentage": 25
+    }
+  },
+  "progress-100": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "4",
+    "state": "OPERATION_STATE_RUNNING",
+    "updatedAt": "2026-09-19T12:00:03Z",
+    "progress": {
+      "sequence": "4",
+      "updatedAt": "2026-09-19T12:00:03Z",
+      "message": "Finishing maintenance.",
+      "percentage": 100
+    }
+  },
+  "requested": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "5",
+    "state": "OPERATION_STATE_CANCELLATION_REQUESTED",
+    "updatedAt": "2026-09-19T12:00:04Z",
+    "progress": {
+      "sequence": "4",
+      "updatedAt": "2026-09-19T12:00:03Z",
+      "message": "Finishing maintenance.",
+      "percentage": 100
+    }
+  },
+  "succeeded": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "5",
+    "state": "OPERATION_STATE_SUCCEEDED",
+    "updatedAt": "2026-09-19T12:00:04Z",
+    "success": {
+      "result": {
+        "reclaimedBytes": 4096
+      }
+    },
+    "progress": {
+      "sequence": "4",
+      "updatedAt": "2026-09-19T12:00:03Z",
+      "message": "Finishing maintenance.",
+      "percentage": 100
+    }
+  },
+  "succeeded-after-request": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "6",
+    "state": "OPERATION_STATE_SUCCEEDED",
+    "updatedAt": "2026-09-19T12:00:05Z",
+    "success": {
+      "result": {
+        "reclaimedBytes": 4096
+      }
+    },
+    "progress": {
+      "sequence": "4",
+      "updatedAt": "2026-09-19T12:00:03Z",
+      "message": "Finishing maintenance.",
+      "percentage": 100
+    }
+  },
+  "cancelled": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "6",
+    "state": "OPERATION_STATE_CANCELLED",
+    "updatedAt": "2026-09-19T12:00:05Z",
+    "cancellation": {
+      "effects": {
+        "sideEffects": "SIDE_EFFECT_STATE_PRESENT",
+        "cleanup": "CLEANUP_STATE_INCOMPLETE",
+        "explanation": "A maintenance reservation remains; its release could not be confirmed."
+      }
+    },
+    "progress": {
+      "sequence": "4",
+      "updatedAt": "2026-09-19T12:00:03Z",
+      "message": "Finishing maintenance.",
+      "percentage": 100
+    }
+  },
+  "failed": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "5",
+    "state": "OPERATION_STATE_FAILED",
+    "updatedAt": "2026-09-19T12:00:04Z",
+    "failure": {
+      "code": "example.database.maintenance_failed",
+      "explanation": "Maintenance failed after changing some partitions.",
+      "effects": {
+        "sideEffects": "SIDE_EFFECT_STATE_PRESENT",
+        "cleanup": "CLEANUP_STATE_INCOMPLETE",
+        "explanation": "A maintenance reservation remains; its release could not be confirmed."
+      }
+    },
+    "progress": {
+      "sequence": "4",
+      "updatedAt": "2026-09-19T12:00:03Z",
+      "message": "Finishing maintenance.",
+      "percentage": 100
+    }
+  },
+  "failed-after-request": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "6",
+    "state": "OPERATION_STATE_FAILED",
+    "updatedAt": "2026-09-19T12:00:05Z",
+    "failure": {
+      "code": "stateforge.operation.provider_error",
+      "explanation": "Maintenance failed before interruption was confirmed.",
+      "effects": {
+        "sideEffects": "SIDE_EFFECT_STATE_UNKNOWN",
+        "cleanup": "CLEANUP_STATE_UNKNOWN",
+        "explanation": "The remote maintenance outcome and cleanup could not be confirmed."
+      }
+    },
+    "progress": {
+      "sequence": "4",
+      "updatedAt": "2026-09-19T12:00:03Z",
+      "message": "Finishing maintenance.",
+      "percentage": 100
+    }
+  },
+  "invalid-result": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "5",
+    "state": "OPERATION_STATE_FAILED",
+    "updatedAt": "2026-09-19T12:00:04Z",
+    "failure": {
+      "code": "stateforge.operation.invalid_result",
+      "explanation": "The operation returned a result that does not satisfy its pinned contract.",
+      "effects": {
+        "sideEffects": "SIDE_EFFECT_STATE_UNKNOWN",
+        "cleanup": "CLEANUP_STATE_UNKNOWN",
+        "explanation": "The remote maintenance outcome and cleanup could not be confirmed."
+      }
+    },
+    "progress": {
+      "sequence": "4",
+      "updatedAt": "2026-09-19T12:00:03Z",
+      "message": "Finishing maintenance.",
+      "percentage": 100
+    }
+  },
+  "deadline": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "5",
+    "state": "OPERATION_STATE_FAILED",
+    "updatedAt": "2026-09-20T12:00:01Z",
+    "failure": {
+      "code": "stateforge.operation.execution_deadline_exceeded",
+      "explanation": "Execution ended after its business deadline expired.",
+      "effects": {
+        "sideEffects": "SIDE_EFFECT_STATE_NONE",
+        "cleanup": "CLEANUP_STATE_COMPLETED",
+        "explanation": "Execution stopped and its temporary reservation was released."
+      }
+    },
+    "progress": {
+      "sequence": "4",
+      "updatedAt": "2026-09-19T12:00:03Z",
+      "message": "Finishing maintenance.",
+      "percentage": 100
+    }
+  },
+  "prestart-failure": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "2",
+    "state": "OPERATION_STATE_FAILED",
+    "updatedAt": "2026-09-19T12:00:01Z",
+    "failure": {
+      "code": "stateforge.operation.provider_error",
+      "explanation": "Execution could not start.",
+      "effects": {
+        "sideEffects": "SIDE_EFFECT_STATE_NONE",
+        "cleanup": "CLEANUP_STATE_NOT_REQUIRED",
+        "explanation": "Execution did not start; no resources were acquired."
+      }
+    }
+  },
+  "queued-request": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "2",
+    "state": "OPERATION_STATE_CANCELLATION_REQUESTED",
+    "updatedAt": "2026-09-19T12:00:01Z"
+  },
+  "queued-cancelled": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "3",
+    "state": "OPERATION_STATE_CANCELLED",
+    "updatedAt": "2026-09-19T12:00:02Z",
+    "cancellation": {
+      "effects": {
+        "sideEffects": "SIDE_EFFECT_STATE_NONE",
+        "cleanup": "CLEANUP_STATE_NOT_REQUIRED",
+        "explanation": "Execution did not start; no resources were acquired."
+      }
+    }
+  }
+}

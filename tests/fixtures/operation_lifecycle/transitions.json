@@ -1,0 +1,22 @@
+{
+  "ACCEPTED": [
+    "RUNNING",
+    "CANCELLATION_REQUESTED",
+    "FAILED"
+  ],
+  "RUNNING": [
+    "RUNNING",
+    "CANCELLATION_REQUESTED",
+    "SUCCEEDED",
+    "FAILED"
+  ],
+  "CANCELLATION_REQUESTED": [
+    "CANCELLATION_REQUESTED",
+    "SUCCEEDED",
+    "FAILED",
+    "CANCELLED"
+  ],
+  "SUCCEEDED": [],
+  "FAILED": [],
+  "CANCELLED": []
+}
