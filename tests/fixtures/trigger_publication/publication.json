@@ -1,0 +1,12 @@
+{
+  "publication": {
+    "publicationId": "11111111-1111-4111-8111-111111111111",
+    "triggerIdentifier": "stateforge.git/reference.changed@1",
+    "observedAt": "2026-09-27T08:30:00Z",
+    "payload": {
+      "repository": "stateforge-org/stateforge-protocol",
+      "ref": "refs/heads/mvp/implementation",
+      "commitSha": "38d528c560d29a0553d204d7e53662264b82f626"
+    }
+  }
+}

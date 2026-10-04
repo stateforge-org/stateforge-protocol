@@ -1,0 +1,44 @@
+[
+  {
+    "scenario": "first_valid_publication",
+    "recordState": "absent",
+    "canonicalContent": "valid",
+    "expected": "TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_ACCEPTED_NEW",
+    "durableRecordCount": 1
+  },
+  {
+    "scenario": "identical_replay",
+    "recordState": "accepted",
+    "canonicalContent": "equal",
+    "expected": "TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_ACCEPTED_DUPLICATE",
+    "durableRecordCount": 1
+  },
+  {
+    "scenario": "lost_acknowledgement",
+    "recordState": "accepted_ack_lost",
+    "canonicalContent": "equal",
+    "expected": "TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_ACCEPTED_DUPLICATE",
+    "durableRecordCount": 1
+  },
+  {
+    "scenario": "agent_restart_after_commit_before_ack",
+    "recordState": "accepted_recovered",
+    "canonicalContent": "equal",
+    "expected": "TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_ACCEPTED_DUPLICATE",
+    "durableRecordCount": 1
+  },
+  {
+    "scenario": "same_id_different_content",
+    "recordState": "accepted",
+    "canonicalContent": "different",
+    "expected": "TRIGGER_REJECTION_REASON_IDEMPOTENCY_CONFLICT",
+    "durableRecordCount": 1
+  },
+  {
+    "scenario": "crash_before_durable_acceptance",
+    "recordState": "absent_after_restart",
+    "canonicalContent": "equal",
+    "expected": "TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_ACCEPTED_NEW",
+    "durableRecordCount": 1
+  }
+]

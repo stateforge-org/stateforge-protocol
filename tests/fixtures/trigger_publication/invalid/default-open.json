@@ -1,0 +1,11 @@
+{
+  "open": {
+    "sessionBinding": {
+      "expectedProviderInstanceId": "",
+      "expectedEndpointGeneration": "0",
+      "expectedSessionId": "",
+      "expectedManifestRevision": ""
+    },
+    "requestedMaxInFlightPublications": 0
+  }
+}
