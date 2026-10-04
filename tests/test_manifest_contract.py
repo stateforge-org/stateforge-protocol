@@ -12,7 +12,7 @@ from google.protobuf import descriptor_pb2, json_format
 from google.protobuf.descriptor import FieldDescriptor
 from jsonschema import Draft202012Validator, ValidationError
 
-from stateforge_protocol.sfp.manifest.v1 import manifest_pb2
+from stateforge_protocol.sfp.manifest.v1 import contract, manifest_pb2
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "manifest"
 _SCHEMA = json.loads(
@@ -47,6 +47,39 @@ def _preimage(response):
 
 def test_validation_schema_is_valid() -> None:
     Draft202012Validator.check_schema(_SCHEMA)
+
+
+def test_versioned_contract_exposes_normative_limits() -> None:
+    expected = {
+        "MAX_REQUEST_BYTES": 8 * 1024,
+        "MAX_RESPONSE_BYTES": 2 * 1024 * 1024,
+        "MAX_CANONICAL_REVISION_PREIMAGE_BYTES": 1 * 1024 * 1024,
+        "MAX_EMBEDDED_JSON_DEPTH": 64,
+        "MAX_OPERATIONS": 1_024,
+        "MAX_TRIGGERS": 1_024,
+        "MAX_RUNTIME_REQUIREMENTS": 1_024,
+        "MAX_PLATFORMS": 256,
+        "MAX_PROFILE_CLAIMS_PER_OPERATION": 64,
+    }
+
+    assert {name: getattr(contract, name) for name in expected} == expected
+
+
+def test_versioned_contract_limits_match_packaged_schema() -> None:
+    definitions = _SCHEMA["$defs"]
+    manifest = definitions["providerManifest"]["properties"]
+
+    assert manifest["operations"]["maxProperties"] == contract.MAX_OPERATIONS
+    assert manifest["triggers"]["maxProperties"] == contract.MAX_TRIGGERS
+    assert (
+        manifest["runtimeRequirements"]["maxProperties"]
+        == contract.MAX_RUNTIME_REQUIREMENTS
+    )
+    assert manifest["platforms"]["maxItems"] == contract.MAX_PLATFORMS
+    assert (
+        definitions["operation"]["properties"]["implements"]["maxItems"]
+        == contract.MAX_PROFILE_CLAIMS_PER_OPERATION
+    )
 
 
 def test_response_round_trip_preserves_canonical_representation(

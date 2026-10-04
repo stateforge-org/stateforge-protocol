@@ -13,6 +13,7 @@ from jsonschema import Draft202012Validator, ValidationError
 
 from stateforge_protocol.sfp.capability_assessment.v1 import (
     capability_assessment_pb2,
+    contract,
 )
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "capability_assessment"
@@ -39,9 +40,6 @@ _MANIFEST_SCHEMA = json.loads(
     .joinpath("manifest.schema.json")
     .read_text()
 )
-_MAX_CONTEXT_NESTING = 64
-_MAX_REQUEST_BYTES = 8 * 1024 * 1024
-_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 
 
 def _container_depth(value) -> int:
@@ -89,6 +87,49 @@ def validator():
 
 def test_validation_schema_is_valid() -> None:
     Draft202012Validator.check_schema(_SCHEMA)
+
+
+def test_versioned_contract_exposes_normative_limits() -> None:
+    expected = {
+        "MAX_REQUEST_BYTES": 8 * 1024 * 1024,
+        "MAX_RESPONSE_BYTES": 16 * 1024 * 1024,
+        "MAX_EXECUTION_CONTEXT_JSON_DEPTH": 64,
+        "MAX_EXECUTION_CONTEXT_CONTAINER_ENTRIES": 32,
+        "MAX_OPERATION_IDENTIFIERS": 64,
+        "MAX_REQUIREMENT_FINDINGS_PER_OPERATION": 64,
+        "MAX_REASONS_PER_OPERATION": 16,
+        "MAX_CONSTRAINTS_PER_OPERATION": 32,
+    }
+
+    assert {name: getattr(contract, name) for name in expected} == expected
+
+
+def test_versioned_contract_limits_match_packaged_schema() -> None:
+    definitions = _SCHEMA["$defs"]
+    finding = definitions["capabilityFinding"]["properties"]
+    request = definitions["assessCapabilitiesRequest"]["properties"]
+
+    assert (
+        definitions["boundedArray"]["maxItems"]
+        == contract.MAX_EXECUTION_CONTEXT_CONTAINER_ENTRIES
+    )
+    assert (
+        definitions["boundedNestedObject"]["maxProperties"]
+        == contract.MAX_EXECUTION_CONTEXT_CONTAINER_ENTRIES
+    )
+    assert (
+        request["operationIdentifiers"]["maxItems"]
+        == contract.MAX_OPERATION_IDENTIFIERS
+    )
+    assert (
+        finding["requirementFindings"]["maxItems"]
+        == contract.MAX_REQUIREMENT_FINDINGS_PER_OPERATION
+    )
+    assert finding["reasons"]["maxItems"] == contract.MAX_REASONS_PER_OPERATION
+    assert (
+        finding["constraints"]["maxItems"]
+        == contract.MAX_CONSTRAINTS_PER_OPERATION
+    )
 
 
 # -- Wire round trips --------------------------------------------------
@@ -652,22 +693,24 @@ def test_execution_context_accepts_nested_objects(request_data) -> None:
 def test_context_nesting_limit_is_a_consumer_check_not_a_schema_restriction(
     request_data,
 ) -> None:
-    request_data["executionContext"] = _nested_context(_MAX_CONTEXT_NESTING)
+    request_data["executionContext"] = _nested_context(
+        contract.MAX_EXECUTION_CONTEXT_JSON_DEPTH
+    )
     _REQUEST_VALIDATOR.validate(request_data)
     assert (
         _container_depth(request_data["executionContext"])
-        == _MAX_CONTEXT_NESTING
+        == contract.MAX_EXECUTION_CONTEXT_JSON_DEPTH
     )
 
     # JSON Schema cannot express an aggregate recursive-depth ceiling. The
     # consumer's cheap pre-validation walk rejects the next container.
     request_data["executionContext"] = _nested_context(
-        _MAX_CONTEXT_NESTING + 1
+        contract.MAX_EXECUTION_CONTEXT_JSON_DEPTH + 1
     )
     _REQUEST_VALIDATOR.validate(request_data)
     assert (
         _container_depth(request_data["executionContext"])
-        > _MAX_CONTEXT_NESTING
+        > contract.MAX_EXECUTION_CONTEXT_JSON_DEPTH
     )
 
 
@@ -763,8 +806,8 @@ def test_serialized_resource_limits_are_independent_of_schema_bounds(
         response,
         capability_assessment_pb2.AssessCapabilitiesResponse(),
     )
-    assert request_message.ByteSize() <= _MAX_REQUEST_BYTES
-    assert response_message.ByteSize() <= _MAX_RESPONSE_BYTES
+    assert request_message.ByteSize() <= contract.MAX_REQUEST_BYTES
+    assert response_message.ByteSize() <= contract.MAX_RESPONSE_BYTES
 
     # JSON Schema maxLength counts code points, not encoded bytes. This is
     # structurally valid but deliberately exceeds the independent wire cap.
@@ -776,7 +819,7 @@ def test_serialized_resource_limits_are_independent_of_schema_bounds(
         request_data,
         capability_assessment_pb2.AssessCapabilitiesRequest(),
     )
-    assert oversized_message.ByteSize() > _MAX_REQUEST_BYTES
+    assert oversized_message.ByteSize() > contract.MAX_REQUEST_BYTES
 
     requirement_findings = [
         {
@@ -800,7 +843,7 @@ def test_serialized_resource_limits_are_independent_of_schema_bounds(
         large_response,
         capability_assessment_pb2.AssessCapabilitiesResponse(),
     )
-    assert oversized_response.ByteSize() > _MAX_RESPONSE_BYTES
+    assert oversized_response.ByteSize() > contract.MAX_RESPONSE_BYTES
 
 
 @pytest.mark.parametrize(

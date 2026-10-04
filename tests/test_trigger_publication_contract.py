@@ -158,6 +158,49 @@ def test_versioned_contract_exposes_normative_limits() -> None:
     assert {name: getattr(contract, name) for name in expected} == expected
 
 
+def test_versioned_contract_limits_match_packaged_schema() -> None:
+    definitions = _SCHEMA["$defs"]
+    string_schema = next(
+        option
+        for option in definitions["boundedScalar"]["anyOf"]
+        if option.get("type") == "string"
+    )
+
+    assert (
+        definitions["boundedArray"]["maxItems"]
+        == contract.MAX_PAYLOAD_CONTAINER_ENTRIES
+    )
+    assert (
+        definitions["boundedObject"]["maxProperties"]
+        == contract.MAX_PAYLOAD_CONTAINER_ENTRIES
+    )
+    assert (
+        definitions["boundedObject"]["propertyNames"]["maxLength"]
+        == contract.MAX_PAYLOAD_PROPERTY_NAME_CODE_POINTS
+    )
+    assert (
+        string_schema["maxLength"] == contract.MAX_PAYLOAD_STRING_CODE_POINTS
+    )
+    assert (
+        definitions["versionedIdentifier"]["maxLength"]
+        == contract.MAX_TRIGGER_IDENTIFIER_CODE_POINTS
+    )
+    assert (
+        definitions["sessionId"]["maxLength"]
+        == contract.MAX_SESSION_ID_CODE_POINTS
+    )
+    assert (
+        definitions["triggerRejection"]["properties"]["explanation"][
+            "maxLength"
+        ]
+        == contract.MAX_EXPLANATION_CODE_POINTS
+    )
+    assert (
+        definitions["receiveWindow"]["maximum"]
+        == contract.MAX_IN_FLIGHT_PUBLICATIONS
+    )
+
+
 def test_stream_directions_are_closed_oneof_envelopes() -> None:
     request_descriptor = (
         trigger_publication_pb2.StreamTriggersRequest.DESCRIPTOR

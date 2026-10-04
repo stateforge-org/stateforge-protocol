@@ -13,6 +13,7 @@ from google.protobuf import json_format
 from jsonschema import Draft202012Validator, ValidationError
 
 from stateforge_protocol.sfp.operation_admission.v1 import (
+    contract,
     operation_admission_pb2,
 )
 
@@ -74,6 +75,39 @@ def resolved_response():
 
 def test_validation_schema_is_valid() -> None:
     Draft202012Validator.check_schema(_SCHEMA)
+
+
+def test_versioned_contract_exposes_normative_limits() -> None:
+    expected = {
+        "MAX_REQUEST_BYTES": 8 * 1024 * 1024,
+        "MAX_RESPONSE_BYTES": 1 * 1024 * 1024,
+        "MAX_ERROR_DETAIL_BYTES": 4 * 1024,
+        "MAX_PAYLOAD_JSON_DEPTH": 64,
+        "MAX_EXECUTION_CONTEXT_JSON_DEPTH": 64,
+        "MAX_JSON_CONTAINER_ENTRIES": 256,
+        "MAX_REQUIRED_IMPLEMENTATION_ROLES": 16,
+    }
+
+    assert {name: getattr(contract, name) for name in expected} == expected
+
+
+def test_versioned_contract_limits_match_packaged_schema() -> None:
+    definitions = _SCHEMA["$defs"]
+
+    assert (
+        definitions["boundedArray"]["maxItems"]
+        == contract.MAX_JSON_CONTAINER_ENTRIES
+    )
+    assert (
+        definitions["boundedObject"]["maxProperties"]
+        == contract.MAX_JSON_CONTAINER_ENTRIES
+    )
+    assert (
+        definitions["operationContractContext"]["properties"][
+            "requiredImplementationRoles"
+        ]["maxItems"]
+        == contract.MAX_REQUIRED_IMPLEMENTATION_ROLES
+    )
 
 
 def test_request_round_trip_preserves_complete_projection(

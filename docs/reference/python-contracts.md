@@ -59,27 +59,63 @@ Trigger-publication bindings expose the bidirectional
 schema-bound publication envelope, acknowledgements, and structured rejection
 reasons.
 
-The versioned Operation Lifecycle `contract` module exposes normative procedure
-limits that consuming runtimes must enforce outside ordinary protobuf or JSON
-Schema validation. For example:
+## Versioned runtime limits
+
+Protobuf and JSON Schema describe message structure, but they cannot configure
+gRPC message ceilings or portably enforce aggregate JSON depth. Each procedure
+with normative runtime limits therefore exposes them through a versioned
+`contract` module:
 
 ```python
-from stateforge_protocol.sfp.operation_lifecycle.v1 import contract
-
-server_receive_limit = contract.MAX_REQUEST_BYTES
-server_send_limit = contract.MAX_RESPONSE_BYTES
+from stateforge_protocol.sfp.capability_assessment.v1 import (
+    contract as capability_assessment,
+)
+from stateforge_protocol.sfp.manifest.v1 import contract as manifest
+from stateforge_protocol.sfp.operation_admission.v1 import (
+    contract as operation_admission,
+)
+from stateforge_protocol.sfp.operation_lifecycle.v1 import (
+    contract as operation_lifecycle,
+)
+from stateforge_protocol.sfp.trigger_publication.v1 import (
+    contract as trigger_publication,
+)
 ```
 
-Trigger Publication exposes its independent stream, payload, retry, and flow
-control limits through its own versioned `contract` module:
+Use the selected procedure's constants at its RPC boundary. For example,
+Manifest Exchange accepts at most `manifest.MAX_REQUEST_BYTES`, while
+Capability Assessment accepts at most
+`capability_assessment.MAX_REQUEST_BYTES`. Collection constants such as
+`manifest.MAX_OPERATIONS` and
+`operation_admission.MAX_REQUIRED_IMPLEMENTATION_ROLES` mirror the packaged
+validation schemas. Depth, canonical-document size, retry, and flow-control
+constants cover limits that JSON Schema cannot express by itself.
+
+A process hosting every current Provider service can derive its shared gRPC
+transport ceiling from those same versioned contracts:
 
 ```python
-from stateforge_protocol.sfp.trigger_publication.v1 import contract
+procedures = (
+    manifest,
+    capability_assessment,
+    operation_admission,
+    operation_lifecycle,
+    trigger_publication,
+)
 
-server_receive_limit = contract.MAX_REQUEST_BYTES
-canonical_payload_limit = contract.MAX_CANONICAL_PAYLOAD_BYTES
-receive_window_limit = contract.MAX_IN_FLIGHT_PUBLICATIONS
+server_receive_limit = max(
+    procedure.MAX_REQUEST_BYTES for procedure in procedures
+)  # 8 MiB
+server_send_limit = max(
+    procedure.MAX_RESPONSE_BYTES for procedure in procedures
+)  # 16 MiB
 ```
+
+The shared ceiling only prevents the transport from rejecting a valid message
+before its handler runs. It does not replace the smaller per-RPC checks. A
+Manifest request larger than 8 KiB remains invalid even when the shared server
+accepts messages up to 8 MiB, and each procedure must still enforce its own
+canonical JSON, nesting, collection, retry, and flow-control limits.
 
 Use the packaged validation schema with a Draft 2020-12 validator when building
 the consuming runtime. Validation libraries are development dependencies here;
