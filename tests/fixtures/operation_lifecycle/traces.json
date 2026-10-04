@@ -1,0 +1,101 @@
+[
+  {
+    "name": "success",
+    "snapshots": [
+      "accepted",
+      "running",
+      "progress-25",
+      "progress-100",
+      "succeeded"
+    ],
+    "valid": true
+  },
+  {
+    "name": "cancel-stops",
+    "snapshots": [
+      "accepted",
+      "running",
+      "progress-25",
+      "progress-100",
+      "requested",
+      "cancelled"
+    ],
+    "valid": true
+  },
+  {
+    "name": "completion-beats-interrupt",
+    "snapshots": [
+      "accepted",
+      "running",
+      "progress-25",
+      "progress-100",
+      "requested",
+      "succeeded-after-request"
+    ],
+    "valid": true
+  },
+  {
+    "name": "failure-beats-interrupt",
+    "snapshots": [
+      "accepted",
+      "running",
+      "progress-25",
+      "progress-100",
+      "requested",
+      "failed-after-request"
+    ],
+    "valid": true
+  },
+  {
+    "name": "queued-stop",
+    "snapshots": [
+      "accepted",
+      "queued-request",
+      "queued-cancelled"
+    ],
+    "valid": true
+  },
+  {
+    "name": "prestart-failure",
+    "snapshots": [
+      "accepted",
+      "prestart-failure"
+    ],
+    "valid": true
+  },
+  {
+    "name": "stop-without-request",
+    "snapshots": [
+      "accepted",
+      "running",
+      "progress-25",
+      "progress-100",
+      "cancelled"
+    ],
+    "valid": false
+  },
+  {
+    "name": "terminal-rewrite",
+    "snapshots": [
+      "succeeded",
+      "cancelled"
+    ],
+    "valid": false
+  },
+  {
+    "name": "progress-after-terminal",
+    "snapshots": [
+      "failed",
+      "progress-100"
+    ],
+    "valid": false
+  },
+  {
+    "name": "regression-after-request",
+    "snapshots": [
+      "requested",
+      "progress-100"
+    ],
+    "valid": false
+  }
+]

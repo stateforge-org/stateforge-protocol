@@ -1,0 +1,74 @@
+[
+  {
+    "name": "active-request",
+    "before": "progress-100",
+    "supported": true,
+    "after": "requested",
+    "disposition": "REQUESTED",
+    "signals": 1
+  },
+  {
+    "name": "queued-request",
+    "before": "accepted",
+    "supported": true,
+    "after": "queued-request",
+    "disposition": "REQUESTED",
+    "signals": 1
+  },
+  {
+    "name": "repeat-request",
+    "before": "requested",
+    "supported": true,
+    "after": "requested",
+    "disposition": "ALREADY_REQUESTED",
+    "signals": 0
+  },
+  {
+    "name": "pending-before-support-check",
+    "before": "requested",
+    "supported": false,
+    "after": "requested",
+    "disposition": "ALREADY_REQUESTED",
+    "signals": 0
+  },
+  {
+    "name": "unsupported",
+    "before": "progress-100",
+    "supported": false,
+    "after": "progress-100",
+    "disposition": "UNSUPPORTED",
+    "signals": 0
+  },
+  {
+    "name": "queued-unsupported",
+    "before": "accepted",
+    "supported": false,
+    "after": "accepted",
+    "disposition": "UNSUPPORTED",
+    "signals": 0
+  },
+  {
+    "name": "terminal-succeeded",
+    "before": "succeeded",
+    "supported": false,
+    "after": "succeeded",
+    "disposition": "ALREADY_TERMINAL",
+    "signals": 0
+  },
+  {
+    "name": "terminal-failed",
+    "before": "failed",
+    "supported": false,
+    "after": "failed",
+    "disposition": "ALREADY_TERMINAL",
+    "signals": 0
+  },
+  {
+    "name": "terminal-cancelled",
+    "before": "cancelled",
+    "supported": false,
+    "after": "cancelled",
+    "disposition": "ALREADY_TERMINAL",
+    "signals": 0
+  }
+]

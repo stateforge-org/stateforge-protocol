@@ -1,0 +1,31 @@
+{
+  "providerInstanceId": "11111111-1111-4111-8111-111111111111",
+  "endpointGeneration": "42",
+  "sessionId": "session-admission-42",
+  "snapshot": {
+    "admissionRecord": {
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+      "admittedAt": "2026-09-19T12:00:00Z",
+      "recordExpiresAt": "2026-09-20T12:00:00Z",
+      "admittedEndpointGeneration": "42"
+    },
+    "operationIdentifier": "example.database/maintenance.compact@1",
+    "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sequence": "5",
+    "state": "OPERATION_STATE_SUCCEEDED",
+    "updatedAt": "2026-09-19T12:00:04Z",
+    "success": {
+      "result": {
+        "reclaimedBytes": 4096
+      }
+    },
+    "progress": {
+      "sequence": "4",
+      "updatedAt": "2026-09-19T12:00:03Z",
+      "message": "Finishing maintenance.",
+      "percentage": 100
+    }
+  },
+  "updatesSkipped": true
+}

@@ -1,0 +1,261 @@
+[
+  {
+    "name": "initial",
+    "cursor": "0",
+    "snapshots": [
+      "accepted",
+      "running",
+      "progress-25",
+      "progress-100",
+      "succeeded"
+    ],
+    "skipped": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "status": "OK",
+    "evidence": "terminal",
+    "valid": true
+  },
+  {
+    "name": "late-running",
+    "cursor": "0",
+    "snapshots": [
+      "progress-100",
+      "succeeded"
+    ],
+    "skipped": [
+      false,
+      false
+    ],
+    "status": "OK",
+    "evidence": "terminal",
+    "valid": true
+  },
+  {
+    "name": "late-terminal",
+    "cursor": "0",
+    "snapshots": [
+      "failed"
+    ],
+    "skipped": [
+      false
+    ],
+    "status": "OK",
+    "evidence": "terminal",
+    "valid": true
+  },
+  {
+    "name": "reconnect-gap",
+    "cursor": "2",
+    "snapshots": [
+      "succeeded"
+    ],
+    "skipped": [
+      true
+    ],
+    "status": "OK",
+    "evidence": "terminal",
+    "valid": true
+  },
+  {
+    "name": "reconnect-adjacent",
+    "cursor": "4",
+    "snapshots": [
+      "succeeded"
+    ],
+    "skipped": [
+      false
+    ],
+    "status": "OK",
+    "evidence": "terminal",
+    "valid": true
+  },
+  {
+    "name": "terminal-equal-cursor",
+    "cursor": "5",
+    "snapshots": [
+      "succeeded"
+    ],
+    "skipped": [
+      false
+    ],
+    "status": "OK",
+    "evidence": "terminal",
+    "valid": true
+  },
+  {
+    "name": "coalesced-states",
+    "cursor": "0",
+    "snapshots": [
+      "accepted",
+      "succeeded"
+    ],
+    "skipped": [
+      false,
+      true
+    ],
+    "status": "OK",
+    "evidence": "terminal",
+    "valid": true
+  },
+  {
+    "name": "terminal-before-disconnect",
+    "cursor": "4",
+    "snapshots": [
+      "succeeded"
+    ],
+    "skipped": [
+      false
+    ],
+    "status": "UNAVAILABLE",
+    "evidence": "terminal",
+    "valid": true
+  },
+  {
+    "name": "transport-disconnect",
+    "cursor": "0",
+    "snapshots": [
+      "running"
+    ],
+    "skipped": [
+      false
+    ],
+    "status": "UNAVAILABLE",
+    "evidence": "indeterminate",
+    "valid": true
+  },
+  {
+    "name": "watch-cancel",
+    "cursor": "0",
+    "snapshots": [
+      "running"
+    ],
+    "skipped": [
+      false
+    ],
+    "status": "CANCELLED",
+    "evidence": "indeterminate",
+    "valid": true
+  },
+  {
+    "name": "rpc-deadline",
+    "cursor": "0",
+    "snapshots": [
+      "progress-100"
+    ],
+    "skipped": [
+      false
+    ],
+    "status": "DEADLINE_EXCEEDED",
+    "evidence": "indeterminate",
+    "valid": true
+  },
+  {
+    "name": "slow-observer",
+    "cursor": "0",
+    "snapshots": [
+      "running"
+    ],
+    "skipped": [
+      false
+    ],
+    "status": "RESOURCE_EXHAUSTED",
+    "evidence": "indeterminate",
+    "valid": true
+  },
+  {
+    "name": "no-initial-before-failure",
+    "cursor": "0",
+    "snapshots": [],
+    "skipped": [],
+    "status": "UNAVAILABLE",
+    "evidence": "indeterminate",
+    "valid": true
+  },
+  {
+    "name": "false-ok",
+    "cursor": "0",
+    "snapshots": [
+      "running"
+    ],
+    "skipped": [
+      false
+    ],
+    "status": "OK",
+    "evidence": "indeterminate",
+    "valid": false
+  },
+  {
+    "name": "hidden-gap",
+    "cursor": "2",
+    "snapshots": [
+      "succeeded"
+    ],
+    "skipped": [
+      false
+    ],
+    "status": "OK",
+    "evidence": "terminal",
+    "valid": false
+  },
+  {
+    "name": "invented-initial-gap",
+    "cursor": "0",
+    "snapshots": [
+      "succeeded"
+    ],
+    "skipped": [
+      true
+    ],
+    "status": "OK",
+    "evidence": "terminal",
+    "valid": false
+  },
+  {
+    "name": "cursor-ahead",
+    "cursor": "6",
+    "snapshots": [
+      "succeeded"
+    ],
+    "skipped": [
+      false
+    ],
+    "status": "OK",
+    "evidence": "terminal",
+    "valid": false
+  },
+  {
+    "name": "duplicate-terminal",
+    "cursor": "0",
+    "snapshots": [
+      "succeeded",
+      "succeeded"
+    ],
+    "skipped": [
+      false,
+      false
+    ],
+    "status": "OK",
+    "evidence": "terminal",
+    "valid": false
+  },
+  {
+    "name": "duplicate-progress",
+    "cursor": "0",
+    "snapshots": [
+      "running",
+      "running"
+    ],
+    "skipped": [
+      false,
+      false
+    ],
+    "status": "CANCELLED",
+    "evidence": "indeterminate",
+    "valid": false
+  }
+]

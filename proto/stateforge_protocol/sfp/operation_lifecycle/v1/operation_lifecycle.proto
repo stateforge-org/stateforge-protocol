@@ -1,0 +1,195 @@
+syntax = "proto3";
+
+package stateforge.sfp.operation_lifecycle.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "stateforge_protocol/sfp/operation_admission/v1/operation_admission.proto";
+
+// OperationLifecycleService observes or cancels an already admitted operation
+// on the existing negotiated SFP channel. Neither method creates or dispatches
+// work. See docs/procedures/progress-results-cancellation.md for normative
+// transitions, retention, correlation, limits, races, and retry behavior.
+service OperationLifecycleService {
+  // Immediately replay a complete current snapshot, then newer snapshots.
+  // Intermediate updates may be coalesced; updates_skipped identifies gaps.
+  // Deliver one terminal snapshot and close OK. Cancelling this stream does
+  // not request cancellation of the operation.
+  rpc WatchOperation(WatchOperationRequest) returns (stream WatchOperationResponse);
+  // Idempotently request cooperative cancellation of this operation only.
+  // A successful RPC does not imply that business execution has stopped.
+  rpc CancelOperation(CancelOperationRequest) returns (CancelOperationResponse);
+}
+
+// OperationState is business state, independent of gRPC transport status.
+// UNSPECIFIED is invalid. Terminal states never transition again.
+enum OperationState {
+  OPERATION_STATE_UNSPECIFIED = 0;
+  OPERATION_STATE_ACCEPTED = 1;
+  OPERATION_STATE_RUNNING = 2;
+  OPERATION_STATE_CANCELLATION_REQUESTED = 3;
+  OPERATION_STATE_SUCCEEDED = 4;
+  OPERATION_STATE_FAILED = 5;
+  OPERATION_STATE_CANCELLED = 6;
+}
+
+// CancellationDisposition describes the atomic cancellation decision, not a
+// terminal outcome. All four nonzero dispositions are successful RPC replies.
+enum CancellationDisposition {
+  CANCELLATION_DISPOSITION_UNSPECIFIED = 0;
+  CANCELLATION_DISPOSITION_REQUESTED = 1;
+  CANCELLATION_DISPOSITION_ALREADY_REQUESTED = 2;
+  CANCELLATION_DISPOSITION_UNSUPPORTED = 3;
+  CANCELLATION_DISPOSITION_ALREADY_TERMINAL = 4;
+}
+
+// SideEffectState reports residual effects, never a promise of rollback.
+enum SideEffectState {
+  SIDE_EFFECT_STATE_UNSPECIFIED = 0;
+  SIDE_EFFECT_STATE_NONE = 1;
+  SIDE_EFFECT_STATE_PRESENT = 2;
+  SIDE_EFFECT_STATE_UNKNOWN = 3;
+}
+
+// CleanupState reports completed cleanup at terminal commit. INCOMPLETE and
+// UNKNOWN are valid even for CANCELLED; stopped does not mean undone.
+enum CleanupState {
+  CLEANUP_STATE_UNSPECIFIED = 0;
+  CLEANUP_STATE_NOT_REQUIRED = 1;
+  CLEANUP_STATE_COMPLETED = 2;
+  CLEANUP_STATE_INCOMPLETE = 3;
+  CLEANUP_STATE_UNKNOWN = 4;
+}
+
+// LifecycleErrorReason accompanies a non-OK gRPC status, not an operation's
+// FAILED outcome. Explanations are bounded diagnostics, not discriminators.
+enum LifecycleErrorReason {
+  LIFECYCLE_ERROR_REASON_UNSPECIFIED = 0;
+  LIFECYCLE_ERROR_REASON_INVALID_REQUEST = 1;
+  LIFECYCLE_ERROR_REASON_SESSION_PRECONDITION_FAILED = 2;
+  LIFECYCLE_ERROR_REASON_OPERATION_RECORD_UNAVAILABLE = 3;
+  LIFECYCLE_ERROR_REASON_OPERATION_RECORD_EXPIRED = 4;
+  LIFECYCLE_ERROR_REASON_FINGERPRINT_MISMATCH = 5;
+  LIFECYCLE_ERROR_REASON_CURSOR_AHEAD = 6;
+  LIFECYCLE_ERROR_REASON_OBSERVER_CAPACITY_EXHAUSTED = 7;
+  LIFECYCLE_ERROR_REASON_SLOW_OBSERVER = 8;
+  LIFECYCLE_ERROR_REASON_PROVIDER_UNAVAILABLE = 9;
+  LIFECYCLE_ERROR_REASON_OPERATION_STATE_UNAVAILABLE = 10;
+}
+
+message WatchOperationRequest {
+  // Required Operation Admission session binding; never retained as state.
+  stateforge.sfp.operation_admission.v1.OperationSessionBinding session_binding = 1;
+  // Exact Agent-assigned UUIDv4 of an already admitted attempt.
+  string operation_id = 2;
+  // Exact admitted-request fingerprint, fencing ID/content mismatches.
+  string expected_request_fingerprint = 3;
+  // Last validated snapshot sequence; zero explicitly means first attachment.
+  // A positive cursor greater than the retained current sequence is rejected.
+  // The first response still replays current state when equal to the cursor.
+  uint64 after_sequence = 4;
+}
+
+message WatchOperationResponse {
+  // Current validated endpoint/session, not the original admission generation.
+  string provider_instance_id = 1;
+  uint64 endpoint_generation = 2;
+  string session_id = 3;
+  OperationSnapshot snapshot = 4;
+  // True iff the sequence skips one or more updates after a positive requested
+  // cursor or the previous response. False for an initial zero-cursor replay.
+  // The complete snapshot is usable; omitted intermediate history is lost.
+  bool updates_skipped = 5;
+}
+
+message CancelOperationRequest {
+  stateforge.sfp.operation_admission.v1.OperationSessionBinding session_binding = 1;
+  string operation_id = 2;
+  string expected_request_fingerprint = 3;
+}
+
+message CancelOperationResponse {
+  string provider_instance_id = 1;
+  uint64 endpoint_generation = 2;
+  string session_id = 3;
+  CancellationDisposition disposition = 4;
+  // Complete snapshot at the atomic decision. A concurrent Watch may already
+  // have delivered a later sequence; consumers must not regress cached state.
+  OperationSnapshot snapshot = 5;
+}
+
+// OperationSnapshot is a complete view of one retained admitted operation. Its
+// identity, declaration pin, and admission record never change. Sequence starts
+// at 1 in ACCEPTED, increases for committed state/progress changes, and never
+// resets on reconnect. Replaying it never allocates another sequence.
+message OperationSnapshot {
+  stateforge.sfp.operation_admission.v1.OperationAdmissionRecord admission_record = 1;
+  string operation_identifier = 2;
+  // Original invocation.contract.manifest_revision, not today's manifest.
+  string manifest_revision = 3;
+  uint64 sequence = 4;
+  OperationState state = 5;
+  // Time of the last committed change, not delivery time. Sequence establishes
+  // order; a wall-clock adjustment must not reorder operation updates.
+  google.protobuf.Timestamp updated_at = 6;
+  // Optional last normalized progress, retained across subsequent state changes.
+  // Forbidden in ACCEPTED. Its own sequence must not exceed this sequence.
+  OperationProgress progress = 7;
+  // Absent in nonterminal states; exactly the matching arm in terminal states.
+  // The complete terminal snapshot, including progress and effects, is immutable.
+  oneof outcome {
+    OperationSuccess success = 8;
+    OperationFailure failure = 9;
+    OperationCancellation cancellation = 10;
+  }
+}
+
+message OperationProgress {
+  // Sequence of the snapshot that first committed this progress update.
+  uint64 sequence = 1;
+  google.protobuf.Timestamp updated_at = 2;
+  // Sanitized human-readable progress; at most 1,024 Unicode code points.
+  // May be empty only when percentage is present. Not a machine discriminator.
+  string message = 3;
+  // Optional finite number in [0, 100]. Absent means unknown; zero means zero.
+  // 100 does not imply SUCCEEDED. It need not be monotonic across phases.
+  optional double percentage = 4;
+}
+
+message OperationSuccess {
+  // Required object, including an explicitly present empty object when allowed.
+  // Validate against the original admitted operation's pinned Provider
+  // Manifest result_schema and relied-on profiles before committing SUCCEEDED.
+  // Never apply defaults.
+  google.protobuf.Struct result = 1;
+}
+
+message OperationFailure {
+  // Stable dotted identifier, including provider-specific codes. Runtime codes:
+  // stateforge.operation.provider_error, stateforge.operation.invalid_result,
+  // stateforge.operation.execution_deadline_exceeded. No raw exception names.
+  string code = 1;
+  string explanation = 2;
+  OperationEffects effects = 3;
+}
+
+message OperationCancellation {
+  // Required cleanup/effect report after confirmation that execution stopped
+  // (or was prevented from starting). Never inferred from RPC cancellation.
+  OperationEffects effects = 1;
+}
+
+message OperationEffects {
+  SideEffectState side_effects = 1;
+  CleanupState cleanup = 2;
+  // Bounded sanitized description of relevant remaining effects/resources and
+  // completed/incomplete cleanup. No credentials, payload echo, or stack trace.
+  string explanation = 3;
+}
+
+message OperationLifecycleErrorDetail {
+  // Empty only when the request lacks a valid operation ID.
+  string operation_id = 1;
+  LifecycleErrorReason reason = 2;
+  string explanation = 3;
+}
