@@ -46,7 +46,18 @@ Operation-lifecycle bindings expose
 `OperationLifecycleService.WatchOperation` (server streaming) and
 `CancelOperation` (unary), complete operation snapshots, typed terminal
 outcomes, progress, cancellation dispositions, and structured RPC error detail.
-They reuse the P4 session binding and admission record types.
+They reuse the Operation Admission session-binding and admission-record types.
+
+The versioned Operation Lifecycle `contract` module exposes normative procedure
+limits that consuming runtimes must enforce outside ordinary protobuf or JSON
+Schema validation. For example:
+
+```python
+from stateforge_protocol.sfp.operation_lifecycle.v1 import contract
+
+server_receive_limit = contract.MAX_REQUEST_BYTES
+server_send_limit = contract.MAX_RESPONSE_BYTES
+```
 
 Use the packaged validation schema with a Draft 2020-12 validator when building
 the consuming runtime. Validation libraries are development dependencies here;

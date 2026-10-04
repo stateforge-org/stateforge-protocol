@@ -1,4 +1,4 @@
-"""Offline P5 conformance vectors, not a Provider execution/stream manager."""
+"""Verify Operation Lifecycle contracts without implementing a runtime."""
 
 import copy
 import itertools
@@ -21,6 +21,21 @@ from stateforge_protocol.sfp.operation_lifecycle.v1 import (
 from stateforge_protocol.sfp.operation_lifecycle.v1 import (
     operation_lifecycle_pb2_grpc as rpc,
 )
+from stateforge_protocol.sfp.operation_lifecycle.v1.contract import (
+    MAX_ERROR_DETAIL_BYTES,
+    MAX_EXPLANATION_CODE_POINTS,
+    MAX_IN_FLIGHT_RESPONSES_PER_OBSERVER,
+    MAX_OBSERVERS_PER_OPERATION,
+    MAX_PENDING_SNAPSHOTS_PER_OBSERVER,
+    MAX_REQUEST_BYTES,
+    MAX_RESPONSE_BYTES,
+    MAX_RESULT_CONTAINER_ENTRIES,
+    MAX_RESULT_JSON_DEPTH,
+    MAX_RESULT_PROPERTY_NAME_CODE_POINTS,
+    MAX_RESULT_STRING_CODE_POINTS,
+    MAX_SNAPSHOT_BYTES,
+    MAX_STALLED_DELIVERY_SECONDS,
+)
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "operation_lifecycle"
 _SCHEMA = json.loads(
@@ -32,7 +47,7 @@ _TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED"}
 _UINT64_MAX = 2**64 - 1
 _FIRST_PROGRESS_SEQUENCE = 3
 _SESSION_MAX_LENGTH = 255
-_DIAGNOSTIC_MAX_LENGTH = 1024
+_DIAGNOSTIC_MAX_LENGTH = MAX_EXPLANATION_CODE_POINTS
 
 
 def _read(name):
@@ -368,7 +383,10 @@ def test_progress_requires_message_or_percentage() -> None:
 @pytest.mark.parametrize(
     "definition", ["operationProgress", "operationFailure", "operationEffects"]
 )
-@pytest.mark.parametrize("length", [1024, 1025])
+@pytest.mark.parametrize(
+    "length",
+    [MAX_EXPLANATION_CODE_POINTS, MAX_EXPLANATION_CODE_POINTS + 1],
+)
 def test_diagnostic_bounds(definition, length) -> None:
     samples = {
         "operationProgress": _SNAPSHOTS["progress-25"]["progress"],
@@ -584,14 +602,54 @@ def test_invalid_author_result_becomes_sanitized_failure(result) -> None:
 @pytest.mark.parametrize(
     "result",
     [
-        {"v": "x" * 65537},
-        {"x" * 129: 0},
-        {"v": [0] * 257},
-        {str(index): 0 for index in range(257)},
+        {"v": "x" * (MAX_RESULT_STRING_CODE_POINTS + 1)},
+        {"x" * (MAX_RESULT_PROPERTY_NAME_CODE_POINTS + 1): 0},
+        {"v": [0] * (MAX_RESULT_CONTAINER_ENTRIES + 1)},
+        {str(index): 0 for index in range(MAX_RESULT_CONTAINER_ENTRIES + 1)},
     ],
 )
 def test_result_structural_resource_limits(result) -> None:
     assert not _validator("operationSuccess").is_valid({"result": result})
+
+
+def test_versioned_contract_exports_normative_resource_limits() -> None:
+    assert MAX_REQUEST_BYTES == 8 * 1024
+    assert MAX_RESPONSE_BYTES == 8 * 1024 * 1024
+    assert MAX_SNAPSHOT_BYTES == 7 * 1024 * 1024
+    assert MAX_ERROR_DETAIL_BYTES == 4 * 1024
+    assert MAX_RESULT_JSON_DEPTH == 64  # noqa: PLR2004 - contract value
+    assert MAX_PENDING_SNAPSHOTS_PER_OBSERVER == 1
+    assert MAX_IN_FLIGHT_RESPONSES_PER_OBSERVER == 1
+    assert MAX_OBSERVERS_PER_OPERATION == 16  # noqa: PLR2004 - contract value
+    assert MAX_STALLED_DELIVERY_SECONDS == 30  # noqa: PLR2004 - contract value
+
+
+def test_versioned_contract_limits_match_packaged_schema() -> None:
+    definitions = _SCHEMA["$defs"]
+    assert (
+        definitions["boundedArray"]["maxItems"] == MAX_RESULT_CONTAINER_ENTRIES
+    )
+    assert (
+        definitions["boundedObject"]["maxProperties"]
+        == MAX_RESULT_CONTAINER_ENTRIES
+    )
+    assert (
+        definitions["boundedObject"]["propertyNames"]["maxLength"]
+        == MAX_RESULT_PROPERTY_NAME_CODE_POINTS
+    )
+    string_schema = next(
+        option
+        for option in definitions["boundedScalar"]["anyOf"]
+        if option.get("type") == "string"
+    )
+    assert string_schema["maxLength"] == MAX_RESULT_STRING_CODE_POINTS
+    assert (
+        definitions["explanation"]["maxLength"] == MAX_EXPLANATION_CODE_POINTS
+    )
+    assert (
+        definitions["operationProgress"]["properties"]["message"]["maxLength"]
+        == MAX_EXPLANATION_CODE_POINTS
+    )
 
 
 def test_failure_and_cancellation_require_explicit_effects() -> None:
@@ -760,10 +818,9 @@ def test_oversized_result_requires_aggregate_serialized_size_check() -> None:
     }
     _validator("operationSnapshot").validate(snapshot)
     message = json_format.ParseDict(snapshot, pb.OperationSnapshot())
-    snapshot_limit = 7 * 1024 * 1024
-    assert message.ByteSize() > snapshot_limit
+    assert message.ByteSize() > MAX_SNAPSHOT_BYTES
     # The normalized invalid-result fallback always fits, without author data.
     fallback = json_format.ParseDict(
         _SNAPSHOTS["invalid-result"], pb.OperationSnapshot()
     )
-    assert fallback.ByteSize() < snapshot_limit
+    assert fallback.ByteSize() < MAX_SNAPSHOT_BYTES

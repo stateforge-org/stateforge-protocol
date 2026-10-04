@@ -163,7 +163,7 @@ class WatchOperationRequest(_message.Message):
     operation_id: _builtins.str
     """Exact Agent-assigned UUIDv4 of an already admitted attempt."""
     expected_request_fingerprint: _builtins.str
-    """Exact P4 request fingerprint, fencing accidental ID/content mismatches."""
+    """Exact admitted-request fingerprint, fencing ID/content mismatches."""
     after_sequence: _builtins.int
     """Last validated snapshot sequence; zero explicitly means first attachment.
     A positive cursor greater than the retained current sequence is rejected.
@@ -171,7 +171,7 @@ class WatchOperationRequest(_message.Message):
     """
     @_builtins.property
     def session_binding(self) -> _operation_admission_pb2.OperationSessionBinding:
-        """Required P4 current-session binding; never included in retained state."""
+        """Required Operation Admission session binding; never retained as state."""
 
     def __init__(
         self,
@@ -290,7 +290,7 @@ Global___CancelOperationResponse: _TypeAlias = CancelOperationResponse  # noqa: 
 
 @_typing.final
 class OperationSnapshot(_message.Message):
-    """OperationSnapshot is a complete view of one retained P4 operation. Its
+    """OperationSnapshot is a complete view of one retained admitted operation. Its
     identity, declaration pin, and admission record never change. Sequence starts
     at 1 in ACCEPTED, increases for committed state/progress changes, and never
     resets on reconnect. Replaying it never allocates another sequence.
@@ -403,8 +403,9 @@ class OperationSuccess(_message.Message):
     @_builtins.property
     def result(self) -> _struct_pb2.Struct:
         """Required object, including an explicitly present empty object when allowed.
-        Validate against the original admitted operation's pinned P1 result_schema
-        and relied-on profiles before committing SUCCEEDED. Never apply defaults.
+        Validate against the original admitted operation's pinned Provider
+        Manifest result_schema and relied-on profiles before committing SUCCEEDED.
+        Never apply defaults.
         """
 
     def __init__(

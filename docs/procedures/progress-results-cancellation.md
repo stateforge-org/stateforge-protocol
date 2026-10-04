@@ -1,7 +1,8 @@
 # Progress, results, and cancellation
 
-P5 defines observation and cooperative cancellation of an operation already
-admitted by [P4](operation-admission.md). It adds the versioned
+Operation Lifecycle defines observation and cooperative cancellation of an
+operation already admitted through
+[Operation Admission](operation-admission.md). It adds the versioned
 `stateforge.sfp.operation_lifecycle.v1.OperationLifecycleService` on the same
 negotiated local SFP channel:
 
@@ -14,21 +15,24 @@ Provider callback implementation, or Agent runtime.
 
 [![Progress, Results, and Cancellation sequence diagram](../assets/diagrams/progress-results-and-cancellation.png)](../assets/diagrams/progress-results-and-cancellation.png)
 
-The source `.proto` and packaged `operation_lifecycle.schema.json` are the
-machine-readable contract. The original
+The source `.proto`, packaged `operation_lifecycle.schema.json`, and this
+procedure page define the current contract. The original
 [SFP lifecycle specification](https://docs.google.com/document/d/1AEGKq15po5g_UYrv4qx1LzmNj1dKqA9J0eIIzTZVrlE/edit)
-provides the procedure context. Landed P1–P4 definitions take precedence over
-older prose, including the removal of generic target/source-mode fields.
+provides historical procedure context. Provider Manifest Exchange and
+Operation Admission define the referenced declarations and records. Generic
+target and source-mode fields are not part of the current contracts.
 
 ## Request and response correlation
 
-Both requests reuse P4 `OperationSessionBinding` unchanged. All three binding
-fields must match a known active negotiated session. Session IDs are opaque
+Both requests reuse Operation Admission's `OperationSessionBinding`
+unchanged. All three binding fields must match a known active negotiated
+session. Session IDs are opaque
 1–255-code-point strings, never inferred from installation or generation.
 Each request supplies the existing `operation_id` and its exact
-`expected_request_fingerprint` from P4. Empty/default identifiers are invalid.
-A lost admission reply is resolved using P4; Watch and Cancel cannot substitute
-for admission or authorize another attempt.
+`expected_request_fingerprint` from the admitted request. Empty/default
+identifiers are invalid. A lost admission reply is resolved through Operation
+Admission; Watch and Cancel cannot substitute for admission or authorize
+another attempt.
 
 Watch additionally supplies `after_sequence`. Zero explicitly means a new
 attachment. A positive value is the last validated sequence from this exact
@@ -36,7 +40,7 @@ operation record. Updating session binding after re-handshake does not change
 the operation ID, fingerprint, or cursor.
 
 Every reply echoes the current instance, generation, and session. Every
-snapshot repeats the immutable P4 admission record, versioned operation
+snapshot repeats the immutable Operation Admission record, versioned operation
 identifier, and the manifest revision pinned by the original invocation.
 The latter is **not necessarily the current manifest revision** after recovery.
 Consumers validate results against the original accepted operation's result
@@ -46,8 +50,9 @@ a newer schema or dispatch again.
 
 Before accepting any message, the Agent checks its current session against
 both the request and response, matches the operation ID and fingerprint, and
-compares the immutable admission record and declaration pin with its P4
-context. A recovered record may have an older `admitted_endpoint_generation`
+compares the immutable admission record and declaration pin with its Operation
+Admission context. A recovered record may have an older
+`admitted_endpoint_generation`
 than the current envelope. A changed Provider installation is not recovery.
 An invalid/mismatched response is a local protocol failure, not a business
 outcome. Do not advance its cursor or issue another StartOperation.
@@ -138,17 +143,19 @@ Replays and repeated cancellation decisions never consume those values.
 ## Retention and backpressure
 
 Retain the current state, latest progress, and immutable terminal snapshot
-with the P4 admission record. No full progress history is required. A terminal
-result must never be discarded while its admission record is retained.
+with the Operation Admission record. No full progress history is required. A
+terminal result must never be discarded while its admission record is retained.
 Admission identity, fingerprint, admission/expiry times, and admitted generation
 stay byte-for-byte unchanged in their canonical ProtoJSON projection.
 
-The P4 `record_expires_at` boundary must not be shortened. Active operations
-retain their records while they can still execute, even past that boundary;
-P4's expiry is not an instruction to discard live work. After terminal commit
-and expiry, the Provider may evict the record according to its documented
-bounded retention policy. This does not extend or rewrite the immutable P4
-expiry field. Already-attached observers retain their pending terminal snapshot
+The Operation Admission `record_expires_at` boundary must not be shortened.
+Active operations retain their records while they can still execute, even past
+that boundary; Operation Admission's expiry is not an instruction to discard
+live work. After terminal commit and expiry, the Provider may evict the record
+according to its documented
+bounded retention policy. This does not extend or rewrite the immutable
+Operation Admission expiry field. Already-attached observers retain their
+pending terminal snapshot
 until delivery or bounded stream failure; a later reconnect may find expiry.
 An implementation must bound admissions when retaining active records would
 exceed capacity, rather than deleting live records to admit more work.
@@ -171,7 +178,8 @@ receive a result, but cannot cause the retained terminal result to be dropped.
 ## Terminal results and failures
 
 Before atomically recording SUCCEEDED, validate the complete typed result
-against the **pinned P1 result schema**, its JSON/resource bounds, and any
+against the **pinned Provider Manifest result schema**, its JSON/resource
+bounds, and any
 relied-on profile requirements. Do not insert schema defaults or infer backup
 variants from a name. Invalid author results become FAILED with code
 `stateforge.operation.invalid_result`; never send the invalid payload, schema
@@ -201,7 +209,8 @@ JSON Schema cannot prove that a string is safe. Cleanup may be incomplete or
 unknown after execution has ended. External side effects may remain even when
 local execution failed; report uncertainty rather than promising rollback.
 
-The business deadline remains the original P4 execution deadline. On expiry,
+The business deadline remains the original Operation Admission execution
+deadline. On expiry,
 prevent not-yet-started work or request cooperative interruption where
 supported. Do not label still-running work terminal just because time passed.
 Once execution has ended, record the appropriate terminal outcome atomically;
@@ -223,7 +232,8 @@ checks, decide against the current operation state atomically:
 | ACCEPTED/RUNNING, cooperative interruption supported | REQUESTED | Commit CANCELLATION_REQUESTED and arrange cooperative interruption; retain the pending request until execution ends. |
 
 All four dispositions are gRPC OK. Cancellation support is an operation/runtime
-fact; P5 adds no execution or cancellation-capability fields to the P1 manifest.
+fact; Operation Lifecycle adds no execution or cancellation-capability fields
+to the Provider Manifest.
 A lost Cancel reply is safely retried with the same operation/fingerprint and
 a current session. No separate cancellation identity is needed because its
 only effect is a monotonic request on the existing operation record.
@@ -265,7 +275,8 @@ inside `google.rpc.Status.details`, carried by the standard
 `grpc-status-details-bin` trailing metadata. Its numeric status code must match
 the RPC status. Consumers ignore unknown detail types and handle absent details
 as transport uncertainty, never as permission to dispatch. This specifies the
-new service's error transport without changing P4's messages. Never put a
+new service's error transport without changing Operation Admission messages.
+Never put a
 business FAILED outcome in this error channel.
 
 | Condition | gRPC status | Lifecycle reason | Recovery |
@@ -296,7 +307,8 @@ validated cursor. Do not treat a transport status as rollback or success.
 The baseline registry may be in memory. Recovery in a new Provider generation
 requires verifiably retained admission, schema context, sequence, state, and
 terminal result. Losing those is indeterminate even with the same stable
-installation UUID. Providers may opt into persistence; P5 does not mandate it.
+installation UUID. Providers may opt into persistence; Operation Lifecycle
+does not mandate it.
 
 ## Structural limits and compatibility
 
@@ -317,20 +329,22 @@ installation UUID. Providers may opt into persistence; P5 does not mandate it.
 Use complete lowerCamelCase ProtoJSON with all non-presence defaults emitted.
 Optional `percentage` and outcome/message fields retain true presence. Unknown
 properties, enum values, wrong outcome arms, and UNSPECIFIED values are invalid.
-The packaged schema is self-contained for offline validation; its embedded P4
-definitions are tested against the authoritative P4 schema. JSON Schema checks
+The packaged schema is self-contained for offline validation; its embedded
+Operation Admission definitions are tested against the authoritative Operation
+Admission schema. JSON Schema checks
 structure, not serialized sizes, recursive depth, finite interoperable JSON,
 uint64 upper bounds, valid calendar timestamps, sessions, transitions, cursor
 comparisons, result-schema conformance, or semantic truth. Consumers must check
 all of these. Protobuf parsing itself does not validate the contract.
 
-The new package and two methods are additive to the existing services. P1's
-manifest shape, schema version, role semantics, and revision vectors and P4's
-invocation fingerprint/admission records remain unchanged. Supporting an SFP
+The Operation Lifecycle package and its two methods are additive to the
+existing services. Provider Manifest shape, schema version, profile semantics,
+and revision vectors and Operation Admission invocation fingerprints and
+admission records remain unchanged. Supporting an SFP
 wire version alone does not mean an older peer implements this service; handle
 UNIMPLEMENTED explicitly. Future incompatible lifecycle changes need a new
-versioned package. Field numbers are new within these new messages; none are
-repurposed from a landed message.
+versioned package. Field numbers are scoped to these messages; none are
+repurposed from an existing message.
 
 Fixtures cover legal and illegal transitions, immediate/late Watch, coalesced
 gaps, reconnect, terminal replay, invalid results, partial cleanup, cancellation
@@ -338,7 +352,7 @@ races, unsupported cancellation, unknown records, and stream termination.
 They define consumer obligations without implementing a runtime task manager,
 full event log, process-kill cancellation, or Control Plane response policy.
 
-## Design tradeoffs for review
+## Design rationale
 
 Complete snapshots cost more bytes per update than deltas, but let a late or
 slow observer recover without unlimited history or reconstructing missed events.
@@ -347,14 +361,13 @@ enclosing snapshot sequence distinguishes an old retained progress report from
 a new state transition.
 
 One pending update per observer, the 16-observer ceiling, and the 30-second
-stall bound are conservative finite limits for this new contract. Lower local
+stall bound are conservative finite limits for this contract. Lower local
 limits remain possible; these limits do not prescribe storage or scheduling.
-The result JSON limits reuse P4's bounded JSON model. The smaller snapshot
-limit leaves room inside the response envelope and permits a small failure
-fallback when author output is oversized.
+The result JSON limits reuse Operation Admission's bounded JSON model. The
+smaller snapshot limit leaves room inside the response envelope and permits a
+small failure fallback when author output is oversized.
 
-P4 record expiry remains immutable. Retaining active records past expiry avoids
-forgetting work that can still cause effects, at the cost of admission capacity.
-Persistence is optional; state loss remains explicit uncertainty. No local
-implementation or passing contract test marks the DPT milestone delivered;
-that requires the human-owned merged PR and DPT reconciliation.
+The Operation Admission record expiry remains immutable. Retaining active
+records past expiry avoids forgetting work that can still cause effects, at the
+cost of admission capacity.
+Persistence is optional; state loss remains explicit uncertainty.

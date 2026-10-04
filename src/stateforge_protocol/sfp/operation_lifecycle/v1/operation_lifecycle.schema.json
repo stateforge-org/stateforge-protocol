@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:stateforge:sfp:operation_lifecycle:1",
   "title": "SFP operation-lifecycle v1 ProtoJSON validation",
-  "description": "Validate complete default-emitting ProtoJSON. State transitions, active sessions, uint64 upper bounds, timestamp validity, cursor comparisons, gaps, immutable history, JSON depth/bytes, pinned result schema, and truthfulness/sanitization require the procedure semantic checks. P4 definitions are embedded unchanged for offline validation.",
+  "description": "Validate complete default-emitting ProtoJSON. State transitions, active sessions, uint64 upper bounds, timestamp validity, cursor comparisons, gaps, immutable history, JSON depth/bytes, pinned result schema, and truthfulness/sanitization require the procedure semantic checks. Operation Admission definitions are embedded unchanged for offline validation.",
   "$ref": "#/$defs/watchOperationResponse",
   "$defs": {
     "uuid4": {
