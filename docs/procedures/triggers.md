@@ -45,7 +45,8 @@ must be `TriggerStreamReady`. The binding fences the stream to the authenticated
 Provider installation, endpoint generation, handshake session, and exact
 accepted manifest revision. Empty values are invalid rather than wildcards.
 The Provider echoes all four binding values in `ready`; any mismatch terminates
-the stream with `FAILED_PRECONDITION`.
+the stream. The Agent records a local `FAILED_PRECONDITION` protocol error and
+cancels the RPC as described under stream failures.
 
 The Agent also supplies a receive window from 1 through 1024. The Provider
 selects an equal or smaller positive `maximum_in_flight_publications`. Once that
@@ -98,8 +99,15 @@ canonical field while reusing the identity is a conflict.
 | `REJECTED` | The publication was not accepted. A structured rejection supplies the stable reason and retry guidance. |
 
 Acknowledgements carry `publication_id`, so the Agent may acknowledge different
-publications out of transmission order. A rejected acknowledgement contains
-exactly one of these stable reasons:
+publications out of transmission order. An acknowledgement is valid only for a
+publication that is currently awaiting its first terminal acknowledgement on
+that same stream. An unknown ID, an ID already acknowledged on that stream, or
+an ID last transmitted only on an earlier stream is an `INVALID_ARGUMENT`
+protocol violation and the Provider terminates the stream. After reconnect, the
+Provider first replays an unacknowledged publication with its original ID and
+content; the Agent may then acknowledge that replay on the new stream.
+
+A rejected acknowledgement contains exactly one of these stable reasons:
 
 | Rejection reason | Retry guidance |
 | --- | --- |
@@ -140,18 +148,30 @@ The following limits are part of this contract:
 - each Agent-to-Provider stream message: at most 64 KiB serialized;
 - each Provider-to-Agent stream message: at most 2 MiB serialized;
 - canonical payload JSON: at most 1 MiB, nesting depth 64, at most 256 members
-  per object or items per array, and property names at most 128 UTF-8 bytes;
-- versioned trigger identifier: at most 255 UTF-8 bytes;
-- opaque session identifier: at most 255 UTF-8 bytes;
-- sanitized rejection explanation: at most 1024 UTF-8 bytes;
+  per object or items per array, property names at most 128 Unicode code points,
+  and string values at most 65,536 Unicode code points;
+- versioned trigger identifier: at most 255 Unicode code points;
+- opaque session identifier: at most 255 Unicode code points;
+- sanitized rejection explanation: at most 1024 Unicode code points;
 - `retry_after`: positive and no greater than 24 hours.
 
-Invalid stream framing or malformed bounds use `INVALID_ARGUMENT`; inactive or
-mismatched bindings use `FAILED_PRECONDITION`; reuse of an active session for a
-second trigger stream uses `ALREADY_EXISTS`; stream-level capacity exhaustion
-uses `RESOURCE_EXHAUSTED`; and loss of the bound session uses `UNAVAILABLE`.
-Individual validly framed publication failures use `REJECTED` without ending an
-otherwise healthy stream.
+Failure ownership follows gRPC client/server direction:
+
+- The Provider server returns gRPC status when it rejects an Agent-originated
+  request. Invalid request framing, bounds, or acknowledgement correlation use
+  `INVALID_ARGUMENT`; inactive or mismatched open bindings use
+  `FAILED_PRECONDITION`; reuse of an active session for a second trigger stream
+  uses `ALREADY_EXISTS`; and loss of the bound session uses `UNAVAILABLE`.
+- The Agent client cannot return a gRPC status to the Provider server. When the
+  Agent detects an invalid Provider response, it records the corresponding
+  local SFP protocol error and cancels the RPC. The Provider observes
+  `CANCELLED` or transport closure. A publication before `ready` is locally
+  `INTERNAL`; a mismatched `ready` binding is locally `FAILED_PRECONDITION`;
+  and a response exceeding the negotiated receive window is locally
+  `RESOURCE_EXHAUSTED`.
+
+Individual validly framed publication failures use `REJECTED` without ending
+an otherwise healthy stream.
 
 ## Responsibilities and privacy
 

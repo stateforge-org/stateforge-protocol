@@ -57,6 +57,7 @@ message TriggerSessionBinding {
   // Positive endpoint generation from Handshake, never a process ID.
   uint64 expected_endpoint_generation = 2;
   // Required opaque HandshakeResponse.session_id for the active session.
+  // Limited to 255 Unicode code points.
   string expected_session_id = 3;
   // Exact accepted GetManifestResponse.manifest_revision. The corresponding
   // trigger declarations and payload schemas govern this stream.
@@ -91,14 +92,17 @@ message TriggerPublication {
   // Required object validated against the selected TriggerDeclaration's
   // payload_schema. It may contain trigger-specific source/resource identity.
   // Its RFC 8785 canonical JSON is limited to 1 MiB, nesting depth 64, 256
-  // members per object or items per array, and 128 UTF-8 bytes per property
-  // name. The complete serialized stream response is limited to 2 MiB.
+  // members per object or items per array, 128 Unicode code points per property
+  // name, and 65,536 Unicode code points per string. The complete serialized
+  // stream response is limited to 2 MiB.
   google.protobuf.Struct payload = 4;
 }
 
 // TriggerAcknowledgement is the Agent's terminal delivery decision for one
-// publication transmission. publication_id provides correlation even when
-// acknowledgements are not sent in publication order.
+// publication transmission. publication_id must identify one currently
+// unacknowledged publication on this stream. It provides correlation even when
+// acknowledgements are not sent in publication order. Unknown, stale, or
+// already-acknowledged identities are stream protocol violations.
 message TriggerAcknowledgement {
   string publication_id = 1;
   TriggerAcknowledgementDisposition disposition = 2;
@@ -130,8 +134,8 @@ message TriggerRejection {
   // Present only with retryable=true and only when bounded guidance is known.
   // When present, it must be positive and no greater than 24 hours.
   google.protobuf.Duration retry_after = 3;
-  // Bounded, sanitized diagnostic text, at most 1024 UTF-8 bytes. Never the
-  // discriminator.
+  // Bounded, sanitized diagnostic text, at most 1024 Unicode code points.
+  // Never the discriminator.
   string explanation = 4;
 }
 

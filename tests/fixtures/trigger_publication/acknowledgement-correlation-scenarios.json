@@ -1,0 +1,32 @@
+[
+  {
+    "scenario": "outstanding_on_current_stream",
+    "publicationState": "awaiting_acknowledgement_on_current_stream",
+    "expectedOutcome": "ACCEPTED",
+    "streamTerminates": false
+  },
+  {
+    "scenario": "replayed_on_current_stream",
+    "publicationState": "replayed_and_awaiting_acknowledgement_on_current_stream",
+    "expectedOutcome": "ACCEPTED",
+    "streamTerminates": false
+  },
+  {
+    "scenario": "unknown_publication",
+    "publicationState": "unknown",
+    "expectedOutcome": "INVALID_ARGUMENT",
+    "streamTerminates": true
+  },
+  {
+    "scenario": "already_acknowledged",
+    "publicationState": "already_acknowledged_on_current_stream",
+    "expectedOutcome": "INVALID_ARGUMENT",
+    "streamTerminates": true
+  },
+  {
+    "scenario": "previous_stream_without_replay",
+    "publicationState": "last_transmitted_only_on_previous_stream",
+    "expectedOutcome": "INVALID_ARGUMENT",
+    "streamTerminates": true
+  }
+]

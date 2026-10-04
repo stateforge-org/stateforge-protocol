@@ -197,7 +197,9 @@ class TriggerSessionBinding(_message.Message):
     expected_endpoint_generation: _builtins.int
     """Positive endpoint generation from Handshake, never a process ID."""
     expected_session_id: _builtins.str
-    """Required opaque HandshakeResponse.session_id for the active session."""
+    """Required opaque HandshakeResponse.session_id for the active session.
+    Limited to 255 Unicode code points.
+    """
     expected_manifest_revision: _builtins.str
     """Exact accepted GetManifestResponse.manifest_revision. The corresponding
     trigger declarations and payload schemas govern this stream.
@@ -287,8 +289,9 @@ class TriggerPublication(_message.Message):
         """Required object validated against the selected TriggerDeclaration's
         payload_schema. It may contain trigger-specific source/resource identity.
         Its RFC 8785 canonical JSON is limited to 1 MiB, nesting depth 64, 256
-        members per object or items per array, and 128 UTF-8 bytes per property
-        name. The complete serialized stream response is limited to 2 MiB.
+        members per object or items per array, 128 Unicode code points per property
+        name, and 65,536 Unicode code points per string. The complete serialized
+        stream response is limited to 2 MiB.
         """
 
     def __init__(
@@ -310,8 +313,10 @@ Global___TriggerPublication: _TypeAlias = TriggerPublication  # noqa: Y015
 @_typing.final
 class TriggerAcknowledgement(_message.Message):
     """TriggerAcknowledgement is the Agent's terminal delivery decision for one
-    publication transmission. publication_id provides correlation even when
-    acknowledgements are not sent in publication order.
+    publication transmission. publication_id must identify one currently
+    unacknowledged publication on this stream. It provides correlation even when
+    acknowledgements are not sent in publication order. Unknown, stale, or
+    already-acknowledged identities are stream protocol violations.
     """
 
     DESCRIPTOR: _descriptor.Descriptor
@@ -356,8 +361,8 @@ class TriggerRejection(_message.Message):
     reason: Global___TriggerRejectionReason.ValueType
     retryable: _builtins.bool
     explanation: _builtins.str
-    """Bounded, sanitized diagnostic text, at most 1024 UTF-8 bytes. Never the
-    discriminator.
+    """Bounded, sanitized diagnostic text, at most 1024 Unicode code points.
+    Never the discriminator.
     """
     @_builtins.property
     def retry_after(self) -> _duration_pb2.Duration:

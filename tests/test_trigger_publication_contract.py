@@ -13,6 +13,7 @@ from jsonschema import Draft202012Validator, ValidationError
 
 from stateforge_protocol.sfp.manifest.v1 import manifest_pb2
 from stateforge_protocol.sfp.trigger_publication.v1 import (
+    contract,
     trigger_publication_pb2,
 )
 
@@ -136,6 +137,25 @@ def test_service_is_versioned_and_bidirectional_streaming() -> None:
     )
     assert method.client_streaming
     assert method.server_streaming
+
+
+def test_versioned_contract_exposes_normative_limits() -> None:
+    expected = {
+        "MAX_REQUEST_BYTES": 64 * 1024,
+        "MAX_RESPONSE_BYTES": 2 * 1024 * 1024,
+        "MAX_CANONICAL_PAYLOAD_BYTES": 1 * 1024 * 1024,
+        "MAX_PAYLOAD_JSON_DEPTH": 64,
+        "MAX_PAYLOAD_CONTAINER_ENTRIES": 256,
+        "MAX_PAYLOAD_PROPERTY_NAME_CODE_POINTS": 128,
+        "MAX_PAYLOAD_STRING_CODE_POINTS": 65_536,
+        "MAX_TRIGGER_IDENTIFIER_CODE_POINTS": 255,
+        "MAX_SESSION_ID_CODE_POINTS": 255,
+        "MAX_EXPLANATION_CODE_POINTS": 1_024,
+        "MAX_RETRY_AFTER_SECONDS": 24 * 60 * 60,
+        "MAX_IN_FLIGHT_PUBLICATIONS": 1_024,
+    }
+
+    assert {name: getattr(contract, name) for name in expected} == expected
 
 
 def test_stream_directions_are_closed_oneof_envelopes() -> None:
@@ -309,6 +329,35 @@ def test_acknowledgements_correlate_by_publication_id() -> None:
         assert acknowledgement["publicationId"] == publication_id
 
 
+def test_acknowledgement_correlation_is_scoped_to_the_current_stream() -> None:
+    scenarios = {
+        item["scenario"]: item
+        for item in _read_json("acknowledgement-correlation-scenarios.json")
+    }
+
+    assert set(scenarios) == {
+        "outstanding_on_current_stream",
+        "replayed_on_current_stream",
+        "unknown_publication",
+        "already_acknowledged",
+        "previous_stream_without_replay",
+    }
+    assert {
+        name
+        for name, scenario in scenarios.items()
+        if scenario["expectedOutcome"] == "ACCEPTED"
+    } == {
+        "outstanding_on_current_stream",
+        "replayed_on_current_stream",
+    }
+    assert all(
+        scenario["expectedOutcome"] == "INVALID_ARGUMENT"
+        and scenario["streamTerminates"]
+        for scenario in scenarios.values()
+        if scenario["expectedOutcome"] != "ACCEPTED"
+    )
+
+
 def test_acknowledgement_dispositions_are_closed_and_complete() -> None:
     values = {
         value.name
@@ -382,6 +431,31 @@ def test_retry_after_requires_a_retryable_rejection() -> None:
         _REQUEST_VALIDATOR.validate(acknowledgement)
 
 
+@pytest.mark.parametrize("duration", ["0.5s", "0.500s", "0.000000001s"])
+def test_positive_subsecond_retry_after_is_valid(duration: str) -> None:
+    acknowledgement = _read_json("acknowledgement-rejected.json")
+    rejection = acknowledgement["acknowledgement"]["rejection"]
+    rejection["retryable"] = True
+    rejection["retryAfter"] = duration
+
+    _REQUEST_VALIDATOR.validate(acknowledgement)
+    json_format.ParseDict(
+        acknowledgement,
+        trigger_publication_pb2.StreamTriggersRequest(),
+    )
+
+
+@pytest.mark.parametrize("duration", ["0s", "0.0s", "0.000000000s"])
+def test_zero_retry_after_is_invalid(duration: str) -> None:
+    acknowledgement = _read_json("acknowledgement-rejected.json")
+    rejection = acknowledgement["acknowledgement"]["rejection"]
+    rejection["retryable"] = True
+    rejection["retryAfter"] = duration
+
+    with pytest.raises(ValidationError):
+        _REQUEST_VALIDATOR.validate(acknowledgement)
+
+
 def test_canonical_content_excludes_delivery_and_session_identity(
     publication_data,
 ) -> None:
@@ -400,8 +474,9 @@ def test_canonical_content_excludes_delivery_and_session_identity(
 def test_golden_canonical_content_vector(publication_data) -> None:
     vector = _read_json("content-fingerprint-vector.json")
 
-    assert _canonical_content(publication_data).decode() == (
-        vector["canonicalJson"]
+    assert (
+        _canonical_content(publication_data).decode()
+        == (vector["canonicalJson"])
     )
     assert _content_fingerprint(publication_data) == vector["fingerprint"]
 
@@ -474,26 +549,64 @@ def test_stream_scenarios_cover_framing_session_and_backpressure() -> None:
         "publication_before_ready",
         "stale_session_or_manifest",
         "receive_window_exceeded",
+        "ready_binding_mismatch",
     }
-    assert scenarios["valid_open"]["expectedStatus"] == "OK"
-    assert scenarios["stale_session_or_manifest"]["expectedStatus"] == (
+    assert scenarios["valid_open"]["expectedOutcome"] == "OK"
+    assert scenarios["acknowledgement_before_open"]["expectedWireStatus"] == (
+        "INVALID_ARGUMENT"
+    )
+    assert scenarios["stale_session_or_manifest"]["expectedWireStatus"] == (
         "FAILED_PRECONDITION"
     )
-    assert scenarios["receive_window_exceeded"]["expectedStatus"] == (
+    assert scenarios["publication_before_ready"]["expectedAgentError"] == (
+        "INTERNAL"
+    )
+    assert scenarios["receive_window_exceeded"]["expectedAgentError"] == (
         "RESOURCE_EXHAUSTED"
+    )
+    assert scenarios["ready_binding_mismatch"]["expectedAgentError"] == (
+        "FAILED_PRECONDITION"
+    )
+    assert all(
+        scenario["providerObserves"] == "CANCELLED_OR_TRANSPORT_CLOSED"
+        for scenario in scenarios.values()
+        if scenario["detectingPeer"] == "AGENT"
     )
 
 
 def test_structural_bounds_reject_oversized_values(
     publication_data,
 ) -> None:
+    maximum_string = copy.deepcopy(publication_data)
+    maximum_string["publication"]["payload"]["repository"] = (
+        "x" * contract.MAX_PAYLOAD_STRING_CODE_POINTS
+    )
+    _RESPONSE_VALIDATOR.validate(maximum_string)
+
     oversized_payload = copy.deepcopy(publication_data)
-    oversized_payload["publication"]["payload"]["repository"] = "x" * 65537
+    oversized_payload["publication"]["payload"]["repository"] = "x" * (
+        contract.MAX_PAYLOAD_STRING_CODE_POINTS + 1
+    )
     with pytest.raises(ValidationError):
         _RESPONSE_VALIDATOR.validate(oversized_payload)
 
+    maximum_property_name = copy.deepcopy(publication_data)
+    maximum_property_name["publication"]["payload"] = {
+        "😀" * contract.MAX_PAYLOAD_PROPERTY_NAME_CODE_POINTS: "value"
+    }
+    _RESPONSE_VALIDATOR.validate(maximum_property_name)
+
+    oversized_property_name = copy.deepcopy(publication_data)
+    oversized_property_name["publication"]["payload"] = {
+        "😀" * (contract.MAX_PAYLOAD_PROPERTY_NAME_CODE_POINTS + 1): "value"
+    }
+    with pytest.raises(ValidationError):
+        _RESPONSE_VALIDATOR.validate(oversized_property_name)
+
     oversized_window = _read_json("open.json")
-    oversized_window["open"]["requestedMaxInFlightPublications"] = 1025
+    oversized_window["open"]["requestedMaxInFlightPublications"] = (
+        contract.MAX_IN_FLIGHT_PUBLICATIONS + 1
+    )
     with pytest.raises(ValidationError):
         _REQUEST_VALIDATOR.validate(oversized_window)
 

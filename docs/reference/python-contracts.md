@@ -70,6 +70,17 @@ server_receive_limit = contract.MAX_REQUEST_BYTES
 server_send_limit = contract.MAX_RESPONSE_BYTES
 ```
 
+Trigger Publication exposes its independent stream, payload, retry, and flow
+control limits through its own versioned `contract` module:
+
+```python
+from stateforge_protocol.sfp.trigger_publication.v1 import contract
+
+server_receive_limit = contract.MAX_REQUEST_BYTES
+canonical_payload_limit = contract.MAX_CANONICAL_PAYLOAD_BYTES
+receive_window_limit = contract.MAX_IN_FLIGHT_PUBLICATIONS
+```
+
 Use the packaged validation schema with a Draft 2020-12 validator when building
 the consuming runtime. Validation libraries are development dependencies here;
 consumers choose their own compliant implementation.

@@ -3,30 +3,45 @@
     "scenario": "valid_open",
     "firstAgentMessage": "open",
     "firstProviderMessage": "ready",
-    "expectedStatus": "OK"
+    "detectingPeer": "NONE",
+    "expectedOutcome": "OK"
   },
   {
     "scenario": "acknowledgement_before_open",
     "firstAgentMessage": "acknowledgement",
     "firstProviderMessage": "none",
-    "expectedStatus": "INVALID_ARGUMENT"
+    "detectingPeer": "PROVIDER",
+    "expectedWireStatus": "INVALID_ARGUMENT"
   },
   {
     "scenario": "publication_before_ready",
     "firstAgentMessage": "open",
     "firstProviderMessage": "publication",
-    "expectedStatus": "INTERNAL"
+    "detectingPeer": "AGENT",
+    "expectedAgentError": "INTERNAL",
+    "providerObserves": "CANCELLED_OR_TRANSPORT_CLOSED"
   },
   {
     "scenario": "stale_session_or_manifest",
     "firstAgentMessage": "open",
     "firstProviderMessage": "none",
-    "expectedStatus": "FAILED_PRECONDITION"
+    "detectingPeer": "PROVIDER",
+    "expectedWireStatus": "FAILED_PRECONDITION"
   },
   {
     "scenario": "receive_window_exceeded",
     "firstAgentMessage": "open",
     "firstProviderMessage": "ready",
-    "expectedStatus": "RESOURCE_EXHAUSTED"
+    "detectingPeer": "AGENT",
+    "expectedAgentError": "RESOURCE_EXHAUSTED",
+    "providerObserves": "CANCELLED_OR_TRANSPORT_CLOSED"
+  },
+  {
+    "scenario": "ready_binding_mismatch",
+    "firstAgentMessage": "open",
+    "firstProviderMessage": "ready_with_mismatched_binding",
+    "detectingPeer": "AGENT",
+    "expectedAgentError": "FAILED_PRECONDITION",
+    "providerObserves": "CANCELLED_OR_TRANSPORT_CLOSED"
   }
 ]
