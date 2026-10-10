@@ -1,0 +1,60 @@
+name: Protocol / Build and verify
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: Name of the distribution artifact passed between jobs.
+        required: false
+        type: string
+        default: stateforge-protocol-dist
+      breaking-against:
+        description: Buf Git source used for compatibility comparison.
+        required: false
+        type: string
+        default: .git#branch=origin/mvp/implementation
+      retention-days:
+        description: Number of days to retain distributions and evidence.
+        required: false
+        type: number
+        default: 14
+    outputs:
+      artifact-name:
+        description: Exact tested distribution artifact for a later consumer.
+        value: ${{ jobs.build.outputs.artifact-name }}
+      version:
+        description: Version read from the tested wheel.
+        value: ${{ jobs.build.outputs.version }}
+      wheel-sha256:
+        description: SHA-256 digest of the tested wheel.
+        value: ${{ jobs.build.outputs.wheel-sha256 }}
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    name: Verify contract source
+    uses: ./.github/workflows/protocol-source-verify.yml
+    with:
+      breaking-against: ${{ inputs.breaking-against }}
+      evidence-name: stateforge-protocol-source-${{ github.run_id }}-${{ github.run_attempt }}
+      retention-days: ${{ inputs.retention-days }}
+
+  build:
+    name: Build distributions once
+    needs: source
+    uses: ./.github/workflows/protocol-build.yml
+    with:
+      artifact-name: ${{ inputs.artifact-name }}
+      evidence-name: stateforge-protocol-build-${{ github.run_id }}-${{ github.run_attempt }}
+      retention-days: ${{ inputs.retention-days }}
+
+  installed:
+    name: Verify exact built wheel
+    needs: build
+    uses: ./.github/workflows/protocol-installed-test.yml
+    with:
+      artifact-name: ${{ needs.build.outputs.artifact-name }}
+      evidence-prefix: stateforge-protocol-installed-${{ github.run_id }}-${{ github.run_attempt }}
+      retention-days: ${{ inputs.retention-days }}

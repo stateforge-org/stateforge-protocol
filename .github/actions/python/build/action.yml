@@ -1,0 +1,93 @@
+name: Build StateForge Protocol distributions
+description: Build one wheel and sdist with hashes and source provenance.
+
+inputs:
+  output-directory:
+    description: Directory receiving distributions and their identity records.
+    required: false
+    default: dist
+  evidence-directory:
+    description: Directory receiving the build log.
+    required: false
+    default: evidence/build
+
+outputs:
+  version:
+    description: Version read from the built wheel metadata.
+    value: ${{ steps.identity.outputs.version }}
+  wheel-path:
+    description: Absolute path to the built wheel.
+    value: ${{ steps.identity.outputs.wheel-path }}
+  wheel-sha256:
+    description: SHA-256 digest of the built wheel.
+    value: ${{ steps.identity.outputs.wheel-sha256 }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build wheel and source distribution once
+      shell: bash
+      env:
+        EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+        OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+      run: |
+        set -euo pipefail
+        mkdir -p "${EVIDENCE_DIRECTORY}"
+        mkdir -p "${OUTPUT_DIRECTORY}"
+        python -m build \
+          --sdist \
+          --wheel \
+          --outdir "${OUTPUT_DIRECTORY}" \
+          2>&1 | tee "${EVIDENCE_DIRECTORY}/build.log"
+
+    - name: Record artifact checksums and provenance
+      id: identity
+      shell: bash
+      env:
+        OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+
+        wheels=("${OUTPUT_DIRECTORY}"/*.whl)
+        sdists=("${OUTPUT_DIRECTORY}"/*.tar.gz)
+        if [[ ${#wheels[@]} -ne 1 || ${#sdists[@]} -ne 1 ]]; then
+          echo "Expected exactly one wheel and one source distribution" >&2
+          exit 1
+        fi
+
+        wheel="${wheels[0]}"
+        sdist="${sdists[0]}"
+        wheel_name="$(basename "${wheel}")"
+        sdist_name="$(basename "${sdist}")"
+        distribution="$(unzip -p "${wheel}" '*/METADATA' | sed -n 's/^Name: //p')"
+        version="$(unzip -p "${wheel}" '*/METADATA' | sed -n 's/^Version: //p')"
+        if [[ "${distribution}" != "stateforge-protocol" || -z "${version}" ]]; then
+          echo "Built wheel has unexpected or incomplete package metadata" >&2
+          exit 1
+        fi
+        source_sha="${GITHUB_SHA:-$(git rev-parse HEAD)}"
+        source_ref="${GITHUB_REF:-$(git symbolic-ref --short HEAD)}"
+
+        (
+          cd "${OUTPUT_DIRECTORY}"
+          printf '%s\n' \
+            "distribution=${distribution}" \
+            "version=${version}" \
+            "source-sha=${source_sha}" \
+            "source-ref=${source_ref}" \
+            "builder-python=$(python --version 2>&1)" \
+            "runner-os=${RUNNER_OS:-local}" \
+            "runner-arch=${RUNNER_ARCH:-unknown}" \
+            > PROVENANCE
+          sha256sum "${wheel_name}" "${sdist_name}" PROVENANCE \
+            > SHA256SUMS
+        )
+
+        wheel_path="$(cd "${OUTPUT_DIRECTORY}" && pwd)/${wheel_name}"
+        wheel_sha256="$(sha256sum "${wheel}" | awk '{print $1}')"
+        {
+          echo "version=${version}"
+          echo "wheel-path=${wheel_path}"
+          echo "wheel-sha256=${wheel_sha256}"
+        } >> "${GITHUB_OUTPUT}"

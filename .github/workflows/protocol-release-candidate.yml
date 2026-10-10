@@ -1,0 +1,31 @@
+name: Protocol release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      breaking-against:
+        description: Buf Git source used for compatibility comparison.
+        required: false
+        type: string
+        default: .git#branch=origin/mvp/implementation
+      retention-days:
+        description: Number of days to retain the tested candidate and evidence.
+        required: false
+        type: number
+        default: 30
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protocol-release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  protocol:
+    name: Build and test release candidate
+    uses: ./.github/workflows/protocol-build-and-verify.yml
+    with:
+      artifact-name: stateforge-protocol-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+      breaking-against: ${{ inputs.breaking-against }}
+      retention-days: ${{ inputs.retention-days }}

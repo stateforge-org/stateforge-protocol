@@ -1,0 +1,33 @@
+name: Validate StateForge Protocol contracts
+description: Validate Buf sources, deterministic bindings, fixtures, and contracts.
+
+inputs:
+  breaking-against:
+    description: Buf Git source used for compatibility comparison; empty skips it.
+    required: false
+    default: .git#branch=origin/mvp/implementation
+  evidence-directory:
+    description: Directory receiving the contract-validation log.
+    required: false
+    default: evidence/contracts
+
+runs:
+  using: composite
+  steps:
+    - name: Validate Protocol contracts
+      shell: bash
+      env:
+        BREAKING_AGAINST: ${{ inputs.breaking-against }}
+        EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+      run: |
+        set -euo pipefail
+        mkdir -p "${EVIDENCE_DIRECTORY}"
+        {
+          buf lint
+          buf format --diff --exit-code
+          python scripts/check_generated.py
+          if [[ -n "${BREAKING_AGAINST}" ]]; then
+            buf breaking --against "${BREAKING_AGAINST}"
+          fi
+          python -m pytest
+        } 2>&1 | tee "${EVIDENCE_DIRECTORY}/contracts.log"
