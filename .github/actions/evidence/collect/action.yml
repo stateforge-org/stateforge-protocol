@@ -1,0 +1,48 @@
+name: Collect bounded CI evidence
+description: Record safe runner context and bound logs before artifact upload.
+
+inputs:
+  stage:
+    description: Stable name of the CI stage that produced the evidence.
+    required: true
+  evidence-directory:
+    description: Directory containing and receiving evidence files.
+    required: true
+  max-file-bytes:
+    description: Maximum retained size of each evidence file.
+    required: false
+    default: "262144"
+
+runs:
+  using: composite
+  steps:
+    - name: Record runner context and bound logs
+      shell: bash
+      env:
+        EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+        EVIDENCE_STAGE: ${{ inputs.stage }}
+        MAX_FILE_BYTES: ${{ inputs.max-file-bytes }}
+      run: |
+        set -euo pipefail
+        if [[ ! "${MAX_FILE_BYTES}" =~ ^[0-9]+$ ]] || (( MAX_FILE_BYTES < 1024 )); then
+          echo "max-file-bytes must be an integer of at least 1024" >&2
+          exit 1
+        fi
+
+        mkdir -p "${EVIDENCE_DIRECTORY}"
+        printf '%s\n' \
+          "stage=${EVIDENCE_STAGE}" \
+          "repository=${GITHUB_REPOSITORY:-local}" \
+          "ref=${GITHUB_REF:-local}" \
+          "sha=${GITHUB_SHA:-local}" \
+          "runner-os=${RUNNER_OS:-local}" \
+          "runner-arch=${RUNNER_ARCH:-unknown}" \
+          > "${EVIDENCE_DIRECTORY}/runner-context.txt"
+
+        while IFS= read -r -d '' file; do
+          size="$(wc -c < "${file}")"
+          if (( size > MAX_FILE_BYTES )); then
+            tail -c "${MAX_FILE_BYTES}" "${file}" > "${file}.bounded"
+            mv "${file}.bounded" "${file}"
+          fi
+        done < <(find "${EVIDENCE_DIRECTORY}" -type f -print0)

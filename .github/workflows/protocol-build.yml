@@ -1,0 +1,94 @@
+name: Protocol / Build Python distributions
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: Name used to upload the immutable distribution artifact.
+        required: false
+        type: string
+        default: stateforge-protocol-dist
+      evidence-name:
+        description: Name used to upload build evidence.
+        required: false
+        type: string
+        default: stateforge-protocol-build-evidence
+      retention-days:
+        description: Number of days to retain distributions and build evidence.
+        required: false
+        type: number
+        default: 14
+    outputs:
+      artifact-name:
+        description: Artifact containing the wheel, sdist, hashes, and provenance.
+        value: ${{ jobs.build.outputs.artifact-name }}
+      version:
+        description: Version read from the built wheel.
+        value: ${{ jobs.build.outputs.version }}
+      wheel-sha256:
+        description: SHA-256 digest of the built wheel.
+        value: ${{ jobs.build.outputs.wheel-sha256 }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build wheel and sdist once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      artifact-name: ${{ inputs.artifact-name }}
+      version: ${{ steps.package.outputs.version }}
+      wheel-sha256: ${{ steps.package.outputs.wheel-sha256 }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check --upgrade pip
+          python -m pip install --disable-pip-version-check --group dev .
+
+      - name: Build distribution artifacts
+        id: package
+        uses: ./.github/actions/python/build
+
+      - name: Upload immutable distribution artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS
+            dist/PROVENANCE
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+          compression-level: 0
+
+      - name: Collect bounded build evidence
+        if: ${{ always() }}
+        uses: ./.github/actions/evidence/collect
+        with:
+          stage: python-build
+          evidence-directory: evidence/build
+
+      - name: Upload build evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.evidence-name }}
+          path: evidence/build
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}

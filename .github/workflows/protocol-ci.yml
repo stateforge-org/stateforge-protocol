@@ -1,0 +1,28 @@
+name: Protocol CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - mvp/implementation
+  push:
+    branches:
+      - main
+      - mvp/implementation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protocol-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protocol:
+    name: Validate, build, and test package
+    uses: ./.github/workflows/protocol-build-and-verify.yml
+    with:
+      artifact-name: stateforge-protocol-dist-${{ github.run_id }}-${{ github.run_attempt }}
+      breaking-against: ${{ github.event_name == 'pull_request' && format('.git#branch=origin/{0}', github.base_ref) || '.git#branch=origin/mvp/implementation' }}
+      retention-days: 7

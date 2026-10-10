@@ -60,6 +60,32 @@ packages = [
 ]
 
 
+[tool.hatch.build.targets.wheel.force-include]
+"tests/fixtures" = "stateforge_protocol/fixtures"
+
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/.github",
+    "/LICENSE",
+    "/README.md",
+    "/buf.gen.yaml",
+    "/buf.yaml",
+    "/docs",
+    "/mkdocs.yml",
+    "/proto",
+    "/pyproject.toml",
+    "/scripts",
+    "/src",
+    "/tests",
+]
+exclude = [
+    "**/.DS_Store",
+    "**/__pycache__",
+    "**/*.pyc",
+]
+
+
 [tool.ruff]
 target-version = "py311"
 line-length = 79

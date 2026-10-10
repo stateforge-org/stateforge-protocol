@@ -1,0 +1,88 @@
+name: Test an installed StateForge Protocol wheel
+description: Verify exact artifact bytes in an isolated environment outside the checkout.
+
+inputs:
+  artifact-directory:
+    description: Directory containing the downloaded distribution artifact.
+    required: true
+  evidence-directory:
+    description: Directory receiving installed-package evidence.
+    required: false
+    default: evidence/installed
+
+outputs:
+  version:
+    description: >-
+      Version verified from provenance and installed metadata.
+    value: ${{ steps.identity.outputs.version }}
+  wheel-sha256:
+    description: SHA-256 digest of the exact installed wheel.
+    value: ${{ steps.identity.outputs.wheel-sha256 }}
+
+runs:
+  using: composite
+  steps:
+    - name: Verify downloaded artifact identity
+      id: identity
+      shell: bash
+      env:
+        ARTIFACT_DIRECTORY: ${{ inputs.artifact-directory }}
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        cd "${ARTIFACT_DIRECTORY}"
+        if [[ "${RUNNER_OS}" == "macOS" ]]; then
+          shasum --algorithm 256 --check SHA256SUMS
+          checksum_command=(shasum --algorithm 256)
+        else
+          sha256sum --check SHA256SUMS
+          checksum_command=(sha256sum)
+        fi
+
+        wheels=(*.whl)
+        sdists=(*.tar.gz)
+        if [[ ${#wheels[@]} -ne 1 || ${#sdists[@]} -ne 1 ]]; then
+          echo "Expected exactly one wheel and one source distribution" >&2
+          exit 1
+        fi
+
+        version="$(awk -F= '$1 == "version" {print $2}' PROVENANCE)"
+        if [[ -z "${version}" ]]; then
+          echo "PROVENANCE does not contain a package version" >&2
+          exit 1
+        fi
+        wheel_path="$(pwd)/${wheels[0]}"
+        wheel_sha256="$("${checksum_command[@]}" "${wheels[0]}" | awk '{print $1}')"
+        {
+          echo "version=${version}"
+          echo "wheel-path=${wheel_path}"
+          echo "wheel-sha256=${wheel_sha256}"
+        } >> "${GITHUB_OUTPUT}"
+
+    - name: Install and verify exact wheel outside the checkout
+      shell: bash
+      env:
+        EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+        EXPECTED_VERSION: ${{ steps.identity.outputs.version }}
+        WHEEL_PATH: ${{ steps.identity.outputs.wheel-path }}
+      run: |
+        set -euo pipefail
+        environment="${RUNNER_TEMP}/stateforge-protocol-installed-${EXPECTED_VERSION}"
+        python -m venv "${environment}"
+        if [[ "${RUNNER_OS}" == "Windows" ]]; then
+          isolated_python="${environment}/Scripts/python.exe"
+        else
+          isolated_python="${environment}/bin/python"
+        fi
+        mkdir -p "${EVIDENCE_DIRECTORY}"
+        {
+          "${isolated_python}" -m pip install \
+            --disable-pip-version-check \
+            "${WHEEL_PATH}"
+          cd "${RUNNER_TEMP}"
+          unset PYTHONPATH PYTHONHOME
+          "${isolated_python}" -I \
+            "${GITHUB_WORKSPACE}/scripts/ci/verify_installed.py" \
+            --expected-version "${EXPECTED_VERSION}" \
+            --workspace "${GITHUB_WORKSPACE}"
+        } 2>&1 | tee "${EVIDENCE_DIRECTORY}/installed-package.log"
