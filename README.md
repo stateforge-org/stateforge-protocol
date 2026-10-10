@@ -66,8 +66,10 @@ retain tested artifacts but deliberately do not publish or sign them.
 
 All workflows use read-only repository permissions, pin external actions to
 full commit SHAs, disable persisted checkout credentials, set job timeouts, and
-key Python caches from `pyproject.toml`. Evidence uploads contain bounded logs
-and an allow-listed runner summary; they never dump the process environment.
+key Python caches from `pyproject.toml`. Actionlint validates workflow syntax;
+zizmor blocks medium- or high-severity workflow security findings without
+receiving a GitHub token. Evidence uploads contain bounded logs and a small,
+allow-listed runner summary; they never dump the process environment.
 
 ### Workflow interfaces
 
@@ -95,6 +97,7 @@ checks with:
 GOBIN="$(pwd)/.cache/actionlint" \
   go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 ./.cache/actionlint/actionlint
+zizmor --offline --persona auditor --min-severity medium .
 buf lint
 buf format --diff --exit-code
 python scripts/check_generated.py
