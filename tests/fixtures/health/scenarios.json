@@ -1,0 +1,203 @@
+{
+  "schemaVersion": 1,
+  "lifecycle": [
+    {
+      "id": "startup",
+      "from": null,
+      "to": "NOT_SERVING",
+      "newAdmissionAllowed": false
+    },
+    {
+      "id": "validated-readiness",
+      "from": "NOT_SERVING",
+      "to": "SERVING",
+      "newAdmissionAllowed": true
+    },
+    {
+      "id": "degraded-or-maintenance",
+      "from": "SERVING",
+      "to": "NOT_SERVING",
+      "newAdmissionAllowed": false
+    },
+    {
+      "id": "recovery",
+      "from": "NOT_SERVING",
+      "to": "SERVING",
+      "newAdmissionAllowed": true
+    },
+    {
+      "id": "bounded-shutdown",
+      "from": "SERVING",
+      "to": "NOT_SERVING",
+      "newAdmissionAllowed": false,
+      "beforeTeardown": true
+    }
+  ],
+  "eligibility": [
+    {
+      "id": "all-current-and-serving",
+      "transportCurrent": true,
+      "sessionCurrent": true,
+      "generationCurrent": true,
+      "manifestAccepted": true,
+      "watchCurrent": true,
+      "healthStatus": "SERVING",
+      "expectedEligible": true
+    },
+    {
+      "id": "serving-with-invalid-manifest",
+      "transportCurrent": true,
+      "sessionCurrent": true,
+      "generationCurrent": true,
+      "manifestAccepted": false,
+      "watchCurrent": true,
+      "healthStatus": "SERVING",
+      "expectedEligible": false
+    },
+    {
+      "id": "not-serving",
+      "transportCurrent": true,
+      "sessionCurrent": true,
+      "generationCurrent": true,
+      "manifestAccepted": true,
+      "watchCurrent": true,
+      "healthStatus": "NOT_SERVING",
+      "expectedEligible": false
+    },
+    {
+      "id": "unknown-initial-state",
+      "transportCurrent": true,
+      "sessionCurrent": true,
+      "generationCurrent": true,
+      "manifestAccepted": true,
+      "watchCurrent": true,
+      "healthStatus": "UNKNOWN",
+      "expectedEligible": false
+    },
+    {
+      "id": "unknown-service",
+      "transportCurrent": true,
+      "sessionCurrent": true,
+      "generationCurrent": true,
+      "manifestAccepted": true,
+      "watchCurrent": true,
+      "healthStatus": "SERVICE_UNKNOWN",
+      "expectedEligible": false
+    },
+    {
+      "id": "stale-session-serving",
+      "transportCurrent": true,
+      "sessionCurrent": false,
+      "generationCurrent": true,
+      "manifestAccepted": true,
+      "watchCurrent": false,
+      "healthStatus": "SERVING",
+      "expectedEligible": false
+    },
+    {
+      "id": "stale-generation-serving",
+      "transportCurrent": true,
+      "sessionCurrent": true,
+      "generationCurrent": false,
+      "manifestAccepted": true,
+      "watchCurrent": false,
+      "healthStatus": "SERVING",
+      "expectedEligible": false
+    },
+    {
+      "id": "watch-lost",
+      "transportCurrent": true,
+      "sessionCurrent": true,
+      "generationCurrent": true,
+      "manifestAccepted": true,
+      "watchCurrent": false,
+      "healthStatus": "UNKNOWN",
+      "expectedEligible": false
+    }
+  ],
+  "watch": [
+    {
+      "id": "initial-replay",
+      "service": "",
+      "statuses": ["SERVING"],
+      "ordered": true,
+      "watchBindingCurrent": true,
+      "acceptedEvents": 1,
+      "retry": false,
+      "eligibilityAfter": true
+    },
+    {
+      "id": "ordered-state-changes",
+      "service": "",
+      "statuses": ["SERVING", "NOT_SERVING", "SERVING"],
+      "ordered": true,
+      "watchBindingCurrent": true,
+      "acceptedEvents": 3,
+      "retry": false,
+      "eligibilityAfter": true
+    },
+    {
+      "id": "stale-session-event",
+      "service": "",
+      "statuses": ["SERVING"],
+      "ordered": true,
+      "watchBindingCurrent": false,
+      "acceptedEvents": 0,
+      "retry": false,
+      "eligibilityAfter": false
+    },
+    {
+      "id": "channel-failure",
+      "service": "",
+      "statuses": [],
+      "ordered": true,
+      "watchBindingCurrent": true,
+      "acceptedEvents": 0,
+      "terminalCode": "UNAVAILABLE",
+      "retry": true,
+      "eligibilityAfter": false
+    },
+    {
+      "id": "slow-observer",
+      "service": "",
+      "statuses": ["SERVING"],
+      "ordered": true,
+      "watchBindingCurrent": true,
+      "acceptedEvents": 1,
+      "terminalCode": "RESOURCE_EXHAUSTED",
+      "retry": true,
+      "eligibilityAfter": false
+    },
+    {
+      "id": "watch-unimplemented",
+      "service": "",
+      "statuses": [],
+      "ordered": true,
+      "watchBindingCurrent": true,
+      "acceptedEvents": 0,
+      "terminalCode": "UNIMPLEMENTED",
+      "retry": false,
+      "eligibilityAfter": false
+    }
+  ],
+  "admittedWork": [
+    {
+      "id": "health-loss-after-admission",
+      "healthStatus": "NOT_SERVING",
+      "newAdmissionAllowed": false,
+      "existingOperationStateMutated": false,
+      "existingTerminalResultReplaced": false,
+      "cancellationRequested": false
+    }
+  ],
+  "diagnosticBoundaries": [
+    {
+      "codePoints": 1024,
+      "accepted": true
+    },
+    {
+      "codePoints": 1025,
+      "accepted": false
+    }
+  ]
+}

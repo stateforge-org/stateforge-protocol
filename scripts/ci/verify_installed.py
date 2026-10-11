@@ -10,7 +10,118 @@ import sys
 from importlib import metadata
 from pathlib import Path
 
+from grpc_health.v1 import health_pb2, health_pb2_grpc
+
+from stateforge_protocol.sfp import health_contract
+
 _DISTRIBUTION = "stateforge-protocol"
+
+
+def _read_json_object(path: Path) -> dict[str, object]:
+    """Read one JSON object or fail installed-package verification."""
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"Expected a JSON object: {path}")
+    return value
+
+
+def _object_cases(
+    document: dict[str, object], name: str
+) -> list[dict[str, object]]:
+    """Return an object-array member from a conformance document."""
+    value = document.get(name)
+    if not isinstance(value, list) or not all(
+        isinstance(item, dict) for item in value
+    ):
+        raise ValueError(f"Expected an object array named {name}")
+    return value
+
+
+def _verify_health_fixtures(fixture_root: Path) -> int:
+    """Verify Health vectors from the exact installed wheel."""
+    service = health_pb2.DESCRIPTOR.services_by_name["Health"]
+    if service.full_name != health_contract.STANDARD_HEALTH_SERVICE:
+        raise ValueError("Installed package has the wrong Health service")
+    if not {"Check", "Watch"} <= set(service.methods_by_name):
+        raise ValueError("Installed Health service is missing required RPCs")
+    if health_pb2_grpc.HealthStub is None:
+        raise ValueError("Installed package has no Health client bindings")
+
+    root = fixture_root / "health"
+    registry = _read_json_object(root / "registry.json")
+    scenarios = _read_json_object(root / "scenarios.json")
+    expected_registry = {
+        "wireService": health_contract.STANDARD_HEALTH_SERVICE,
+        "providerHealthService": health_contract.PROVIDER_HEALTH_SERVICE,
+        "authoritativeWatchService": (
+            health_contract.AUTHORITATIVE_WATCH_SERVICE
+        ),
+        "registeredServices": list(health_contract.SFP_SERVICE_NAMES),
+        "statuses": list(health_contract.HEALTH_STATUS_NAMES),
+        "channel": "existing-multiplexed-sfp",
+    }
+    for name, expected in expected_registry.items():
+        if registry.get(name) != expected:
+            raise ValueError(f"Installed Health registry mismatch: {name}")
+
+    eligibility = _object_cases(scenarios, "eligibility")
+    factors = (
+        "transportCurrent",
+        "sessionCurrent",
+        "generationCurrent",
+        "manifestAccepted",
+        "watchCurrent",
+    )
+    for case in eligibility:
+        derived = all(case.get(name) is True for name in factors)
+        derived = derived and case.get("healthStatus") == "SERVING"
+        if case.get("expectedEligible") is not derived:
+            raise ValueError(
+                f"Invalid installed Health eligibility case: {case.get('id')}"
+            )
+
+    required_watch_cases = {
+        "initial-replay",
+        "ordered-state-changes",
+        "stale-session-event",
+        "channel-failure",
+        "slow-observer",
+        "watch-unimplemented",
+    }
+    watch = _object_cases(scenarios, "watch")
+    if {case.get("id") for case in watch} != required_watch_cases:
+        raise ValueError("Installed Health Watch scenarios are incomplete")
+    if any(
+        case.get("service") != health_contract.AUTHORITATIVE_WATCH_SERVICE
+        for case in watch
+    ):
+        raise ValueError(
+            "Installed Health Watch must use Provider-wide status"
+        )
+
+    boundaries = _object_cases(scenarios, "diagnosticBoundaries")
+    if boundaries != [
+        {
+            "codePoints": health_contract.MAX_DIAGNOSTIC_CODE_POINTS,
+            "accepted": True,
+        },
+        {
+            "codePoints": health_contract.MAX_DIAGNOSTIC_CODE_POINTS + 1,
+            "accepted": False,
+        },
+    ]:
+        raise ValueError("Installed Health diagnostic boundaries are invalid")
+
+    return sum(
+        len(_object_cases(scenarios, name))
+        for name in (
+            "lifecycle",
+            "eligibility",
+            "watch",
+            "admittedWork",
+            "diagnosticBoundaries",
+        )
+    )
 
 
 def _is_within(path: Path, parent: Path) -> bool:
@@ -32,7 +143,7 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
         )
         raise ValueError(msg)
     package_root = Path(
-        distribution.locate_file("stateforge_protocol")
+        str(distribution.locate_file("stateforge_protocol"))
     ).resolve()
     if not package_root.is_dir():
         raise ValueError(
@@ -73,6 +184,8 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
     for fixture in fixture_files:
         json.loads(fixture.read_text(encoding="utf-8"))
 
+    health_scenario_count = _verify_health_fixtures(fixture_root)
+
     return {
         "distribution": _DISTRIBUTION,
         "version": distribution.version,
@@ -80,6 +193,7 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
         "generated_module_count": len(module_names),
         "schema_count": len(schemas),
         "fixture_count": len(fixture_files),
+        "health_scenario_count": health_scenario_count,
     }
 
 
