@@ -6,13 +6,10 @@ STANDARD_HEALTH_SERVICE: Final = "grpc.health.v1.Health"
 OVERALL_SERVICE_NAME: Final = ""
 PROVIDER_HEALTH_SERVICE: Final = OVERALL_SERVICE_NAME
 
-BOOTSTRAP_SERVICE: Final = (
-    "stateforge.sfp.bootstrap.v1.BootstrapService"
-)
+BOOTSTRAP_SERVICE: Final = "stateforge.sfp.bootstrap.v1.BootstrapService"
 MANIFEST_SERVICE: Final = "stateforge.sfp.manifest.v1.ManifestService"
 CAPABILITY_ASSESSMENT_SERVICE: Final = (
-    "stateforge.sfp.capability_assessment.v1."
-    "CapabilityAssessmentService"
+    "stateforge.sfp.capability_assessment.v1.CapabilityAssessmentService"
 )
 OPERATION_ADMISSION_SERVICE: Final = (
     "stateforge.sfp.operation_admission.v1.OperationAdmissionService"

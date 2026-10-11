@@ -57,6 +57,5 @@ def test_health_contract_is_registered_in_reusable_validation() -> None:
     assert "./.github/actions/contracts/validate" in source_workflow
     assert "./.github/workflows/protocol-source-verify.yml" in build_workflow
     assert (
-        "./.github/workflows/protocol-build-and-verify.yml"
-        in release_workflow
+        "./.github/workflows/protocol-build-and-verify.yml" in release_workflow
     )
