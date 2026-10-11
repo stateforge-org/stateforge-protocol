@@ -28,29 +28,37 @@ runs:
     - name: Build wheel and source distribution once
       shell: bash
       env:
+        ACTION_PATH: ${{ github.action_path }}
         EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
         OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
       run: |
         set -euo pipefail
-        mkdir -p "${EVIDENCE_DIRECTORY}"
-        mkdir -p "${OUTPUT_DIRECTORY}"
+        source_directory="$(cd "${ACTION_PATH}/../../../.." && pwd -P)"
+        evidence_directory="$(mkdir -p "${EVIDENCE_DIRECTORY}" && \
+          cd "${EVIDENCE_DIRECTORY}" && pwd -P)"
+        output_directory="$(mkdir -p "${OUTPUT_DIRECTORY}" && \
+          cd "${OUTPUT_DIRECTORY}" && pwd -P)"
         python -m build \
           --sdist \
           --wheel \
-          --outdir "${OUTPUT_DIRECTORY}" \
-          2>&1 | tee "${EVIDENCE_DIRECTORY}/build.log"
+          --outdir "${output_directory}" \
+          "${source_directory}" \
+          2>&1 | tee "${evidence_directory}/build.log"
 
     - name: Record artifact checksums and provenance
       id: identity
       shell: bash
       env:
+        ACTION_PATH: ${{ github.action_path }}
         OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
       run: |
         set -euo pipefail
+        source_directory="$(cd "${ACTION_PATH}/../../../.." && pwd -P)"
+        output_directory="$(cd "${OUTPUT_DIRECTORY}" && pwd -P)"
         shopt -s nullglob
 
-        wheels=("${OUTPUT_DIRECTORY}"/*.whl)
-        sdists=("${OUTPUT_DIRECTORY}"/*.tar.gz)
+        wheels=("${output_directory}"/stateforge_protocol-*.whl)
+        sdists=("${output_directory}"/stateforge_protocol-*.tar.gz)
         if [[ ${#wheels[@]} -ne 1 || ${#sdists[@]} -ne 1 ]]; then
           echo "Expected exactly one wheel and one source distribution" >&2
           exit 1
@@ -66,11 +74,14 @@ runs:
           echo "Built wheel has unexpected or incomplete package metadata" >&2
           exit 1
         fi
-        source_sha="${GITHUB_SHA:-$(git rev-parse HEAD)}"
-        source_ref="${GITHUB_REF:-$(git symbolic-ref --short HEAD)}"
+        source_sha="$(git -C "${source_directory}" rev-parse --verify HEAD)"
+        source_ref="$(
+          git -C "${source_directory}" symbolic-ref --quiet --short HEAD || \
+            printf 'detached'
+        )"
 
         (
-          cd "${OUTPUT_DIRECTORY}"
+          cd "${output_directory}"
           printf '%s\n' \
             "distribution=${distribution}" \
             "version=${version}" \
@@ -84,7 +95,7 @@ runs:
             > SHA256SUMS
         )
 
-        wheel_path="$(cd "${OUTPUT_DIRECTORY}" && pwd)/${wheel_name}"
+        wheel_path="${output_directory}/${wheel_name}"
         wheel_sha256="$(sha256sum "${wheel}" | awk '{print $1}')"
         {
           echo "version=${version}"

@@ -42,9 +42,10 @@ jobs:
       version: ${{ steps.package.outputs.version }}
       wheel-sha256: ${{ steps.package.outputs.wheel-sha256 }}
     steps:
-      - name: Check out source
+      - name: Check out Protocol source below the caller workspace
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          path: .stateforge-ci/protocol
           persist-credentials: false
 
       - name: Set up Python
@@ -52,17 +53,18 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: .stateforge-ci/protocol/pyproject.toml
 
       - name: Install build dependencies
         shell: bash
         run: |
           python -m pip install --disable-pip-version-check --upgrade pip
           python -m pip install --disable-pip-version-check --group dev .
+        working-directory: .stateforge-ci/protocol
 
       - name: Build distribution artifacts
         id: package
-        uses: ./.github/actions/python/build
+        uses: ./.stateforge-ci/protocol/.github/actions/python/build
 
       - name: Upload immutable distribution artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -79,7 +81,7 @@ jobs:
 
       - name: Collect bounded build evidence
         if: ${{ always() }}
-        uses: ./.github/actions/evidence/collect
+        uses: ./.stateforge-ci/protocol/.github/actions/evidence/collect
         with:
           stage: python-build
           evidence-directory: evidence/build
