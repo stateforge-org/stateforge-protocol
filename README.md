@@ -64,6 +64,28 @@ generated protobuf and gRPC modules, validation schemas, and packaged
 conformance fixtures without a repository `PYTHONPATH`. Release-candidate runs
 retain tested artifacts but deliberately do not publish or sign them.
 
+The package action can also be invoked from another repository. The consumer
+owns revision selection and checks out Protocol below its workspace; the
+builder always resolves and builds the checkout containing the action:
+
+```yaml
+- uses: actions/checkout@<immutable-sha>
+  with:
+    repository: stateforge-org/stateforge-protocol
+    ref: <protocol-ref-or-commit>
+    path: .stateforge-ci/protocol
+    persist-credentials: false
+
+- uses: ./.stateforge-ci/protocol/.github/actions/python/build
+  with:
+    output-directory: dist/protocol
+    evidence-directory: evidence/protocol-build
+```
+
+Both destination paths are normalized in the caller workspace before the
+source build begins. `PROVENANCE` records the exact commit and ref from the
+Protocol checkout, never the consuming repository.
+
 All workflows use read-only repository permissions, pin external actions to
 full commit SHAs, disable persisted checkout credentials, set job timeouts, and
 key Python caches from `pyproject.toml`. Actionlint validates workflow syntax;
