@@ -42,3 +42,21 @@ def test_protocol_builder_preserves_artifact_contract() -> None:
         assert record in action
     for output in ("version", "wheel-path", "wheel-sha256"):
         assert f"{output}:" in action
+
+
+def test_health_contract_is_registered_in_reusable_validation() -> None:
+    """Run focused Health vectors in every standard source-validation path."""
+    health_action = read(ACTIONS / "contracts" / "health" / "action.yml")
+    contract_action = read(ACTIONS / "contracts" / "validate" / "action.yml")
+    source_workflow = read(WORKFLOWS / "protocol-source-verify.yml")
+    build_workflow = read(WORKFLOWS / "protocol-build-and-verify.yml")
+    release_workflow = read(WORKFLOWS / "protocol-release-candidate.yml")
+
+    assert "tests/test_health_contract.py" in health_action
+    assert "./.github/actions/contracts/health" in contract_action
+    assert "./.github/actions/contracts/validate" in source_workflow
+    assert "./.github/workflows/protocol-source-verify.yml" in build_workflow
+    assert (
+        "./.github/workflows/protocol-build-and-verify.yml"
+        in release_workflow
+    )

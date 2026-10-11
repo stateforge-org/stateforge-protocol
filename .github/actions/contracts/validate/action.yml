@@ -14,6 +14,11 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Validate Provider Health contract
+      uses: ./.github/actions/contracts/health
+      with:
+        evidence-directory: ${{ inputs.evidence-directory }}/health
+
     - name: Validate Protocol contracts
       shell: bash
       env:

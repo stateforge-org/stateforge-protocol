@@ -1,0 +1,21 @@
+name: Validate Provider Health contract
+description: Run focused standard gRPC Health conformance scenarios.
+
+inputs:
+  evidence-directory:
+    description: Directory receiving focused Health contract evidence.
+    required: false
+    default: evidence/contracts/health
+
+runs:
+  using: composite
+  steps:
+    - name: Validate Health and eligibility scenarios
+      shell: bash
+      env:
+        EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+      run: |
+        set -euo pipefail
+        mkdir -p "${EVIDENCE_DIRECTORY}"
+        python -m pytest -q tests/test_health_contract.py \
+          2>&1 | tee "${EVIDENCE_DIRECTORY}/health.log"

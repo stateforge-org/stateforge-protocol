@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "wireService": "grpc.health.v1.Health",
+  "channel": "existing-multiplexed-sfp",
+  "providerHealthService": "",
+  "authoritativeWatchService": "",
+  "registeredServices": [
+    "stateforge.sfp.bootstrap.v1.BootstrapService",
+    "stateforge.sfp.manifest.v1.ManifestService",
+    "stateforge.sfp.capability_assessment.v1.CapabilityAssessmentService",
+    "stateforge.sfp.operation_admission.v1.OperationAdmissionService",
+    "stateforge.sfp.operation_lifecycle.v1.OperationLifecycleService",
+    "stateforge.sfp.trigger_publication.v1.TriggerPublicationService"
+  ],
+  "statuses": [
+    "UNKNOWN",
+    "SERVING",
+    "NOT_SERVING",
+    "SERVICE_UNKNOWN"
+  ],
+  "lookups": [
+    {
+      "id": "known-named-check",
+      "rpc": "Check",
+      "service": "stateforge.sfp.operation_admission.v1.OperationAdmissionService",
+      "result": "CURRENT_STATUS",
+      "diagnosticOnly": true
+    },
+    {
+      "id": "provider-health-check",
+      "rpc": "Check",
+      "service": "",
+      "result": "CURRENT_STATUS",
+      "diagnosticOnly": true
+    },
+    {
+      "id": "provider-health-watch",
+      "rpc": "Watch",
+      "service": "",
+      "result": "CURRENT_AND_ORDERED_UPDATES",
+      "authoritativeForProviderHealth": true
+    },
+    {
+      "id": "unknown-check",
+      "rpc": "Check",
+      "service": "stateforge.sfp.unknown.v1.UnknownService",
+      "grpcCode": "NOT_FOUND"
+    },
+    {
+      "id": "wildcard-check",
+      "rpc": "Check",
+      "service": "stateforge.sfp.*",
+      "grpcCode": "NOT_FOUND"
+    },
+    {
+      "id": "unknown-watch",
+      "rpc": "Watch",
+      "service": "stateforge.sfp.unknown.v1.UnknownService",
+      "firstStatus": "SERVICE_UNKNOWN",
+      "streamRemainsOpen": true
+    }
+  ]
+}
