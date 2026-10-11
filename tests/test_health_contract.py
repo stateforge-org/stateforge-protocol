@@ -78,9 +78,11 @@ def test_registry_uses_standard_health_and_real_sfp_service_names() -> None:
         == contract.AUTHORITATIVE_WATCH_SERVICE
         == ""
     )
-    assert registry["registeredServices"] == [
-        descriptor.full_name for descriptor in descriptors
-    ] == list(contract.SFP_SERVICE_NAMES)
+    assert (
+        registry["registeredServices"]
+        == [descriptor.full_name for descriptor in descriptors]
+        == list(contract.SFP_SERVICE_NAMES)
+    )
     assert registry["statuses"] == list(contract.HEALTH_STATUS_NAMES)
     assert registry["channel"] == "existing-multiplexed-sfp"
 
@@ -137,8 +139,9 @@ def test_named_empty_unknown_and_wildcard_lookups() -> None:
     assert lookups["unknown-watch"]["streamRemainsOpen"] is True
 
 
-def test_provider_lifecycle_fails_closed_before_readiness_and_teardown(
-) -> None:
+def test_provider_lifecycle_fails_closed_before_readiness_and_teardown() -> (
+    None
+):
     lifecycle = _by_id(_cases(_read("scenarios.json"), "lifecycle"))
     assert lifecycle["startup"]["to"] == "NOT_SERVING"
     assert lifecycle["startup"]["newAdmissionAllowed"] is False
