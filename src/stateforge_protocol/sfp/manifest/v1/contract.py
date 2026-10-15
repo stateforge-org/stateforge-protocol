@@ -15,6 +15,8 @@ MAX_RESPONSE_BYTES: Final = 2 * 1024 * 1024
 # Canonicalization and embedded JSON limits enforced outside JSON Schema.
 MAX_CANONICAL_REVISION_PREIMAGE_BYTES: Final = 1 * 1024 * 1024
 MAX_EMBEDDED_JSON_DEPTH: Final = 64
+MAX_JSON_NODES: Final = 100_000
+MAX_SCHEMA_NODES: Final = 25_000
 
 # Declaration-count limits mirrored by the packaged validation schema.
 MAX_OPERATIONS: Final = 1_024
