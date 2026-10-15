@@ -2,10 +2,26 @@
 
 from typing import Final
 
-from stateforge_protocol.sfp.bootstrap.v1 import contract as bootstrap_contract
-from stateforge_protocol.sfp.manifest.v1 import contract as manifest_contract
+from grpc_health.v1 import health_pb2
 
-STANDARD_HEALTH_SERVICE: Final = "grpc.health.v1.Health"
+from stateforge_protocol.sfp.bootstrap.v1 import contract as bootstrap_contract
+from stateforge_protocol.sfp.capability_assessment.v1 import (
+    contract as capability_assessment_contract,
+)
+from stateforge_protocol.sfp.manifest.v1 import contract as manifest_contract
+from stateforge_protocol.sfp.operation_admission.v1 import (
+    contract as operation_admission_contract,
+)
+from stateforge_protocol.sfp.operation_lifecycle.v1 import (
+    contract as operation_lifecycle_contract,
+)
+from stateforge_protocol.sfp.trigger_publication.v1 import (
+    contract as trigger_publication_contract,
+)
+
+STANDARD_HEALTH_SERVICE: Final = health_pb2.DESCRIPTOR.services_by_name[
+    "Health"
+].full_name
 OVERALL_SERVICE_NAME: Final = ""
 PROVIDER_HEALTH_SERVICE: Final = OVERALL_SERVICE_NAME
 
@@ -16,17 +32,11 @@ MAX_RESPONSE_BYTES: Final = 64
 BOOTSTRAP_SERVICE: Final = bootstrap_contract.SERVICE_NAME
 MANIFEST_SERVICE: Final = manifest_contract.SERVICE_NAME
 CAPABILITY_ASSESSMENT_SERVICE: Final = (
-    "stateforge.sfp.capability_assessment.v1.CapabilityAssessmentService"
+    capability_assessment_contract.SERVICE_NAME
 )
-OPERATION_ADMISSION_SERVICE: Final = (
-    "stateforge.sfp.operation_admission.v1.OperationAdmissionService"
-)
-OPERATION_LIFECYCLE_SERVICE: Final = (
-    "stateforge.sfp.operation_lifecycle.v1.OperationLifecycleService"
-)
-TRIGGER_PUBLICATION_SERVICE: Final = (
-    "stateforge.sfp.trigger_publication.v1.TriggerPublicationService"
-)
+OPERATION_ADMISSION_SERVICE: Final = operation_admission_contract.SERVICE_NAME
+OPERATION_LIFECYCLE_SERVICE: Final = operation_lifecycle_contract.SERVICE_NAME
+TRIGGER_PUBLICATION_SERVICE: Final = trigger_publication_contract.SERVICE_NAME
 
 SFP_SERVICE_NAMES: Final[tuple[str, ...]] = (
     BOOTSTRAP_SERVICE,

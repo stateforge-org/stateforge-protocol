@@ -181,9 +181,7 @@ def test_service_is_versioned_unary_and_admission_only() -> None:
     ]
     method = service.methods_by_name["StartOperation"]
 
-    assert service.full_name == (
-        "stateforge.sfp.operation_admission.v1.OperationAdmissionService"
-    )
+    assert service.full_name == contract.SERVICE_NAME
     assert tuple(service.methods_by_name) == ("StartOperation",)
     assert method.input_type == (
         operation_admission_pb2.StartOperationRequest.DESCRIPTOR

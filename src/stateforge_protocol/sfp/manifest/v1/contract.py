@@ -2,7 +2,11 @@
 
 from typing import Final
 
-SERVICE_NAME: Final = "stateforge.sfp.manifest.v1.ManifestService"
+from stateforge_protocol.sfp.manifest.v1 import manifest_pb2
+
+SERVICE_NAME: Final = manifest_pb2.DESCRIPTOR.services_by_name[
+    "ManifestService"
+].full_name
 
 # Serialized protobuf limits enforced at the RPC boundary.
 MAX_REQUEST_BYTES: Final = 8 * 1024
