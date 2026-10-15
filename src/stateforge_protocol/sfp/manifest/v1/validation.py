@@ -55,7 +55,6 @@ _SAME_INSTANCE = {
     "dependentSchemas",
 }
 _VALUES = {"default", "examples", "const", "enum"}
-_MAX_UINT32 = (1 << 32) - 1
 
 
 class ManifestValidationError(ValueError):
@@ -444,7 +443,7 @@ def _validate_schema_version(value: int) -> None:
     if (
         not isinstance(value, int)
         or isinstance(value, bool)
-        or not 1 <= value <= _MAX_UINT32
+        or not 1 <= value <= contract.MAX_SCHEMA_VERSION
     ):
         raise ManifestValidationError(
             "response: manifest schema version is invalid"
