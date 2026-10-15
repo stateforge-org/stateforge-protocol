@@ -46,22 +46,22 @@ PROCEDURE_LIMITS: Final[tuple[ProcedureTransportLimits, ...]] = (
         max_response_bytes=manifest.MAX_RESPONSE_BYTES,
     ),
     ProcedureTransportLimits(
-        service_name=health_contract.CAPABILITY_ASSESSMENT_SERVICE,
+        service_name=capability_assessment.SERVICE_NAME,
         max_request_bytes=capability_assessment.MAX_REQUEST_BYTES,
         max_response_bytes=capability_assessment.MAX_RESPONSE_BYTES,
     ),
     ProcedureTransportLimits(
-        service_name=health_contract.OPERATION_ADMISSION_SERVICE,
+        service_name=operation_admission.SERVICE_NAME,
         max_request_bytes=operation_admission.MAX_REQUEST_BYTES,
         max_response_bytes=operation_admission.MAX_RESPONSE_BYTES,
     ),
     ProcedureTransportLimits(
-        service_name=health_contract.OPERATION_LIFECYCLE_SERVICE,
+        service_name=operation_lifecycle.SERVICE_NAME,
         max_request_bytes=operation_lifecycle.MAX_REQUEST_BYTES,
         max_response_bytes=operation_lifecycle.MAX_RESPONSE_BYTES,
     ),
     ProcedureTransportLimits(
-        service_name=health_contract.TRIGGER_PUBLICATION_SERVICE,
+        service_name=trigger_publication.SERVICE_NAME,
         max_request_bytes=trigger_publication.MAX_REQUEST_BYTES,
         max_response_bytes=trigger_publication.MAX_RESPONSE_BYTES,
     ),

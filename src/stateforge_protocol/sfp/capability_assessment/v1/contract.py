@@ -1,6 +1,14 @@
-"""Expose normative Capability Assessment v1 resource limits."""
+"""Expose the normative SFP Capability Assessment v1 wire contract."""
 
 from typing import Final
+
+from stateforge_protocol.sfp.capability_assessment.v1 import (
+    capability_assessment_pb2,
+)
+
+SERVICE_NAME: Final = capability_assessment_pb2.DESCRIPTOR.services_by_name[
+    "CapabilityAssessmentService"
+].full_name
 
 # Serialized protobuf limits enforced at the RPC boundary.
 MAX_REQUEST_BYTES: Final = 8 * 1024 * 1024

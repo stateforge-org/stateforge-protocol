@@ -1,6 +1,14 @@
-"""Expose normative Operation Lifecycle v1 resource limits."""
+"""Expose the normative SFP Operation Lifecycle v1 wire contract."""
 
 from typing import Final
+
+from stateforge_protocol.sfp.operation_lifecycle.v1 import (
+    operation_lifecycle_pb2,
+)
+
+SERVICE_NAME: Final = operation_lifecycle_pb2.DESCRIPTOR.services_by_name[
+    "OperationLifecycleService"
+].full_name
 
 # Serialized protobuf limits enforced at the RPC boundary.
 MAX_REQUEST_BYTES: Final = 8 * 1024
