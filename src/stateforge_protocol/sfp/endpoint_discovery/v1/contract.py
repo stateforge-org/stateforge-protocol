@@ -8,6 +8,8 @@ from pathlib import PurePosixPath
 from typing import Final, TypeGuard
 from uuid import UUID
 
+from stateforge_protocol.sfp import primitives
+
 SCHEMA_VERSION: Final = "1"
 DESCRIPTOR_SUFFIX: Final = ".sfp.json"
 TRANSPORT_TYPE: Final = "unix"
@@ -21,7 +23,7 @@ SOCKET_MODE: Final = 0o660
 MAX_DESCRIPTOR_BYTES: Final = 4 * 1024
 MIN_ENDPOINT_GENERATION: Final = 1
 MAX_ENDPOINT_GENERATION: Final = (2**63) - 1
-PROVIDER_INSTANCE_UUID_VERSION: Final = 4
+PROVIDER_INSTANCE_UUID_VERSION: Final = primitives.CANONICAL_UUID_VERSION
 
 _ROOT_FIELDS: Final = frozenset(
     {
@@ -232,19 +234,11 @@ def _validate_provider_instance_id(provider_instance_id: UUID) -> None:
 def _parse_provider_instance_id(value: str) -> UUID:
     """Parse one canonical lowercase Provider UUIDv4."""
     try:
-        provider_instance_id = UUID(value)
-    except ValueError as error:
+        return primitives.parse_canonical_uuid4(value)
+    except primitives.ProtocolScalarError as error:
         raise EndpointDescriptorContractError(
             "provider_instance_id must be a canonical UUIDv4"
         ) from error
-    if (
-        provider_instance_id.version != PROVIDER_INSTANCE_UUID_VERSION
-        or str(provider_instance_id) != value
-    ):
-        raise EndpointDescriptorContractError(
-            "provider_instance_id must be a canonical UUIDv4"
-        )
-    return provider_instance_id
 
 
 def _require_exact_fields(

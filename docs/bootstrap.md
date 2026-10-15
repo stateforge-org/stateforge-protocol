@@ -17,7 +17,9 @@ SFP exposes the unary method
 `/stateforge.sfp.bootstrap.v1.BootstrapService/Handshake`. The protobuf source
 defines its message shape; the versioned
 `stateforge_protocol.sfp.bootstrap.v1.contract` module is the authoritative
-consumer API for limits and canonical service/method identifiers.
+consumer API for limits and the canonical service identifier. The adjacent
+`validation` module is the authoritative semantic validator for request and
+response envelopes.
 
 | Resource | Limit |
 | --- | --- |
@@ -30,6 +32,13 @@ boundary. The session ID is an opaque value issued by the Provider and copied
 unchanged by consumers; its length is measured in Unicode code points rather
 than encoded bytes. Procedure-specific checks remain required even when the
 shared gRPC channel accepts a larger message for another SFP procedure.
+
+The canonical validator requires lowercase UUIDv4 runtime and Provider
+identities, an allocated endpoint generation, at least one unique valid SFP
+wire version, and a non-empty bounded session identifier. Consumers then apply
+only live-context checks: the Provider compares the requested identity and
+generation with the endpoint it is serving, while the Agent compares the
+response with the descriptor and version offer it used for that call.
 
 If no wire version overlaps, the Provider returns gRPC `UNIMPLEMENTED`. The
 Agent classifies the endpoint generation as incompatible rather than retrying

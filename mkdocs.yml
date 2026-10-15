@@ -30,6 +30,7 @@ nav:
       - Progress, results, and cancellation: procedures/progress-results-cancellation.md
       - Disconnection and recovery: procedures/disconnection-recovery.md
   - Generated Python contracts: reference/python-contracts.md
+  - Responsibility boundaries: reference/responsibility-boundaries.md
 
 plugins:
   - search
