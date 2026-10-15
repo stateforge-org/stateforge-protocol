@@ -167,7 +167,7 @@ def test_service_is_versioned_and_unary() -> None:
     service = manifest_pb2.DESCRIPTOR.services_by_name["ManifestService"]
     method = service.methods_by_name["GetManifest"]
 
-    assert service.full_name == "stateforge.sfp.manifest.v1.ManifestService"
+    assert service.full_name == contract.SERVICE_NAME
     assert tuple(service.methods_by_name) == ("GetManifest",)
     assert method.input_type == manifest_pb2.GetManifestRequest.DESCRIPTOR
     assert method.output_type == manifest_pb2.GetManifestResponse.DESCRIPTOR

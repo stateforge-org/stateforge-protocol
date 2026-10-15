@@ -41,7 +41,7 @@ PROCEDURE_LIMITS: Final[tuple[ProcedureTransportLimits, ...]] = (
         max_response_bytes=health_contract.MAX_RESPONSE_BYTES,
     ),
     ProcedureTransportLimits(
-        service_name=health_contract.MANIFEST_SERVICE,
+        service_name=manifest.SERVICE_NAME,
         max_request_bytes=manifest.MAX_REQUEST_BYTES,
         max_response_bytes=manifest.MAX_RESPONSE_BYTES,
     ),
