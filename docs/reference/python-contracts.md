@@ -117,31 +117,20 @@ Manifest request larger than 8 KiB remains invalid even when the shared server
 accepts messages up to 8 MiB, and each procedure must still enforce its own
 canonical JSON, nesting, collection, retry, and flow-control limits.
 
-Use the packaged validation schema with a Draft 2020-12 validator when building
-the consuming runtime. Validation libraries are development dependencies here;
-consumers choose their own compliant implementation.
+Use the packaged semantic validator when building the consuming runtime. It
+applies the versioned ProtoJSON schema, embedded-schema restrictions, resource
+bounds, RFC 8785 canonicalization, and revision verification consistently.
 
 ```python
-import json
-from importlib.resources import files
-
-from google.protobuf.json_format import MessageToDict
-from jsonschema import Draft202012Validator
-
 from stateforge_protocol.sfp.manifest.v1 import manifest_pb2
-
-schema = json.loads(
-    files("stateforge_protocol.sfp.manifest.v1")
-    .joinpath("manifest.schema.json")
-    .read_text()
+from stateforge_protocol.sfp.manifest.v1.validation import (
+    validate_manifest_response,
 )
 
 
-def validate_structure(response: manifest_pb2.GetManifestResponse) -> None:
-    """Validate structure before the runtime's semantic and session checks."""
-    Draft202012Validator(schema).validate(
-        MessageToDict(response, always_print_fields_with_no_presence=True)
-    )
+def accept_manifest(response: manifest_pb2.GetManifestResponse) -> bytes:
+    """Validate semantics and return the canonical manifest document."""
+    return validate_manifest_response(response)
 ```
 
 The [manifest procedure](../procedures/provider-manifest.md) defines required
