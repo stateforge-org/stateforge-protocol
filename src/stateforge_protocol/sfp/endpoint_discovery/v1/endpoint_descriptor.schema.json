@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stateforge.net/schema/sfp/endpoint-discovery/v1/endpoint-descriptor.schema.json",
+  "title": "StateForge Provider Endpoint Descriptor v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "provider_instance_id",
+    "endpoint_generation",
+    "transport"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "provider_instance_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "endpoint_generation": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "socket_path"],
+      "properties": {
+        "type": {
+          "const": "unix"
+        },
+        "socket_path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/"
+        }
+      }
+    }
+  }
+}

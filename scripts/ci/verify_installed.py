@@ -9,15 +9,21 @@ import pkgutil
 import sys
 from importlib import metadata
 from pathlib import Path
+from uuid import UUID
 
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
 from stateforge_protocol.sfp import health_contract, shared_endpoint
 from stateforge_protocol.sfp.bootstrap.v1 import bootstrap_pb2
 from stateforge_protocol.sfp.bootstrap.v1 import contract as bootstrap_contract
+from stateforge_protocol.sfp.endpoint_discovery.v1 import (
+    contract as endpoint_discovery_contract,
+)
 
 _DISTRIBUTION = "stateforge-protocol"
 _EXPECTED_HEALTH_RESPONSE_BYTES = 64
+_EXPECTED_DESCRIPTOR_MODE = 0o640
+_EXPECTED_SOCKET_MODE = 0o660
 
 
 def _verify_wire_contracts() -> int:
@@ -48,6 +54,31 @@ def _verify_wire_contracts() -> int:
         raise ValueError("Installed Health request limit is invalid")
     if health_contract.MAX_RESPONSE_BYTES != _EXPECTED_HEALTH_RESPONSE_BYTES:
         raise ValueError("Installed Health response limit is invalid")
+
+    provider_instance_id = UUID("7f7db7d8-68b4-4f71-9769-065b5c4f941c")
+    descriptor = endpoint_discovery_contract.EndpointDescriptor(
+        provider_instance_id=provider_instance_id,
+        endpoint_generation=4,
+        socket_path=(
+            f"/run/stateforge-agent/providers/{provider_instance_id}.4.sock"
+        ),
+    )
+    if (
+        endpoint_discovery_contract.parse_descriptor(
+            descriptor.to_json_bytes()
+        )
+        != descriptor
+    ):
+        raise ValueError("Installed endpoint descriptor contract is invalid")
+    if endpoint_discovery_contract.MAX_DESCRIPTOR_BYTES != 4 * 1024:
+        raise ValueError("Installed endpoint descriptor limit is invalid")
+    if (
+        endpoint_discovery_contract.DESCRIPTOR_MODE
+        != _EXPECTED_DESCRIPTOR_MODE
+    ):
+        raise ValueError("Installed endpoint descriptor mode is invalid")
+    if endpoint_discovery_contract.SOCKET_MODE != _EXPECTED_SOCKET_MODE:
+        raise ValueError("Installed endpoint socket mode is invalid")
 
     procedures = shared_endpoint.PROCEDURE_LIMITS
     service_names = [procedure.service_name for procedure in procedures]
