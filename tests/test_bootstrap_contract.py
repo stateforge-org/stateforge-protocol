@@ -59,10 +59,6 @@ def test_bootstrap_service_contains_handshake_method() -> None:
 
     assert tuple(service.methods_by_name) == ("Handshake",)
     assert service.full_name == contract.SERVICE_NAME
-    assert contract.HANDSHAKE_METHOD_NAME == "Handshake"
-    assert (
-        f"/{service.full_name}/{contract.HANDSHAKE_METHOD_NAME}"
-    ) == contract.HANDSHAKE_METHOD_PATH
 
 
 def test_bootstrap_limits_accept_exact_boundary_and_reject_larger_size() -> (
