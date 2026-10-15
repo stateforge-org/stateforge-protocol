@@ -13,6 +13,7 @@ from pathlib import Path
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
 from stateforge_protocol.sfp import health_contract, shared_endpoint
+from stateforge_protocol.sfp.bootstrap.v1 import bootstrap_pb2
 from stateforge_protocol.sfp.bootstrap.v1 import contract as bootstrap_contract
 
 _DISTRIBUTION = "stateforge-protocol"
@@ -21,6 +22,10 @@ _EXPECTED_HEALTH_RESPONSE_BYTES = 64
 
 def _verify_wire_contracts() -> int:
     """Verify installed Bootstrap, Health, and endpoint limit contracts."""
+    bootstrap_service = bootstrap_pb2.DESCRIPTOR.services_by_name[
+        "BootstrapService"
+    ]
+    handshake_method = bootstrap_service.methods_by_name["Handshake"]
     expected_bootstrap = {
         "service": "stateforge.sfp.bootstrap.v1.BootstrapService",
         "method": "Handshake",
@@ -31,8 +36,8 @@ def _verify_wire_contracts() -> int:
     }
     actual_bootstrap = {
         "service": bootstrap_contract.SERVICE_NAME,
-        "method": bootstrap_contract.HANDSHAKE_METHOD_NAME,
-        "path": bootstrap_contract.HANDSHAKE_METHOD_PATH,
+        "method": handshake_method.name,
+        "path": f"/{bootstrap_service.full_name}/{handshake_method.name}",
         "request": bootstrap_contract.MAX_REQUEST_BYTES,
         "response": bootstrap_contract.MAX_RESPONSE_BYTES,
         "session": bootstrap_contract.MAX_SESSION_ID_CODE_POINTS,
