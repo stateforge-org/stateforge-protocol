@@ -105,6 +105,45 @@ def test_contract_uses_official_grpc_health_descriptors() -> None:
     assert health_pb2_grpc.HealthServicer is not None
 
 
+def test_health_wire_limits_cover_exact_and_oversized_messages() -> None:
+    for target_size in (
+        contract.MAX_REQUEST_BYTES,
+        contract.MAX_REQUEST_BYTES + 1,
+    ):
+        # The service string is untrusted wire data. Adjusting it constructs
+        # exact serialized boundaries without changing the standard schema.
+        service_length = target_size
+        request = health_pb2.HealthCheckRequest()
+        for _ in range(8):
+            request.service = "x" * service_length
+            difference = target_size - request.ByteSize()
+            if difference == 0:
+                break
+            service_length += difference
+        assert request.ByteSize() == target_size
+        assert (request.ByteSize() <= contract.MAX_REQUEST_BYTES) is (
+            target_size == contract.MAX_REQUEST_BYTES
+        )
+
+    for target_size in (
+        contract.MAX_RESPONSE_BYTES,
+        contract.MAX_RESPONSE_BYTES + 1,
+    ):
+        # A standard response has only a tiny enum, but protobuf receivers must
+        # still bound unknown wire fields before accepting the message.
+        unknown_payload_size = target_size - 4
+        wire = (
+            b"\x08\x01\x12"
+            + bytes([unknown_payload_size])
+            + (b"x" * unknown_payload_size)
+        )
+        response = health_pb2.HealthCheckResponse.FromString(wire)
+        assert response.ByteSize() == target_size
+        assert (response.ByteSize() <= contract.MAX_RESPONSE_BYTES) is (
+            target_size == contract.MAX_RESPONSE_BYTES
+        )
+
+
 def test_no_custom_health_protobuf_is_introduced() -> None:
     assert not list((_ROOT / "proto").rglob("*health*.proto"))
     assert not list((_ROOT / "src").rglob("health_pb2*.py"))
@@ -229,3 +268,17 @@ def test_sanitized_diagnostic_boundary_is_portable() -> None:
             "accepted": False,
         },
     ]
+
+
+def test_health_documentation_matches_exported_limits() -> None:
+    documentation = (_ROOT / "docs" / "procedures" / "health.md").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        f"| Serialized request | {contract.MAX_REQUEST_BYTES // 1024} KiB |"
+        in documentation
+    )
+    assert (
+        f"| Serialized response | {contract.MAX_RESPONSE_BYTES} bytes |"
+        in documentation
+    )
