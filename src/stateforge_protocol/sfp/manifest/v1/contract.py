@@ -1,6 +1,8 @@
-"""Expose normative Provider Manifest v1 resource limits."""
+"""Expose the normative SFP Provider Manifest v1 wire contract."""
 
 from typing import Final
+
+SERVICE_NAME: Final = "stateforge.sfp.manifest.v1.ManifestService"
 
 # Serialized protobuf limits enforced at the RPC boundary.
 MAX_REQUEST_BYTES: Final = 8 * 1024
