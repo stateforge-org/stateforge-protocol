@@ -12,9 +12,55 @@ from pathlib import Path
 
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
-from stateforge_protocol.sfp import health_contract
+from stateforge_protocol.sfp import health_contract, shared_endpoint
+from stateforge_protocol.sfp.bootstrap.v1 import contract as bootstrap_contract
 
 _DISTRIBUTION = "stateforge-protocol"
+_EXPECTED_HEALTH_RESPONSE_BYTES = 64
+
+
+def _verify_wire_contracts() -> int:
+    """Verify installed Bootstrap, Health, and endpoint limit contracts."""
+    expected_bootstrap = {
+        "service": "stateforge.sfp.bootstrap.v1.BootstrapService",
+        "method": "Handshake",
+        "path": ("/stateforge.sfp.bootstrap.v1.BootstrapService/Handshake"),
+        "request": 64 * 1024,
+        "response": 8 * 1024,
+        "session": 255,
+    }
+    actual_bootstrap = {
+        "service": bootstrap_contract.SERVICE_NAME,
+        "method": bootstrap_contract.HANDSHAKE_METHOD_NAME,
+        "path": bootstrap_contract.HANDSHAKE_METHOD_PATH,
+        "request": bootstrap_contract.MAX_REQUEST_BYTES,
+        "response": bootstrap_contract.MAX_RESPONSE_BYTES,
+        "session": bootstrap_contract.MAX_SESSION_ID_CODE_POINTS,
+    }
+    if actual_bootstrap != expected_bootstrap:
+        raise ValueError("Installed Bootstrap contract limits are invalid")
+    if health_contract.MAX_REQUEST_BYTES != 4 * 1024:
+        raise ValueError("Installed Health request limit is invalid")
+    if health_contract.MAX_RESPONSE_BYTES != _EXPECTED_HEALTH_RESPONSE_BYTES:
+        raise ValueError("Installed Health response limit is invalid")
+
+    procedures = shared_endpoint.PROCEDURE_LIMITS
+    service_names = [procedure.service_name for procedure in procedures]
+    expected_services = {
+        health_contract.STANDARD_HEALTH_SERVICE,
+        *health_contract.SFP_SERVICE_NAMES,
+    }
+    if len(service_names) != len(expected_services):
+        raise ValueError(
+            "Installed endpoint procedure inventory is incomplete"
+        )
+    if set(service_names) != expected_services:
+        raise ValueError("Installed endpoint procedure inventory is invalid")
+    if shared_endpoint.MAX_PROVIDER_RECEIVE_BYTES != 8 * 1024 * 1024:
+        raise ValueError("Installed Provider receive ceiling is invalid")
+    if shared_endpoint.MAX_PROVIDER_SEND_BYTES != 16 * 1024 * 1024:
+        raise ValueError("Installed Provider send ceiling is invalid")
+    return len(procedures)
 
 
 def _read_json_object(path: Path) -> dict[str, object]:
@@ -184,6 +230,7 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
     for fixture in fixture_files:
         json.loads(fixture.read_text(encoding="utf-8"))
 
+    procedure_contract_count = _verify_wire_contracts()
     health_scenario_count = _verify_health_fixtures(fixture_root)
 
     return {
@@ -193,6 +240,7 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
         "generated_module_count": len(module_names),
         "schema_count": len(schemas),
         "fixture_count": len(fixture_files),
+        "procedure_contract_count": procedure_contract_count,
         "health_scenario_count": health_scenario_count,
     }
 

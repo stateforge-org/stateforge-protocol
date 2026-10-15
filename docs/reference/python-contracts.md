@@ -1,9 +1,11 @@
-# Generated Python contracts
+# Python contracts
 
 !!! warning
 
-    These modules are generated from Protocol Buffers. Treat the `.proto`
-    schema as the authoritative contract and never edit generated modules.
+    The `_pb2` and `_pb2_grpc` modules are generated from Protocol Buffers.
+    Treat the `.proto` schema as authoritative for their wire shape and never
+    edit generated modules. Handwritten `contract` modules expose normative
+    limits that Protocol Buffers cannot express.
 
 The bootstrap, manifest, capability-assessment, operation-admission,
 operation-lifecycle, and trigger-publication schemas generate these Python
@@ -70,6 +72,8 @@ with normative runtime limits therefore exposes them through a versioned
 from stateforge_protocol.sfp.capability_assessment.v1 import (
     contract as capability_assessment,
 )
+from stateforge_protocol.sfp.bootstrap.v1 import contract as bootstrap
+from stateforge_protocol.sfp import health_contract as health
 from stateforge_protocol.sfp.manifest.v1 import contract as manifest
 from stateforge_protocol.sfp.operation_admission.v1 import (
     contract as operation_admission,
@@ -83,33 +87,29 @@ from stateforge_protocol.sfp.trigger_publication.v1 import (
 ```
 
 Use the selected procedure's constants at its RPC boundary. For example,
-Manifest Exchange accepts at most `manifest.MAX_REQUEST_BYTES`, while
-Capability Assessment accepts at most
+Bootstrap accepts at most `bootstrap.MAX_REQUEST_BYTES`, standard gRPC Health
+accepts at most `health.MAX_REQUEST_BYTES`, Manifest Exchange accepts at most
+`manifest.MAX_REQUEST_BYTES`, and Capability Assessment accepts at most
 `capability_assessment.MAX_REQUEST_BYTES`. Collection constants such as
 `manifest.MAX_OPERATIONS` and
 `operation_admission.MAX_REQUIRED_IMPLEMENTATION_ROLES` mirror the packaged
 validation schemas. Depth, canonical-document size, retry, and flow-control
 constants cover limits that JSON Schema cannot express by itself.
 
-A process hosting every current Provider service can derive its shared gRPC
-transport ceiling from those same versioned contracts:
+A process hosting every current Provider service uses the authoritative shared
+endpoint inventory. Its aggregate transport ceilings are derived from every
+Bootstrap, Health, and SFP procedure in that inventory:
 
 ```python
-procedures = (
-    manifest,
-    capability_assessment,
-    operation_admission,
-    operation_lifecycle,
-    trigger_publication,
-)
+from stateforge_protocol.sfp import shared_endpoint
 
-server_receive_limit = max(
-    procedure.MAX_REQUEST_BYTES for procedure in procedures
-)  # 8 MiB
-server_send_limit = max(
-    procedure.MAX_RESPONSE_BYTES for procedure in procedures
-)  # 16 MiB
+server_receive_limit = shared_endpoint.MAX_PROVIDER_RECEIVE_BYTES  # 8 MiB
+server_send_limit = shared_endpoint.MAX_PROVIDER_SEND_BYTES  # 16 MiB
 ```
+
+`shared_endpoint.PROCEDURE_LIMITS` exposes the service name and both message
+directions for each registered procedure. Agent send uses the Provider receive
+ceiling; Agent receive uses the Provider send ceiling.
 
 The shared ceiling only prevents the transport from rejecting a valid message
 before its handler runs. It does not replace the smaller per-RPC checks. A

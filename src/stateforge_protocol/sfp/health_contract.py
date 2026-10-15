@@ -2,11 +2,17 @@
 
 from typing import Final
 
+from stateforge_protocol.sfp.bootstrap.v1 import contract as bootstrap_contract
+
 STANDARD_HEALTH_SERVICE: Final = "grpc.health.v1.Health"
 OVERALL_SERVICE_NAME: Final = ""
 PROVIDER_HEALTH_SERVICE: Final = OVERALL_SERVICE_NAME
 
-BOOTSTRAP_SERVICE: Final = "stateforge.sfp.bootstrap.v1.BootstrapService"
+# Serialized standard Health messages enforced at the RPC boundary.
+MAX_REQUEST_BYTES: Final = 4 * 1024
+MAX_RESPONSE_BYTES: Final = 64
+
+BOOTSTRAP_SERVICE: Final = bootstrap_contract.SERVICE_NAME
 MANIFEST_SERVICE: Final = "stateforge.sfp.manifest.v1.ManifestService"
 CAPABILITY_ASSESSMENT_SERVICE: Final = (
     "stateforge.sfp.capability_assessment.v1.CapabilityAssessmentService"

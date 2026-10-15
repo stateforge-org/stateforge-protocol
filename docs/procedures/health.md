@@ -20,9 +20,21 @@ definition, including the `grpc.health.v1.Health` service,
 consumers obtain those official generated bindings from
 `grpcio-health-checking` as `grpc_health.v1.health_pb2` and
 `grpc_health.v1.health_pb2_grpc`; StateForge does not generate or vendor a
-second copy. Health shares the same local HTTP/2 channel, endpoint trust,
-message-size controls, and process lifetime as the negotiated SFP services. It
-does not create a second connection or reverse RPC surface.
+second copy. StateForge's authoritative limits and service-name constants are
+published by `stateforge_protocol.sfp.health_contract`:
+
+| Resource | Limit |
+| --- | --- |
+| Serialized request | 4 KiB |
+| Serialized response | 64 bytes |
+
+The limits apply to each serialized `Check` or `Watch` message at the RPC
+boundary, including unknown protobuf fields. Health shares the same local
+HTTP/2 channel, endpoint trust, derived transport ceilings, and process
+lifetime as the negotiated SFP services. It does not create a second
+connection or reverse RPC surface. Its smaller per-procedure limits remain
+mandatory even though another service requires a larger shared-channel
+ceiling.
 
 The Agent watches `Health.Watch(service="")`. In standard gRPC Health, the
 empty service name represents the whole server; in SFP it represents the
