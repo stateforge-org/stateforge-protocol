@@ -150,8 +150,13 @@ default field-omission behavior for validation or revision calculation.
 The protobuf definition owns field names, numbers, types and service shape.
 The JSON Schema adds required-field, identifier, uniqueness, count, and nested
 JSON Schema constraints. Protobuf deserialization alone is not validation.
-Neither generated bindings nor this package run a server, negotiate schemas,
-validate a session, construct manifests, or maintain Agent caches.
+The Python package exposes
+`stateforge_protocol.sfp.manifest.v1.validation` for structural validation,
+embedded-schema validation, bounded RFC 8785 canonicalization, revision
+calculation, and revision verification. Calling those functions is explicit;
+generated bindings do not invoke them automatically. The package does not run
+a server, negotiate schemas, validate a live session, construct Provider
+author declarations, or maintain Agent caches.
 
 The schema enforces canonical lowercase UUIDv4 identities, positive decimal
 generation strings, SemVer, required messages, unique lists, identifier syntax,
@@ -164,6 +169,8 @@ enforce the following limits before accepting a snapshot:
 | Serialized request | 8 KiB |
 | Serialized response | 2 MiB |
 | Canonical revision preimage | 1 MiB |
+| JSON nodes processed during validation | 100,000 |
+| Schema nodes processed per embedded document | 25,000 |
 | Each operations, triggers, or requirements map | 1,024 entries |
 | Platform pairs | 256 unique pairs |
 | Compliance roles per operation | 64 unique roles |
@@ -251,9 +258,11 @@ is `sha256:34f54f69855f1fbebef4d3d6bb74c0238785e0f8ef43f9efb1a12e6b4353183d`.
    manifest_schema_version, manifest_revision)` with a previously **validated**
    cache entry. On a match, reuse that exact cached declaration; do not merge
    fields from the new response or skip current session/generation checks.
-4. For a new key, validate the complete schema, embedded references, identity,
-   profile claims, limits, and canonical digest before acceptance. Store only
-   accepted snapshots. A revision is a change detector, not authentication.
+4. For a new key, call the versioned semantic validator before acceptance. It
+   validates the complete schema, embedded references, identity, claim shapes,
+   limits, and canonical digest. Store only accepted snapshots. A revision is
+   a change detector, not authentication. Profile-specific conformance still
+   requires the validators and behavior tests defined by that profile.
 5. An invalid manifest leaves the integration unusable even if gRPC health is
    `SERVING`. Block operational requests. A valid changed manifest replaces the
    normalized declaration and triggers Agent-owned reconciliation.

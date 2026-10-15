@@ -35,6 +35,7 @@ from stateforge_protocol.sfp.operation_lifecycle.v1.contract import (
     MAX_RESULT_STRING_CODE_POINTS,
     MAX_SNAPSHOT_BYTES,
     MAX_STALLED_DELIVERY_SECONDS,
+    SERVICE_NAME,
 )
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "operation_lifecycle"
@@ -187,9 +188,7 @@ def test_wire_fixture_round_trip(fixture, definition, message_type) -> None:
 
 def test_service_streaming_descriptors_and_p4_reuse() -> None:
     service = pb.DESCRIPTOR.services_by_name["OperationLifecycleService"]
-    assert service.full_name == (
-        "stateforge.sfp.operation_lifecycle.v1.OperationLifecycleService"
-    )
+    assert service.full_name == SERVICE_NAME
     assert set(service.methods_by_name) == {
         "WatchOperation",
         "CancelOperation",

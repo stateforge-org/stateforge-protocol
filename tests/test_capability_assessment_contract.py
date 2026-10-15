@@ -197,9 +197,7 @@ def test_service_is_versioned_and_unary() -> None:
     ]
     method = service.methods_by_name["AssessCapabilities"]
 
-    assert service.full_name == (
-        "stateforge.sfp.capability_assessment.v1.CapabilityAssessmentService"
-    )
+    assert service.full_name == contract.SERVICE_NAME
     assert tuple(service.methods_by_name) == ("AssessCapabilities",)
     request_type = capability_assessment_pb2.AssessCapabilitiesRequest
     response_type = capability_assessment_pb2.AssessCapabilitiesResponse

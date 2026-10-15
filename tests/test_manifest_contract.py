@@ -68,6 +68,7 @@ def test_versioned_contract_exposes_normative_limits() -> None:
 def test_versioned_contract_limits_match_packaged_schema() -> None:
     definitions = _SCHEMA["$defs"]
     manifest = definitions["providerManifest"]["properties"]
+    request = definitions["getManifestRequest"]["properties"]
 
     assert manifest["operations"]["maxProperties"] == contract.MAX_OPERATIONS
     assert manifest["triggers"]["maxProperties"] == contract.MAX_TRIGGERS
@@ -79,6 +80,15 @@ def test_versioned_contract_limits_match_packaged_schema() -> None:
     assert (
         definitions["operation"]["properties"]["implements"]["maxItems"]
         == contract.MAX_PROFILE_CLAIMS_PER_OPERATION
+    )
+    schema_versions = request["supportedManifestSchemaVersions"]
+    assert (
+        schema_versions["maxItems"] == contract.MAX_SUPPORTED_SCHEMA_VERSIONS
+    )
+    assert schema_versions["items"]["maximum"] == contract.MAX_SCHEMA_VERSION
+    assert (
+        definitions["sessionId"]["maxLength"]
+        == contract.MAX_SESSION_ID_CODE_POINTS
     )
 
 
@@ -167,7 +177,7 @@ def test_service_is_versioned_and_unary() -> None:
     service = manifest_pb2.DESCRIPTOR.services_by_name["ManifestService"]
     method = service.methods_by_name["GetManifest"]
 
-    assert service.full_name == "stateforge.sfp.manifest.v1.ManifestService"
+    assert service.full_name == contract.SERVICE_NAME
     assert tuple(service.methods_by_name) == ("GetManifest",)
     assert method.input_type == manifest_pb2.GetManifestRequest.DESCRIPTOR
     assert method.output_type == manifest_pb2.GetManifestResponse.DESCRIPTOR

@@ -125,9 +125,7 @@ def test_service_is_versioned_and_bidirectional_streaming() -> None:
     ]
     method = service.methods_by_name["StreamTriggers"]
 
-    assert service.full_name == (
-        "stateforge.sfp.trigger_publication.v1.TriggerPublicationService"
-    )
+    assert service.full_name == contract.SERVICE_NAME
     assert tuple(service.methods_by_name) == ("StreamTriggers",)
     assert method.input_type == (
         trigger_publication_pb2.StreamTriggersRequest.DESCRIPTOR

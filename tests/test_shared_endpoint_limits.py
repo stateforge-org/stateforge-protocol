@@ -7,6 +7,7 @@ from stateforge_protocol.sfp.bootstrap.v1 import bootstrap_pb2, contract
 from stateforge_protocol.sfp.capability_assessment.v1 import (
     capability_assessment_pb2,
 )
+from stateforge_protocol.sfp.manifest.v1 import contract as manifest_contract
 from stateforge_protocol.sfp.manifest.v1 import manifest_pb2
 from stateforge_protocol.sfp.operation_admission.v1 import (
     operation_admission_pb2,
@@ -56,6 +57,7 @@ def test_inventory_contains_every_service_registered_on_shared_endpoint() -> (
     assert len(actual) == len(set(actual))
     assert actual[0] == contract.SERVICE_NAME
     assert actual[1] == health_contract.STANDARD_HEALTH_SERVICE
+    assert actual[2] == manifest_contract.SERVICE_NAME
     assert set(actual) == {
         health_contract.STANDARD_HEALTH_SERVICE,
         *health_contract.SFP_SERVICE_NAMES,
