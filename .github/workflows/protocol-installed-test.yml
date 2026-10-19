@@ -57,11 +57,12 @@ jobs:
           name: ${{ inputs.artifact-name }}
           path: ${{ runner.temp }}/stateforge-protocol-dist
 
-      - name: Verify installed wheel
+      - name: Verify installed distributions
         uses: ./.github/actions/python/test-installed
         with:
           artifact-directory: ${{ runner.temp }}/stateforge-protocol-dist
           evidence-directory: evidence/installed
+          verify-sdist: ${{ matrix.os == 'ubuntu-24.04' && matrix.python == '3.13' }}
 
       - name: Collect bounded installed-package evidence
         if: ${{ always() }}

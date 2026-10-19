@@ -44,6 +44,20 @@ def test_protocol_builder_preserves_artifact_contract() -> None:
         assert f"{output}:" in action
 
 
+def test_installed_verifier_covers_wheel_and_sdist() -> None:
+    """Verify both distribution formats without multiplying the full matrix."""
+    action = read(ACTIONS / "python" / "test-installed" / "action.yml")
+    workflow = read(WORKFLOWS / "protocol-installed-test.yml")
+
+    assert "verify-sdist:" in action
+    assert "sdist-path=${sdist_path}" in action
+    assert "installed-sdist.log" in action
+    assert (
+        "verify-sdist: ${{ matrix.os == 'ubuntu-24.04' && "
+        "matrix.python == '3.13' }}" in workflow
+    )
+
+
 def test_health_contract_is_registered_in_reusable_validation() -> None:
     """Run focused Health vectors in every standard source-validation path."""
     health_action = read(ACTIONS / "contracts" / "health" / "action.yml")

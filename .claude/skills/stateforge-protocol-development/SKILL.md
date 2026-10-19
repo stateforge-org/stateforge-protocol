@@ -40,6 +40,18 @@ next procedure in the same pull request.
   filesystem, session, retry, cache, admission, or lifecycle state. They map
   Protocol validation failures into their local error surfaces rather than
   redefining the rule.
+- Each versioned procedure exposes its context-independent semantics through a
+  public `validation.py`. Keep that module domain-focused: its exports are the
+  procedure error type and message or exchange validators, not generic parsing
+  helpers.
+- Reuse private `stateforge_protocol.sfp._validation` mechanics for packaged
+  schemas, ProtoJSON projection, scalar translation, resource-bounded JSON,
+  and canonicalization. That private module must not own procedure constants,
+  schema paths, service identities, or runtime-state policy.
+- Isolate a complex procedure-only algorithm in a private module beside the
+  procedure when doing so keeps the public validator readable. Preserve public
+  validator paths, signatures, return types, and errors consumed by Agent and
+  Provider.
 - Backup engines are in-process Agent tools and never SFP peers.
 - SF-AOP and the Control Plane are mandatory later MVP phases, but must not be
   invented during the active SFP phase.
@@ -93,6 +105,12 @@ behavior in three independent implementations is a failure of ownership, not
 proof of interoperability. Reconcile the inventory against the final diff and
 name any repository or procedure that was not inspected before claiming the
 boundary is complete.
+
+For a new procedure, add an architectural test proving that its public
+`validation.py` does not reintroduce shared schema loading, ProtoJSON,
+canonicalization, or traversal machinery. Test the private shared mechanism
+once, then test the procedure's observable domain semantics through its public
+validator.
 
 ## Respect cross-repository delivery order
 

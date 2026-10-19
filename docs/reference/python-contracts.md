@@ -117,6 +117,36 @@ Manifest request larger than 8 KiB remains invalid even when the shared server
 accepts messages up to 8 MiB, and each procedure must still enforce its own
 canonical JSON, nesting, collection, retry, and flow-control limits.
 
+## Canonical validation architecture
+
+Context-independent procedure semantics are exposed from the owning version's
+public `validation` module. Consumers import that procedure module; they do not
+import Protocol's private `sfp._validation` support module or reimplement its
+mechanics.
+
+The ownership split is deliberate:
+
+| Module | Responsibility |
+| --- | --- |
+| `contract.py` | Normative procedure constants, service identities, message bounds, and small named predicates |
+| `validation.py` | Public procedure error type, message validators, exchange validators, and domain-specific correlation rules |
+| `sfp._validation` | Private schema loading, ProtoJSON projection, shared scalar translation, bounded traversal, and canonical JSON mechanics |
+| Private procedure helpers | Complex algorithms meaningful only to that procedure, such as Manifest embedded-schema inspection |
+
+A procedure `validation.py` must read as the procedure contract rather than as
+a collection of generic parsers. It may compose private shared mechanics, but
+its public API and errors remain procedure-owned and versioned. Shared support
+contains no procedure constants, schema paths, service names, or runtime-state
+policy.
+
+New procedures must ship their canonical validators with their wire contract.
+Their tests must prove both the semantic behavior and that generic mechanics
+were not copied back into the procedure module. Agent and Provider integrations
+then call those public validators and add only checks that require local state.
+Bootstrap, Manifest Exchange, and Capability Assessment currently implement
+this pattern. A missing validator for another procedure is an upstream Protocol
+gap, not permission for a consumer runtime to create its own canonical copy.
+
 Use the packaged semantic validator when building the consuming runtime. It
 applies the versioned ProtoJSON schema, embedded-schema restrictions, resource
 bounds, RFC 8785 canonicalization, and revision verification consistently.
@@ -142,39 +172,33 @@ those requirements. Populate `GetManifestRequest.expected_session_id` from
 reusing a cached manifest revision. JSON Schema checks the opaque string's
 shape; consumer runtimes enforce the active-session relationship.
 
-The same pattern validates a capability-assessment response:
+Capability Assessment exposes one canonical validator for each message and one
+for the complete request/response exchange:
 
 ```python
-import json
-from importlib.resources import files
-
-from google.protobuf.json_format import MessageToDict
-from jsonschema import Draft202012Validator
-
 from stateforge_protocol.sfp.capability_assessment.v1 import (
     capability_assessment_pb2,
 )
-
-schema = json.loads(
-    files("stateforge_protocol.sfp.capability_assessment.v1")
-    .joinpath("capability_assessment.schema.json")
-    .read_text()
+from stateforge_protocol.sfp.capability_assessment.v1.validation import (
+    validate_assessment_exchange,
 )
 
 
-def validate_assessment(
+def accept_assessment(
+    request: capability_assessment_pb2.AssessCapabilitiesRequest,
     response: capability_assessment_pb2.AssessCapabilitiesResponse,
 ) -> None:
-    """Validate structure before the runtime's semantic and session checks."""
-    Draft202012Validator(schema).validate(
-        MessageToDict(response, always_print_fields_with_no_presence=True)
-    )
+    """Validate both messages and their context-independent correlation."""
+    validate_assessment_exchange(request, response)
 ```
 
 The [capability-assessment procedure](../procedures/capability-assessment.md)
-defines required session/manifest fencing, normalized findings, cross-field
-invariants, and failure mapping. Constructing a generated message does not
-enforce those requirements.
+defines runtime session/manifest fencing, declaration checks, readiness,
+failure mapping, deadlines, and retry behavior. The canonical validator
+enforces the complete ProtoJSON schema, context nesting, normalized finding
+invariants, unique detail identifiers, request/response correlation, and exact
+ordered finding coverage. Constructing a generated message does not perform
+either class of validation.
 
 Operation-admission structure is validated with the schema packaged beside
 `operation_admission_pb2` in the same way. The

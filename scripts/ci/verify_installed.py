@@ -1,4 +1,4 @@
-"""Verify the installed StateForge Protocol wheel outside its checkout."""
+"""Verify installed StateForge Protocol distributions outside checkout."""
 
 from __future__ import annotations
 
@@ -11,11 +11,18 @@ from importlib import metadata
 from pathlib import Path
 from uuid import UUID
 
+from google.protobuf.json_format import ParseDict
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
 from stateforge_protocol.sfp import health_contract, shared_endpoint
 from stateforge_protocol.sfp.bootstrap.v1 import bootstrap_pb2
 from stateforge_protocol.sfp.bootstrap.v1 import contract as bootstrap_contract
+from stateforge_protocol.sfp.capability_assessment.v1 import (
+    capability_assessment_pb2,
+)
+from stateforge_protocol.sfp.capability_assessment.v1 import (
+    validation as capability_validation,
+)
 from stateforge_protocol.sfp.endpoint_discovery.v1 import (
     contract as endpoint_discovery_contract,
 )
@@ -206,6 +213,33 @@ def _verify_health_fixtures(fixture_root: Path) -> int:
     )
 
 
+def _verify_capability_assessment_validation(fixture_root: Path) -> int:
+    """Exercise canonical assessment validation from the installed package."""
+    root = fixture_root / "capability_assessment"
+    request = ParseDict(
+        _read_json_object(root / "request.json"),
+        capability_assessment_pb2.AssessCapabilitiesRequest(),
+    )
+    response = ParseDict(
+        _read_json_object(root / "response-mixed-states.json"),
+        capability_assessment_pb2.AssessCapabilitiesResponse(),
+    )
+    capability_validation.validate_assess_capabilities_request(request)
+    capability_validation.validate_assess_capabilities_response(response)
+    capability_validation.validate_assessment_exchange(request, response)
+
+    response.session_id = "mismatched-session"
+    try:
+        capability_validation.validate_assessment_exchange(request, response)
+    except capability_validation.CapabilityAssessmentValidationError:
+        pass
+    else:
+        raise ValueError(
+            "Installed Capability Assessment exchange validation is inactive"
+        )
+    return 2
+
+
 def _is_within(path: Path, parent: Path) -> bool:
     """Return whether ``path`` is contained below ``parent``."""
     try:
@@ -268,6 +302,9 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
 
     procedure_contract_count = _verify_wire_contracts()
     health_scenario_count = _verify_health_fixtures(fixture_root)
+    capability_assessment_vector_count = (
+        _verify_capability_assessment_validation(fixture_root)
+    )
 
     return {
         "distribution": _DISTRIBUTION,
@@ -278,6 +315,9 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
         "fixture_count": len(fixture_files),
         "procedure_contract_count": procedure_contract_count,
         "health_scenario_count": health_scenario_count,
+        "capability_assessment_vector_count": (
+            capability_assessment_vector_count
+        ),
     }
 
 

@@ -1,5 +1,5 @@
-name: Test an installed StateForge Protocol wheel
-description: Verify exact artifact bytes in an isolated environment outside the checkout.
+name: Test installed StateForge Protocol distributions
+description: Verify exact artifact bytes in isolated environments outside the checkout.
 
 inputs:
   artifact-directory:
@@ -9,6 +9,10 @@ inputs:
     description: Directory receiving installed-package evidence.
     required: false
     default: evidence/installed
+  verify-sdist:
+    description: Also install and verify the exact source distribution.
+    required: false
+    default: "false"
 
 outputs:
   version:
@@ -52,10 +56,12 @@ runs:
           exit 1
         fi
         wheel_path="$(pwd)/${wheels[0]}"
+        sdist_path="$(pwd)/${sdists[0]}"
         wheel_sha256="$("${checksum_command[@]}" "${wheels[0]}" | awk '{print $1}')"
         {
           echo "version=${version}"
           echo "wheel-path=${wheel_path}"
+          echo "sdist-path=${sdist_path}"
           echo "wheel-sha256=${wheel_sha256}"
         } >> "${GITHUB_OUTPUT}"
 
@@ -86,3 +92,32 @@ runs:
             --expected-version "${EXPECTED_VERSION}" \
             --workspace "${GITHUB_WORKSPACE}"
         } 2>&1 | tee "${EVIDENCE_DIRECTORY}/installed-package.log"
+
+    - name: Install and verify exact source distribution outside the checkout
+      if: ${{ inputs.verify-sdist == 'true' }}
+      shell: bash
+      env:
+        EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+        EXPECTED_VERSION: ${{ steps.identity.outputs.version }}
+        SDIST_PATH: ${{ steps.identity.outputs.sdist-path }}
+      run: |
+        set -euo pipefail
+        environment="${RUNNER_TEMP}/stateforge-protocol-sdist-${EXPECTED_VERSION}"
+        python -m venv "${environment}"
+        if [[ "${RUNNER_OS}" == "Windows" ]]; then
+          isolated_python="${environment}/Scripts/python.exe"
+        else
+          isolated_python="${environment}/bin/python"
+        fi
+        mkdir -p "${EVIDENCE_DIRECTORY}"
+        {
+          "${isolated_python}" -m pip install \
+            --disable-pip-version-check \
+            "${SDIST_PATH}"
+          cd "${RUNNER_TEMP}"
+          unset PYTHONPATH PYTHONHOME
+          "${isolated_python}" -I \
+            "${GITHUB_WORKSPACE}/scripts/ci/verify_installed.py" \
+            --expected-version "${EXPECTED_VERSION}" \
+            --workspace "${GITHUB_WORKSPACE}"
+        } 2>&1 | tee "${EVIDENCE_DIRECTORY}/installed-sdist.log"
