@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+import re
 from importlib.resources import files
 from pathlib import Path
 
@@ -40,6 +41,23 @@ _MANIFEST_SCHEMA = json.loads(
     .joinpath("manifest.schema.json")
     .read_text()
 )
+_CANONICAL_REASON_CODES = {
+    "REASON_CODE_ACCESS_DENIED": (
+        "stateforge.capability_assessment.v1.access_denied"
+    ),
+    "REASON_CODE_PERMISSION_UNCERTAIN": (
+        "stateforge.capability_assessment.v1.permission_uncertain"
+    ),
+    "REASON_CODE_UNSUPPORTED_VENDOR_STATE": (
+        "stateforge.capability_assessment.v1.unsupported_vendor_state"
+    ),
+    "REASON_CODE_INSUFFICIENT_EVIDENCE": (
+        "stateforge.capability_assessment.v1.insufficient_evidence"
+    ),
+    "REASON_CODE_REQUIREMENT_UNMET": (
+        "stateforge.capability_assessment.v1.requirement_unmet"
+    ),
+}
 
 
 def _container_depth(value) -> int:
@@ -102,6 +120,21 @@ def test_versioned_contract_exposes_normative_limits() -> None:
     }
 
     assert {name: getattr(contract, name) for name in expected} == expected
+
+
+def test_versioned_contract_exposes_canonical_reason_codes() -> None:
+    assert {
+        name: getattr(contract, name) for name in _CANONICAL_REASON_CODES
+    } == _CANONICAL_REASON_CODES
+
+    procedure = Path("docs/procedures/capability-assessment.md").read_text()
+    reason_section = procedure.split("### Reason-code vocabulary", 1)[1].split(
+        "## Structural and semantic validation", 1
+    )[0]
+    documented = set(
+        re.findall(r"^\| `([^`]+)` \|", reason_section, flags=re.MULTILINE)
+    )
+    assert documented == set(_CANONICAL_REASON_CODES.values())
 
 
 def test_versioned_contract_limits_match_packaged_schema() -> None:
@@ -652,13 +685,7 @@ def test_custom_reason_and_requirement_identifiers_are_extensible(
 
 @pytest.mark.parametrize(
     "reason_code",
-    [
-        "stateforge.capability_assessment.v1.access_denied",
-        "stateforge.capability_assessment.v1.permission_uncertain",
-        "stateforge.capability_assessment.v1.unsupported_vendor_state",
-        "stateforge.capability_assessment.v1.insufficient_evidence",
-        "stateforge.capability_assessment.v1.requirement_unmet",
-    ],
+    _CANONICAL_REASON_CODES.values(),
 )
 def test_canonical_reason_codes_validate(
     response, validator, reason_code

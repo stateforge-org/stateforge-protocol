@@ -23,3 +23,20 @@ MAX_OPERATION_IDENTIFIERS: Final = 64
 MAX_REQUIREMENT_FINDINGS_PER_OPERATION: Final = 64
 MAX_REASONS_PER_OPERATION: Final = 16
 MAX_CONSTRAINTS_PER_OPERATION: Final = 32
+
+# Canonical reusable values from the open reason-code vocabulary.
+REASON_CODE_ACCESS_DENIED: Final[str] = (
+    "stateforge.capability_assessment.v1.access_denied"
+)
+REASON_CODE_PERMISSION_UNCERTAIN: Final[str] = (
+    "stateforge.capability_assessment.v1.permission_uncertain"
+)
+REASON_CODE_UNSUPPORTED_VENDOR_STATE: Final[str] = (
+    "stateforge.capability_assessment.v1.unsupported_vendor_state"
+)
+REASON_CODE_INSUFFICIENT_EVIDENCE: Final[str] = (
+    "stateforge.capability_assessment.v1.insufficient_evidence"
+)
+REASON_CODE_REQUIREMENT_UNMET: Final[str] = (
+    "stateforge.capability_assessment.v1.requirement_unmet"
+)
