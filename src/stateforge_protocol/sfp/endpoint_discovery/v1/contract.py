@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 from typing import Final, TypeGuard
 from uuid import UUID
 
-from stateforge_protocol.sfp import primitives
+from stateforge_protocol.sfp import _validation, primitives
 
 SCHEMA_VERSION: Final = "1"
 DESCRIPTOR_SUFFIX: Final = ".sfp.json"
@@ -38,6 +38,9 @@ _TRANSPORT_FIELDS: Final = frozenset({"type", "socket_path"})
 
 class EndpointDescriptorContractError(ValueError):
     """Report endpoint descriptor data outside the versioned contract."""
+
+
+_VALIDATION = _validation.ValidationContext(EndpointDescriptorContractError)
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,12 +236,10 @@ def _validate_provider_instance_id(provider_instance_id: UUID) -> None:
 
 def _parse_provider_instance_id(value: str) -> UUID:
     """Parse one canonical lowercase Provider UUIDv4."""
-    try:
-        return primitives.parse_canonical_uuid4(value)
-    except primitives.ProtocolScalarError as error:
-        raise EndpointDescriptorContractError(
-            "provider_instance_id must be a canonical UUIDv4"
-        ) from error
+    return _VALIDATION.require_canonical_uuid4(
+        value,
+        "provider_instance_id must be a canonical UUIDv4",
+    )
 
 
 def _require_exact_fields(

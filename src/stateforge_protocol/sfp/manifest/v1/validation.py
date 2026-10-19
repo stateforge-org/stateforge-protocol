@@ -3,62 +3,53 @@
 from __future__ import annotations
 
 import hashlib
-import io
-import json
-from collections import deque
 from dataclasses import dataclass
-from functools import lru_cache
-from importlib.resources import files
-from typing import Any
+from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID
 
-import rfc8785
-from google.protobuf.json_format import MessageToDict
-from jsonschema import Draft202012Validator
-from referencing import Registry
-from referencing.exceptions import Unresolvable
-from referencing.jsonschema import DRAFT202012
-
-from stateforge_protocol.sfp.manifest.v1 import contract, manifest_pb2
-
-JSON_SCHEMA_DRAFT_2020_12_URI = str(Draft202012Validator.META_SCHEMA["$id"])
-
-_SCHEMA_MAPS = (
-    "$defs",
-    "definitions",
-    "properties",
-    "patternProperties",
-    "dependentSchemas",
+from stateforge_protocol.sfp import _validation
+from stateforge_protocol.sfp.manifest.v1 import (
+    _schema_inspection,
+    contract,
+    manifest_pb2,
 )
-_SCHEMA_LISTS = ("allOf", "anyOf", "oneOf", "prefixItems")
-_SCHEMA_SINGLE = (
-    "additionalProperties",
-    "unevaluatedProperties",
-    "propertyNames",
-    "items",
-    "unevaluatedItems",
-    "contains",
-    "not",
-    "if",
-    "then",
-    "else",
-    "contentSchema",
+
+if TYPE_CHECKING:
+    from jsonschema import Draft202012Validator
+
+__all__ = [
+    "DEFAULT_VALIDATION_LIMITS",
+    "JSON_SCHEMA_DRAFT_2020_12_URI",
+    "ManifestRevisionKey",
+    "ManifestValidationError",
+    "ManifestValidationLimits",
+    "bounded_json",
+    "canonical_bytes",
+    "compute_manifest_revision",
+    "contract_validator",
+    "validate_manifest_document",
+    "validate_manifest_key",
+    "validate_manifest_response",
+    "validate_schema",
+    "validate_structure",
+]
+
+JSON_SCHEMA_DRAFT_2020_12_URI = (
+    _schema_inspection.JSON_SCHEMA_DRAFT_2020_12_URI
 )
-_SAME_INSTANCE = {
-    "allOf",
-    "anyOf",
-    "oneOf",
-    "not",
-    "if",
-    "then",
-    "else",
-    "dependentSchemas",
-}
-_VALUES = {"default", "examples", "const", "enum"}
+
+_SCHEMA: Final = _validation.PackagedSchema(
+    package="stateforge_protocol.sfp.manifest.v1",
+    resource="manifest.schema.json",
+    contract_name="P1",
+)
 
 
 class ManifestValidationError(ValueError):
     """Report invalid Manifest data without exposing rejected values."""
+
+
+_VALIDATION: Final = _validation.ValidationContext(ManifestValidationError)
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +86,7 @@ class ManifestRevisionKey:
     revision: str
 
 
-def bounded_json(  # noqa: PLR0912
+def bounded_json(
     value: object,
     path: str,
     *,
@@ -103,107 +94,41 @@ def bounded_json(  # noqa: PLR0912
     limits: ManifestValidationLimits = DEFAULT_VALIDATION_LIMITS,
 ) -> None:
     """Reject excessive or non-JSON content before schema processing."""
-    pending = [(value, 0)]
-    nodes = 0
-    size = 0
-    while pending:
-        item, depth = pending.pop()
-        nodes += 1
-        if nodes > limits.max_json_nodes:
-            raise ManifestValidationError(
-                f"{path}: JSON resource limit exceeded"
-            )
-        if isinstance(item, (dict, list)):
-            depth += 1
-            if depth > depth_limit:
-                raise ManifestValidationError(
-                    f"{path}: JSON nesting limit exceeded"
-                )
-            if len(item) > limits.max_json_nodes:
-                raise ManifestValidationError(
-                    f"{path}: JSON resource limit exceeded"
-                )
-            size += len(item) + 2
-            if isinstance(item, dict):
-                for key, child in item.items():
-                    if not isinstance(key, str):
-                        raise ManifestValidationError(
-                            f"{path}: JSON keys must be strings"
-                        )
-                    pending.append((key, depth))
-                    pending.append((child, depth))
-            else:
-                pending.extend((child, depth) for child in item)
-        elif isinstance(item, str):
-            if len(item) > contract.MAX_CANONICAL_REVISION_PREIMAGE_BYTES:
-                raise ManifestValidationError(
-                    f"{path}: JSON resource limit exceeded"
-                )
-            try:
-                size += len(item.encode("utf-8")) + 2
-            except UnicodeError:
-                raise ManifestValidationError(
-                    f"{path}: invalid Unicode"
-                ) from None
-        elif item is None or isinstance(item, (bool, int, float)):
-            size += 1
-        else:
-            raise ManifestValidationError(f"{path}: non-JSON value")
-        if size > contract.MAX_CANONICAL_REVISION_PREIMAGE_BYTES:
-            raise ManifestValidationError(
-                f"{path}: JSON resource limit exceeded"
-            )
-
-
-class _BoundedBuffer(io.BytesIO):
-    """Stop canonical output before it exceeds the v1 contract."""
-
-    def write(self, data: bytes, /) -> int:  # type: ignore[override]
-        if (
-            self.tell() + len(data)
-            > contract.MAX_CANONICAL_REVISION_PREIMAGE_BYTES
-        ):
-            raise ManifestValidationError(
-                "manifest: canonical preimage limit exceeded"
-            )
-        return super().write(data)
+    _VALIDATION.require_bounded_json(
+        value,
+        path,
+        maximum_depth=depth_limit,
+        maximum_nodes=limits.max_json_nodes,
+        maximum_bytes=contract.MAX_CANONICAL_REVISION_PREIMAGE_BYTES,
+    )
 
 
 def canonical_bytes(value: dict[str, Any]) -> bytes:
     """Return bounded RFC 8785 bytes for a JSON-compatible object."""
-    stream = _BoundedBuffer()
-    try:
-        rfc8785.dump(value, stream)
-    except rfc8785.CanonicalizationError:
-        raise ManifestValidationError(
-            "manifest: non-interoperable JSON value"
-        ) from None
-    return stream.getvalue()
+    return _VALIDATION.canonicalize_json(
+        value,
+        maximum_bytes=contract.MAX_CANONICAL_REVISION_PREIMAGE_BYTES,
+        limit_message="manifest: canonical preimage limit exceeded",
+        invalid_message="manifest: non-interoperable JSON value",
+    )
 
 
-@lru_cache(maxsize=16)
 def contract_validator(definition: str) -> Draft202012Validator:
     """Load a validation projection from the installed Protocol package."""
-    document = json.loads(
-        files("stateforge_protocol.sfp.manifest.v1")
-        .joinpath("manifest.schema.json")
-        .read_text(encoding="utf-8")
-    )
-    return Draft202012Validator(
-        {"$ref": f"#/$defs/{definition}", "$defs": document["$defs"]}
-    )
+    return _SCHEMA.validator(definition)
 
 
 def validate_structure(value: object, definition: str, path: str) -> None:
     """Validate one packaged ProtoJSON projection without leaking values."""
-    error = next(contract_validator(definition).iter_errors(value), None)
-    if error is not None:
-        raise ManifestValidationError(
-            f"{path}: violates P1 {error.validator} constraint"
-        )
+    _VALIDATION.validate_schema_definition(
+        _SCHEMA,
+        value,
+        definition,
+        path,
+    )
 
 
-def validate_schema(  # noqa: PLR0912, PLR0915
+def validate_schema(
     document: dict[str, Any],
     path: str,
     *,
@@ -213,84 +138,12 @@ def validate_schema(  # noqa: PLR0912, PLR0915
     bounded_json(document, path, limits=limits)
     canonical_bytes(document)
     validate_structure(document, "schemaDocument", path)
-    nodes: dict[int, dict[str, Any]] = {}
-    children: dict[int, set[int]] = {}
-    same: dict[int, set[int]] = {}
-    pending = [document]
-    while pending:
-        node = pending.pop()
-        key = id(node)
-        if key in nodes:
-            continue
-        if (
-            node.get("$schema", JSON_SCHEMA_DRAFT_2020_12_URI)
-            != JSON_SCHEMA_DRAFT_2020_12_URI
-        ):
-            raise ManifestValidationError(
-                f"{path}: unsupported nested schema dialect"
-            )
-        nodes[key] = node
-        if len(nodes) > limits.max_schema_nodes:
-            raise ManifestValidationError(
-                f"{path}: schema node limit exceeded"
-            )
-        children.setdefault(key, set())
-        same.setdefault(key, set())
-        for keyword, value in node.items():
-            candidates: list[object] = []
-            if keyword in _SCHEMA_MAPS and isinstance(value, dict):
-                candidates = list(value.values())
-            elif keyword in _SCHEMA_LISTS and isinstance(value, list):
-                candidates = value
-            elif keyword in _SCHEMA_SINGLE:
-                candidates = [value]
-            for child in candidates:
-                if isinstance(child, dict):
-                    pending.append(child)
-                    if keyword not in {"$defs", "definitions"}:
-                        children[key].add(id(child))
-                    if keyword in _SAME_INSTANCE:
-                        same[key].add(id(child))
-                        same.setdefault(id(child), set()).add(key)
-
-    resource = DRAFT202012.create_resource(document)
-    registry: Registry[Any] = Registry().with_resource("", resource)
-    resolver = registry.resolver("")
-    for key, node in nodes.items():
-        for keyword in ("$ref", "$dynamicRef"):
-            if keyword not in node:
-                continue
-            try:
-                target = resolver.lookup(node[keyword]).contents
-            except Unresolvable:
-                raise ManifestValidationError(
-                    f"{path}: unresolved local reference"
-                ) from None
-            if isinstance(target, bool):
-                continue
-            if not isinstance(target, dict) or id(target) not in nodes:
-                raise ManifestValidationError(
-                    f"{path}: reference does not name a schema"
-                )
-            children[key].add(id(target))
-            same[key].add(id(target))
-            same[id(target)].add(key)
-
-    secrets = {
-        key for key, node in nodes.items() if node.get("writeOnly") is True
-    }
-    effective = _reachable(secrets, same)
-    below = _reachable(effective, children)
-    parents: dict[int, set[int]] = {key: set() for key in nodes}
-    for key, links in children.items():
-        for child in links:
-            parents[child].add(key)
-    protected = below | _reachable(effective, parents)
-    for key in protected:
-        if _VALUES.intersection(nodes[key]):
-            raise ManifestValidationError(
-                f"{path}: secret schema contains value annotations"
-            )
+    _schema_inspection.inspect_schema(
+        document,
+        path,
+        maximum_nodes=limits.max_schema_nodes,
+        error_type=ManifestValidationError,
+    )
 
 
 def validate_manifest_document(
@@ -336,10 +189,7 @@ def validate_manifest_response(
     limits: ManifestValidationLimits = DEFAULT_VALIDATION_LIMITS,
 ) -> bytes:
     """Validate a response and return its canonical manifest bytes."""
-    projected = MessageToDict(
-        response,
-        always_print_fields_with_no_presence=True,
-    )
+    projected = _VALIDATION.project_message(response, "response")
     bounded_json(
         projected,
         "response",
@@ -367,12 +217,12 @@ def validate_manifest_key(
     manifest_revision: str,
 ) -> ManifestRevisionKey:
     """Validate the scalar key used for an accepted manifest cache entry."""
-    if not contract_validator("instanceId").is_valid(provider_instance_id):
+    if not _SCHEMA.is_valid(provider_instance_id, "instanceId"):
         raise ManifestValidationError(
             "response: provider identity must be a canonical UUIDv4"
         )
     _validate_schema_version(manifest_schema_version)
-    if not contract_validator("revision").is_valid(manifest_revision):
+    if not _SCHEMA.is_valid(manifest_revision, "revision"):
         raise ManifestValidationError("response: manifest revision is invalid")
     return ManifestRevisionKey(
         provider_instance_id=UUID(provider_instance_id),
@@ -440,23 +290,9 @@ def _validate_embedded_schemas(
 
 def _validate_schema_version(value: int) -> None:
     """Reject values outside the manifest schema version wire field."""
-    if (
-        not isinstance(value, int)
-        or isinstance(value, bool)
-        or not 1 <= value <= contract.MAX_SCHEMA_VERSION
-    ):
-        raise ManifestValidationError(
-            "response: manifest schema version is invalid"
-        )
-
-
-def _reachable(roots: set[int], edges: dict[int, set[int]]) -> set[int]:
-    """Return every schema node reachable from the supplied roots."""
-    visited = set(roots)
-    pending = deque(roots)
-    while pending:
-        for child in edges[pending.popleft()]:
-            if child not in visited:
-                visited.add(child)
-                pending.append(child)
-    return visited
+    _VALIDATION.require_integer_range(
+        value,
+        minimum=1,
+        maximum=contract.MAX_SCHEMA_VERSION,
+        message="response: manifest schema version is invalid",
+    )

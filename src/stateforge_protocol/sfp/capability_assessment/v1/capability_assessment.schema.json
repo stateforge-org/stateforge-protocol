@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:stateforge:sfp:capability_assessment:1",
   "title": "SFP capability-assessment schema 1 ProtoJSON validation",
-  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure, executionContext breadth and string bounds, and the finding-level support/reason invariants; transport byte limits, aggregate nesting depth, session binding, manifest-revision fencing, per-operation completeness (one finding per requested operation, no duplicates or omissions), and uniqueness of requirementId/reasonCode/constraintId within one finding require consumer checks described in the procedure specification and are exercised by dedicated tests instead.",
+  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure, executionContext breadth and string bounds, and the finding-level support/reason invariants. The packaged Python validation module composes this schema with aggregate nesting depth, per-finding identifier uniqueness, and context-independent request/response correlation. Runtimes retain transport byte limits and checks that require active session, manifest, readiness, or declaration state.",
   "$ref": "#/$defs/assessCapabilitiesResponse",
   "$defs": {
     "instanceId": {
@@ -88,7 +88,7 @@
       }
     },
     "boundedValue": {
-      "description": "A recursively nested JSON value. Every array/object is breadth-bounded and every string is length-bounded here. Aggregate nesting depth and serialized message size are consumer-enforced limits because JSON Schema cannot portably express either one.",
+      "description": "A recursively nested JSON value. Every array/object is breadth-bounded and every string is length-bounded here. The packaged Python validator enforces aggregate nesting depth; runtimes enforce serialized message size at the transport boundary because JSON Schema cannot portably express either limit.",
       "anyOf": [
         {
           "$ref": "#/$defs/boundedScalar"

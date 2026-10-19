@@ -146,17 +146,18 @@ The JSON Schema adds required-field, identifier, uniqueness, count, and the
 cross-field invariants above. `execution_context` accepts recursively nested
 JSON. The packaged schema bounds every object and array to 32 entries, every
 property name to 128 characters, and every string value to
-2,048 characters. Consumers separately enforce the aggregate 64-container
-nesting limit and serialized-message limits; JSON Schema cannot portably
-express either limit, and `maxLength` counts Unicode code points rather than
-encoded bytes.
+2,048 characters. The packaged Python validator enforces the aggregate
+64-container nesting limit before schema processing. Runtimes enforce the
+serialized-message limits at the transport boundary; JSON Schema cannot
+portably express either limit, and `maxLength` counts Unicode code points
+rather than encoded bytes.
 
 These are structural ceilings only. `execution_context` is not
 manifest-schema-validated and must not carry operation-specific resource input.
-The capability schema likewise cannot verify that a response contains exactly
-one finding per requested operation with no duplicates or omissions. Those
-checks are consumer and conformance-test responsibilities, not static-schema
-responsibilities.
+The static schema cannot verify that a response contains exactly one finding
+per requested operation with no duplicates or omissions. The packaged Python
+validator composes the schema with those exchange invariants so Agent and
+Provider implementations do not reproduce Protocol rules.
 
 | Limit | Maximum |
 | --- | ---: |
@@ -180,9 +181,10 @@ Configure transport message limits before decoding, matching
 [provider manifest exchange](provider-manifest.md#structural-and-semantic-validation).
 The byte limits are independent of the field-level bounds: a structurally
 valid payload containing multibyte Unicode strings can still exceed the wire
-limit. Reject that payload with `RESOURCE_EXHAUSTED`. After decoding, enforce
-the nesting limit with a cheap iterative walk before expensive processing;
-malformed shape or excessive nesting is `INVALID_ARGUMENT`.
+limit. Reject that payload with `RESOURCE_EXHAUSTED`. After decoding, call the
+packaged request validator. It enforces the nesting limit with a cheap
+iterative walk before schema processing; malformed shape or excessive nesting
+is `INVALID_ARGUMENT` after runtime status translation.
 
 ## Assessment semantics and correlation
 
@@ -247,5 +249,5 @@ resource input and output. Assessment does not validate a future invocation
 payload, admit or dispatch work, or grant authorization.
 
 This package defines the Protocol-only assessment messages, validation schema,
-and conformance vectors. Provider assessment behavior and Agent-side use of
-the results are separate implementations.
+canonical Python validation API, and conformance vectors. Provider assessment
+behavior and Agent-side use of the results are separate implementations.

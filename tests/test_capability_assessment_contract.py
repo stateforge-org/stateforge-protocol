@@ -366,7 +366,7 @@ def test_findings_cover_every_requested_operation_exactly_once(
     response, request_data
 ) -> None:
     # JSON Schema cannot express request/response completeness; this is a
-    # dedicated Python-level check of the invariant instead.
+    # conformance-vector check. The packaged validation module enforces it.
     requested = request_data["operationIdentifiers"]
     returned = [
         finding["operationIdentifier"] for finding in response["findings"]
@@ -460,9 +460,8 @@ def test_duplicate_requirement_ids_are_not_schema_enforced(
     response, validator
 ) -> None:
     # JSON Schema 2020-12 has no practical way to express "unique by a
-    # sub-key" over an array of objects; this gap is documented in the
-    # schema description and procedure page. A caller-side check (as done
-    # here) is what actually guards the invariant, not the static schema.
+    # sub-key" over an array of objects. The packaged validation module,
+    # rather than the static schema, guards this invariant.
     finding = response["findings"][1]
     finding["requirementFindings"].append(
         copy.deepcopy(finding["requirementFindings"][0])
@@ -701,7 +700,7 @@ def test_context_nesting_limit_is_a_consumer_check_not_a_schema_restriction(
     )
 
     # JSON Schema cannot express an aggregate recursive-depth ceiling. The
-    # consumer's cheap pre-validation walk rejects the next container.
+    # packaged validator's cheap pre-schema walk rejects the next container.
     request_data["executionContext"] = _nested_context(
         contract.MAX_EXECUTION_CONTEXT_JSON_DEPTH + 1
     )
