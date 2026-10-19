@@ -123,9 +123,23 @@ Providers should reuse this canonical core vocabulary where applicable:
 | `stateforge.capability_assessment.v1.insufficient_evidence` | Inspection could not gather enough evidence to decide. |
 | `stateforge.capability_assessment.v1.requirement_unmet` | A specific declared requirement is not met. |
 
+A runtime adapting declared prerequisite checks uses `requirement_unmet` when
+one of those prerequisites proves incompatible and `insufficient_evidence`
+when inspection cannot decide. `unsupported_vendor_state` is reserved for
+incompatibility specifically caused by the current vendor-side state; it is
+not the generic code for an unsupported operating system, missing executable,
+or other unmet runtime prerequisite.
+
 A Provider-specific reason code must be namespaced under its own
 `provider_identity` to avoid colliding with the core vocabulary or another
 Provider's codes.
+
+Python consumers import these canonical values from
+`stateforge_protocol.sfp.capability_assessment.v1.contract` as
+`REASON_CODE_ACCESS_DENIED`, `REASON_CODE_PERMISSION_UNCERTAIN`,
+`REASON_CODE_UNSUPPORTED_VENDOR_STATE`, `REASON_CODE_INSUFFICIENT_EVIDENCE`,
+and `REASON_CODE_REQUIREMENT_UNMET`. These constants expose the reusable core
+vocabulary; they do not close the extensible `reason_code` namespace.
 
 ## Structural and semantic validation
 

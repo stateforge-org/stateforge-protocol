@@ -96,6 +96,14 @@ accepts at most `health.MAX_REQUEST_BYTES`, Manifest Exchange accepts at most
 validation schemas. Depth, canonical-document size, retry, and flow-control
 constants cover limits that JSON Schema cannot express by itself.
 
+Capability Assessment also exposes its canonical core reason-code vocabulary
+through `capability_assessment.REASON_CODE_ACCESS_DENIED`,
+`REASON_CODE_PERMISSION_UNCERTAIN`, `REASON_CODE_UNSUPPORTED_VENDOR_STATE`,
+`REASON_CODE_INSUFFICIENT_EVIDENCE`, and `REASON_CODE_REQUIREMENT_UNMET`.
+Import these values rather than copying their dotted strings into a consumer.
+They are reusable core identifiers, not a closed enum; the contract continues
+to accept correctly namespaced extension reason codes.
+
 A process hosting every current Provider service uses the authoritative shared
 endpoint inventory. Its aggregate transport ceilings are derived from every
 Bootstrap, Health, and SFP procedure in that inventory:
