@@ -1,0 +1,9 @@
+name: StateForge Protocol CodeQL
+
+paths:
+  - src
+  - scripts
+
+paths-ignore:
+  - "src/stateforge_protocol/sfp/**/*_pb2.py"
+  - "src/stateforge_protocol/sfp/**/*_pb2_grpc.py"
