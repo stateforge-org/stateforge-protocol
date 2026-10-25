@@ -1,0 +1,250 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="4460" viewBox="0 0 2200 4460" fill="none">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#111827" flood-opacity="0.16"/>
+    </filter>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#3B82F6"/></marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#12A7C7"/></marker>
+    <marker id="arrow-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#7C5CE7"/></marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#64748B"/></marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#2BA766"/></marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#E47B08"/></marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#D64545"/></marker>
+    <style>
+      .font { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+      .title { font-size: 46px; font-weight: 700; fill: #111827; letter-spacing: -1px; }
+      .subtitle { font-size: 21px; font-weight: 400; fill: #53657D; }
+      .eyebrow { font-size: 14px; font-weight: 700; fill: #3B82F6; letter-spacing: 1.4px; }
+      .node-title { font-size: 21px; font-weight: 650; fill: #FFFFFF; }
+      .node-subtitle { font-size: 11px; font-weight: 650; fill: #D8E7FF; letter-spacing: 0.7px; }
+      .label { font-size: 18px; font-weight: 500; fill: #172033; }
+      .small { font-size: 15px; font-weight: 500; fill: #4B5D73; }
+      .note-title { font-size: 13px; font-weight: 700; fill: #3B82F6; letter-spacing: 0.8px; }
+      .note-text { font-size: 17px; font-weight: 500; fill: #27364A; }
+      .branch { font-size: 15px; font-weight: 700; letter-spacing: 0.6px; }
+      .legend { font-size: 15px; font-weight: 500; fill: #334155; }
+    </style>
+  </defs>
+
+  <g class="font">
+    <text x="60" y="58" class="eyebrow">STATEFORGE PROTOCOL · SFP</text>
+    <text x="60" y="114" class="title">Disconnection and Recovery</text>
+    <text x="60" y="153" class="subtitle">Re-establishing the SFP session without duplicating work or inventing an operation outcome</text>
+
+    <g filter="url(#shadow)">
+      <rect x="45" y="215" width="270" height="118" rx="22" fill="#0B7180"/>
+      <rect x="405" y="215" width="270" height="118" rx="22" fill="#0E6573"/>
+      <rect x="765" y="215" width="270" height="118" rx="22" fill="#5A43B8"/>
+      <rect x="1125" y="215" width="270" height="118" rx="22" fill="#2456A6"/>
+      <rect x="1485" y="215" width="270" height="118" rx="22" fill="#19458B"/>
+      <rect x="1845" y="215" width="270" height="118" rx="22" fill="#312878"/>
+    </g>
+
+    <text x="180" y="258" text-anchor="middle" class="node-title">Provider Implementation</text>
+    <text x="180" y="289" text-anchor="middle" class="node-subtitle">PROVIDER-SPECIFIC EXECUTION</text>
+    <text x="540" y="258" text-anchor="middle" class="node-title">Developer RPC Library</text>
+    <text x="540" y="289" text-anchor="middle" class="node-subtitle">SFP SERVER · SESSION STATE</text>
+    <text x="900" y="252" text-anchor="middle" class="node-title">In-memory</text>
+    <text x="900" y="279" text-anchor="middle" class="node-title">OperationRegistry</text>
+    <text x="900" y="306" text-anchor="middle" class="node-subtitle">CURRENT PROCESS LIFETIME</text>
+    <text x="1260" y="258" text-anchor="middle" class="node-title">Agent Library</text>
+    <text x="1260" y="289" text-anchor="middle" class="node-subtitle">SFP CLIENT · RECONCILIATION</text>
+    <text x="1620" y="258" text-anchor="middle" class="node-title">Agent Recovery State</text>
+    <text x="1620" y="289" text-anchor="middle" class="node-subtitle">AVAILABILITY · CURSORS · ACKS</text>
+    <text x="1980" y="258" text-anchor="middle" class="node-title">Outside SFP</text>
+    <text x="1980" y="289" text-anchor="middle" class="node-subtitle">BUSINESS REMEDIATION NOT DEFINED</text>
+
+    <line x1="180" y1="333" x2="180" y2="4320" stroke="#8EA2BB" stroke-width="2" stroke-dasharray="9 10"/>
+    <line x1="540" y1="333" x2="540" y2="4320" stroke="#8EA2BB" stroke-width="2" stroke-dasharray="9 10"/>
+    <line x1="900" y1="333" x2="900" y2="4320" stroke="#8EA2BB" stroke-width="2" stroke-dasharray="9 10"/>
+    <line x1="1260" y1="333" x2="1260" y2="4320" stroke="#8EA2BB" stroke-width="2" stroke-dasharray="9 10"/>
+    <line x1="1620" y1="333" x2="1620" y2="4320" stroke="#8EA2BB" stroke-width="2" stroke-dasharray="9 10"/>
+    <line x1="1980" y1="333" x2="1980" y2="4320" stroke="#8EA2BB" stroke-width="2" stroke-dasharray="9 10"/>
+
+    <rect x="330" y="370" width="1500" height="76" rx="16" fill="#F0EEFF" stroke="#C9C5FF"/>
+    <text x="1080" y="397" text-anchor="middle" class="note-title">PRECONDITION</text>
+    <text x="1080" y="426" text-anchor="middle" class="label">An SFP session is active; one or more Provider operations may be running</text>
+
+    <!-- Channel loss -->
+    <rect x="45" y="500" width="2070" height="700" rx="24" fill="#FFF5F5" stroke="#E9A3A3" stroke-width="2"/>
+    <rect x="75" y="480" width="230" height="42" rx="12" fill="#FFE5E5"/>
+    <text x="190" y="508" text-anchor="middle" class="branch" fill="#A52E2E">CHANNEL INTERRUPTION</text>
+
+    <line x1="558" y1="585" x2="900" y2="585" stroke="#D64545" stroke-width="4" stroke-dasharray="10 8"/>
+    <path d="M900 568 L920 602 L940 568 L960 602 L980 568" stroke="#D64545" stroke-width="4" fill="none"/>
+    <line x1="980" y1="585" x2="1242" y2="585" stroke="#D64545" stroke-width="4" stroke-dasharray="10 8"/>
+    <rect x="865" y="533" width="250" height="44" rx="12" fill="#FFE5E5"/>
+    <text x="990" y="562" text-anchor="middle" class="label">gRPC channel interrupted</text>
+
+    <path d="M1260 655 H1440 V725 H1278" stroke="#D64545" stroke-width="4" fill="none" marker-end="url(#arrow-red)"/>
+    <rect x="1312" y="643" width="256" height="44" rx="12" fill="#FFE5E5"/>
+    <text x="1440" y="672" text-anchor="middle" class="label">Detect transport loss</text>
+
+    <line x1="1278" y1="790" x2="1602" y2="790" stroke="#D64545" stroke-width="4" marker-end="url(#arrow-red)"/>
+    <rect x="1318" y="758" width="244" height="44" rx="12" fill="#FFE5E5"/>
+    <text x="1440" y="787" text-anchor="middle" class="label">Provider unavailable</text>
+
+    <line x1="1638" y1="875" x2="1962" y2="875" stroke="#D64545" stroke-width="4" marker-end="url(#arrow-red)"/>
+    <rect x="1644" y="843" width="312" height="44" rx="12" fill="#FFE5E5"/>
+    <text x="1800" y="872" text-anchor="middle" class="label">Expose availability loss only</text>
+
+    <path d="M180 950 H360 V1020 H198" stroke="#64748B" stroke-width="4" fill="none" marker-end="url(#arrow-gray)"/>
+    <rect x="206" y="938" width="308" height="44" rx="12" fill="#EEF2F6"/>
+    <text x="360" y="967" text-anchor="middle" class="label">Operation may continue</text>
+
+    <line x1="198" y1="1080" x2="522" y2="1080" stroke="#64748B" stroke-width="4" marker-end="url(#arrow-gray)"/>
+    <rect x="220" y="1048" width="280" height="44" rx="12" fill="#EEF2F6"/>
+    <text x="360" y="1077" text-anchor="middle" class="label">Progress or terminal result</text>
+
+    <line x1="558" y1="1150" x2="882" y2="1150" stroke="#7C5CE7" stroke-width="4" marker-end="url(#arrow-violet)"/>
+    <rect x="584" y="1118" width="272" height="44" rx="12" fill="#ECE8FF"/>
+    <text x="720" y="1147" text-anchor="middle" class="label">Retain latest state</text>
+
+    <!-- Reconnection -->
+    <rect x="45" y="1270" width="2070" height="820" rx="24" fill="#F4FBFD" stroke="#8ED9E8" stroke-width="2"/>
+    <rect x="75" y="1250" width="316" height="42" rx="12" fill="#E8F8FB"/>
+    <text x="233" y="1278" text-anchor="middle" class="branch" fill="#0E6573">NEW CHANNEL AND NEW SFP SESSION</text>
+
+    <rect x="390" y="1330" width="1020" height="210" rx="20" fill="#FFF9F0" stroke="#F2B55C"/>
+    <rect x="420" y="1310" width="260" height="40" rx="12" fill="#FFF0D7"/>
+    <text x="550" y="1337" text-anchor="middle" class="branch" fill="#A85400">BOUNDED RETRY LOOP</text>
+
+    <line x1="1242" y1="1400" x2="558" y2="1400" stroke="#E47B08" stroke-width="4" marker-end="url(#arrow-orange)"/>
+    <rect x="746" y="1368" width="308" height="44" rx="12" fill="#FFF0D7"/>
+    <text x="900" y="1397" text-anchor="middle" class="label">Attempt endpoint connection</text>
+
+    <line x1="558" y1="1480" x2="1242" y2="1480" stroke="#2BA766" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-green)"/>
+    <rect x="766" y="1448" width="268" height="44" rx="12" fill="#E7F8EE"/>
+    <text x="900" y="1477" text-anchor="middle" class="label">New gRPC channel</text>
+
+    <line x1="1242" y1="1620" x2="558" y2="1620" stroke="#3B82F6" stroke-width="4" marker-end="url(#arrow-blue)"/>
+    <rect x="746" y="1588" width="308" height="44" rx="12" fill="#EAF2FF"/>
+    <text x="900" y="1617" text-anchor="middle" class="label">Handshake and version negotiation</text>
+
+    <line x1="558" y1="1700" x2="1242" y2="1700" stroke="#12A7C7" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-teal)"/>
+    <rect x="740" y="1668" width="320" height="44" rx="12" fill="#E8F8FB"/>
+    <text x="900" y="1697" text-anchor="middle" class="label">Provider and protocol identity</text>
+
+    <line x1="1242" y1="1790" x2="558" y2="1790" stroke="#3B82F6" stroke-width="4" marker-end="url(#arrow-blue)"/>
+    <rect x="762" y="1758" width="276" height="44" rx="12" fill="#EAF2FF"/>
+    <text x="900" y="1787" text-anchor="middle" class="label">Request active manifest</text>
+
+    <line x1="558" y1="1870" x2="1242" y2="1870" stroke="#12A7C7" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-teal)"/>
+    <rect x="786" y="1838" width="228" height="44" rx="12" fill="#E8F8FB"/>
+    <text x="900" y="1867" text-anchor="middle" class="label">Provider Manifest</text>
+
+    <path d="M1260 1920 H1440 V1990 H1278" stroke="#3B82F6" stroke-width="4" fill="none" marker-end="url(#arrow-blue)"/>
+    <rect x="1190" y="1908" width="500" height="44" rx="12" fill="#EAF2FF"/>
+    <text x="1440" y="1937" text-anchor="middle" class="label">Classify instance · generation · runtime · session</text>
+
+    <line x1="1242" y1="1990" x2="558" y2="1990" stroke="#3B82F6" stroke-width="4" marker-end="url(#arrow-blue)"/>
+    <rect x="700" y="1958" width="400" height="44" rx="12" fill="#EAF2FF"/>
+    <text x="900" y="1987" text-anchor="middle" class="label">Health.Watch(service=&quot;&quot;)</text>
+
+    <line x1="558" y1="2050" x2="1242" y2="2050" stroke="#2BA766" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-green)"/>
+    <rect x="786" y="2018" width="228" height="44" rx="12" fill="#E7F8EE"/>
+    <text x="900" y="2047" text-anchor="middle" class="label">Current SERVING</text>
+
+    <!-- Identity and operation reconciliation -->
+    <rect x="45" y="2170" width="2070" height="1520" rx="24" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="2"/>
+    <rect x="75" y="2150" width="372" height="42" rx="12" fill="#EEF2F6"/>
+    <text x="261" y="2178" text-anchor="middle" class="branch" fill="#334155">PROVIDER AND OPERATION RECONCILIATION</text>
+
+    <rect x="75" y="2240" width="1960" height="950" rx="20" fill="#F5FBF7" stroke="#A7E0BC"/>
+    <rect x="95" y="2220" width="360" height="40" rx="12" fill="#E7F8EE"/>
+    <text x="275" y="2247" text-anchor="middle" class="branch" fill="#176B3A">SAME PROVIDER INSTALLATION</text>
+
+    <line x1="1242" y1="2325" x2="558" y2="2325" stroke="#3B82F6" stroke-width="4" marker-end="url(#arrow-blue)"/>
+    <rect x="570" y="2293" width="660" height="44" rx="12" fill="#EAF2FF"/>
+    <text x="900" y="2322" text-anchor="middle" class="label">StartOperation(RESOLVE_ONLY · same ID + fingerprint)</text>
+
+    <line x1="558" y1="2410" x2="882" y2="2410" stroke="#7C5CE7" stroke-width="4" marker-end="url(#arrow-violet)"/>
+    <rect x="600" y="2378" width="240" height="44" rx="12" fill="#ECE8FF"/>
+    <text x="720" y="2407" text-anchor="middle" class="label">Registry lookup</text>
+
+    <rect x="95" y="2480" width="1920" height="300" rx="18" fill="#F0FAF4" stroke="#A7E0BC"/>
+    <rect x="115" y="2460" width="230" height="38" rx="11" fill="#E7F8EE"/>
+    <text x="230" y="2486" text-anchor="middle" class="branch" fill="#176B3A">STATE RETAINED</text>
+    <line x1="882" y1="2550" x2="558" y2="2550" stroke="#2BA766" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-green)"/>
+    <rect x="596" y="2518" width="248" height="44" rx="12" fill="#E7F8EE"/>
+    <text x="720" y="2547" text-anchor="middle" class="label">Retained admission record</text>
+    <line x1="558" y1="2640" x2="1242" y2="2640" stroke="#2BA766" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-green)"/>
+    <rect x="762" y="2608" width="276" height="44" rx="12" fill="#E7F8EE"/>
+    <text x="900" y="2637" text-anchor="middle" class="label">RESOLVED_EXISTING</text>
+    <line x1="1242" y1="2705" x2="558" y2="2705" stroke="#3B82F6" stroke-width="4" marker-end="url(#arrow-blue)"/>
+    <rect x="664" y="2673" width="472" height="44" rx="12" fill="#EAF2FF"/>
+    <text x="900" y="2702" text-anchor="middle" class="label">WatchOperation(ID · fingerprint · after_sequence)</text>
+    <line x1="558" y1="2760" x2="1242" y2="2760" stroke="#2BA766" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-green)"/>
+    <rect x="650" y="2728" width="500" height="44" rx="12" fill="#E7F8EE"/>
+    <text x="900" y="2757" text-anchor="middle" class="label">Complete snapshot · monotonic sequence · gap flag</text>
+
+    <rect x="95" y="2850" width="1920" height="320" rx="18" fill="#FFF5F5" stroke="#E9A3A3"/>
+    <rect x="115" y="2830" width="250" height="38" rx="11" fill="#FFE5E5"/>
+    <text x="240" y="2856" text-anchor="middle" class="branch" fill="#A52E2E">STATE UNAVAILABLE</text>
+    <line x1="882" y1="2920" x2="558" y2="2920" stroke="#D64545" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-red)"/>
+    <rect x="532" y="2888" width="376" height="44" rx="12" fill="#FFE5E5"/>
+    <text x="720" y="2917" text-anchor="middle" class="label">Record unavailable or expired</text>
+    <line x1="558" y1="2995" x2="1242" y2="2995" stroke="#D64545" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-red)"/>
+    <rect x="650" y="2963" width="500" height="44" rx="12" fill="#FFE5E5"/>
+    <text x="900" y="2992" text-anchor="middle" class="label">Structured SFP unavailable result</text>
+    <line x1="1278" y1="3070" x2="1602" y2="3070" stroke="#D64545" stroke-width="4" marker-end="url(#arrow-red)"/>
+    <rect x="1296" y="3038" width="288" height="44" rx="12" fill="#FFE5E5"/>
+    <text x="1440" y="3067" text-anchor="middle" class="label">Keep outcome indeterminate</text>
+    <line x1="1638" y1="3140" x2="1962" y2="3140" stroke="#D64545" stroke-width="4" marker-end="url(#arrow-red)"/>
+    <rect x="1642" y="3108" width="316" height="44" rx="12" fill="#FFE5E5"/>
+    <text x="1800" y="3137" text-anchor="middle" class="label">No automatic redispatch</text>
+
+    <rect x="75" y="3260" width="1960" height="260" rx="20" fill="#F6F4FF" stroke="#C9C5FF"/>
+    <rect x="95" y="3240" width="400" height="40" rx="12" fill="#ECE8FF"/>
+    <text x="295" y="3267" text-anchor="middle" class="branch" fill="#5A43B8">PROVIDER INSTALLATION CHANGED</text>
+    <line x1="1278" y1="3340" x2="1602" y2="3340" stroke="#7C5CE7" stroke-width="4" marker-end="url(#arrow-violet)"/>
+    <rect x="1290" y="3308" width="300" height="44" rx="12" fill="#ECE8FF"/>
+    <text x="1440" y="3337" text-anchor="middle" class="label">INSTALLATION_REPLACED</text>
+    <line x1="1638" y1="3420" x2="1962" y2="3420" stroke="#7C5CE7" stroke-width="4" marker-end="url(#arrow-violet)"/>
+    <rect x="1650" y="3388" width="300" height="44" rx="12" fill="#ECE8FF"/>
+    <text x="1800" y="3417" text-anchor="middle" class="label">Do not transfer ownership</text>
+    <text x="1080" y="3495" text-anchor="middle" class="small">Operations belonging to the previous Provider instance are never attributed to its replacement.</text>
+
+    <rect x="330" y="3570" width="1500" height="80" rx="18" fill="#FFF9F0" stroke="#F2B55C"/>
+    <text x="1080" y="3620" text-anchor="middle" class="label">Lost state is indeterminate: StateForge never treats disconnection as failure and never retries automatically.</text>
+
+    <!-- Restore streams and availability -->
+    <rect x="45" y="3760" width="2070" height="500" rx="24" fill="#F4FBFD" stroke="#8ED9E8" stroke-width="2"/>
+    <rect x="75" y="3740" width="310" height="42" rx="12" fill="#E8F8FB"/>
+    <text x="230" y="3768" text-anchor="middle" class="branch" fill="#0E6573">STREAM AND AVAILABILITY RECOVERY</text>
+    <line x1="1242" y1="3840" x2="558" y2="3840" stroke="#3B82F6" stroke-width="4" marker-end="url(#arrow-blue)"/>
+    <rect x="650" y="3808" width="500" height="44" rx="12" fill="#EAF2FF"/>
+    <text x="900" y="3837" text-anchor="middle" class="label">TriggerStreamOpen(new session + manifest)</text>
+    <line x1="558" y1="3920" x2="1242" y2="3920" stroke="#12A7C7" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-teal)"/>
+    <rect x="766" y="3888" width="268" height="44" rx="12" fill="#E8F8FB"/>
+    <text x="900" y="3917" text-anchor="middle" class="label">Matching TriggerStreamReady</text>
+    <line x1="558" y1="4000" x2="1242" y2="4000" stroke="#E47B08" stroke-width="4" marker-end="url(#arrow-orange)"/>
+    <rect x="718" y="3968" width="364" height="44" rx="12" fill="#FFF0D7"/>
+    <text x="900" y="3997" text-anchor="middle" class="label">Replay uncertain TriggerPublication</text>
+    <line x1="1242" y1="4080" x2="558" y2="4080" stroke="#2BA766" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-green)"/>
+    <rect x="660" y="4048" width="480" height="44" rx="12" fill="#E7F8EE"/>
+    <text x="900" y="4077" text-anchor="middle" class="label">ACCEPTED_DUPLICATE · no second trigger</text>
+    <line x1="1278" y1="4160" x2="1602" y2="4160" stroke="#2BA766" stroke-width="4" marker-end="url(#arrow-green)"/>
+    <rect x="1306" y="4128" width="268" height="44" rx="12" fill="#E7F8EE"/>
+    <text x="1440" y="4157" text-anchor="middle" class="label">Availability restored</text>
+    <line x1="1638" y1="4230" x2="1962" y2="4230" stroke="#2BA766" stroke-width="4" marker-end="url(#arrow-green)"/>
+    <rect x="1650" y="4198" width="300" height="44" rx="12" fill="#E7F8EE"/>
+    <text x="1800" y="4227" text-anchor="middle" class="label">Expose availability only</text>
+
+    <!-- Footer -->
+    <rect x="330" y="4300" width="1500" height="72" rx="18" fill="#EAF2FF" stroke="#A9C7FF"/>
+    <text x="1080" y="4345" text-anchor="middle" class="label">Availability requires current identity, compatibility, manifest, and Health validation.</text>
+    <circle cx="80" cy="4420" r="7" fill="#D64545"/>
+    <text x="100" y="4426" class="legend">Disconnected or lost</text>
+    <circle cx="340" cy="4420" r="7" fill="#E47B08"/>
+    <text x="360" y="4426" class="legend">Reconnect or uncertain replay</text>
+    <circle cx="730" cy="4420" r="7" fill="#3B82F6"/>
+    <text x="750" y="4426" class="legend">Agent request and validation</text>
+    <circle cx="1110" cy="4420" r="7" fill="#12A7C7"/>
+    <text x="1130" y="4426" class="legend">Provider response</text>
+    <circle cx="1410" cy="4420" r="7" fill="#2BA766"/>
+    <text x="1430" y="4426" class="legend">Recovered state</text>
+    <circle cx="1690" cy="4420" r="7" fill="#7C5CE7"/>
+    <text x="1710" y="4426" class="legend">Registry or replacement state</text>
+  </g>
+</svg>

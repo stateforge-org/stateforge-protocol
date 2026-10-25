@@ -149,6 +149,19 @@ class ValidationContext(Generic[_ValidationError]):
             )
         return projected
 
+    def require_serialized_size(
+        self,
+        message: Message,
+        *,
+        maximum_bytes: int,
+        path: str,
+    ) -> None:
+        """Require one protobuf message to fit its RPC boundary."""
+        self.require(
+            message.ByteSize() <= maximum_bytes,
+            f"{path}: serialized message exceeds the protocol limit",
+        )
+
     def validate_schema_definition(
         self,
         schema: PackagedSchema,

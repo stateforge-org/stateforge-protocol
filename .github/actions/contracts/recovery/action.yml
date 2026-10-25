@@ -1,0 +1,21 @@
+name: Validate SFP disconnection recovery
+description: Validate cross-procedure recovery semantics and conformance vectors.
+
+inputs:
+  evidence-directory:
+    description: Directory receiving recovery validation evidence.
+    required: false
+    default: evidence/contracts/recovery
+
+runs:
+  using: composite
+  steps:
+    - name: Validate disconnection and recovery contracts
+      shell: bash
+      env:
+        EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+      run: |
+        set -euo pipefail
+        mkdir -p "${EVIDENCE_DIRECTORY}"
+        python -m pytest -q tests/test_disconnection_recovery_contract.py \
+          2>&1 | tee "${EVIDENCE_DIRECTORY}/recovery.log"

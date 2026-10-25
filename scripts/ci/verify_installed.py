@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import importlib
 import json
 import pkgutil
@@ -14,7 +15,7 @@ from uuid import UUID
 from google.protobuf.json_format import ParseDict
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
-from stateforge_protocol.sfp import health_contract, shared_endpoint
+from stateforge_protocol.sfp import health_contract, recovery, shared_endpoint
 from stateforge_protocol.sfp.bootstrap.v1 import bootstrap_pb2
 from stateforge_protocol.sfp.bootstrap.v1 import contract as bootstrap_contract
 from stateforge_protocol.sfp.capability_assessment.v1 import (
@@ -25,6 +26,24 @@ from stateforge_protocol.sfp.capability_assessment.v1 import (
 )
 from stateforge_protocol.sfp.endpoint_discovery.v1 import (
     contract as endpoint_discovery_contract,
+)
+from stateforge_protocol.sfp.operation_admission.v1 import (
+    operation_admission_pb2,
+)
+from stateforge_protocol.sfp.operation_admission.v1 import (
+    validation as admission_validation,
+)
+from stateforge_protocol.sfp.operation_lifecycle.v1 import (
+    operation_lifecycle_pb2,
+)
+from stateforge_protocol.sfp.operation_lifecycle.v1 import (
+    validation as lifecycle_validation,
+)
+from stateforge_protocol.sfp.trigger_publication.v1 import (
+    trigger_publication_pb2,
+)
+from stateforge_protocol.sfp.trigger_publication.v1 import (
+    validation as trigger_validation,
 )
 
 _DISTRIBUTION = "stateforge-protocol"
@@ -240,6 +259,207 @@ def _verify_capability_assessment_validation(fixture_root: Path) -> int:
     return 2
 
 
+def _recovery_identity(value: object) -> recovery.EndpointSessionIdentity:
+    """Build one identity from a packaged recovery scenario."""
+    if not isinstance(value, dict):
+        raise ValueError("Recovery identity must be an object")
+    return recovery.EndpointSessionIdentity(
+        provider_instance_id=UUID(str(value["providerInstanceId"])),
+        endpoint_generation=int(str(value["endpointGeneration"])),
+        provider_runtime_id=UUID(str(value["providerRuntimeId"])),
+        session_id=str(value["sessionId"]),
+    )
+
+
+def _verify_recovery_identities(scenarios: dict[str, object]) -> None:
+    """Exercise installed recovery identity classification."""
+    previous = recovery.EndpointSessionIdentity(
+        provider_instance_id=UUID("11111111-1111-4111-8111-111111111111"),
+        endpoint_generation=42,
+        provider_runtime_id=UUID("33333333-3333-4333-8333-333333333333"),
+        session_id="session-admission-42",
+    )
+    identities = _object_cases(scenarios, "identityTransitions")
+    for case in identities:
+        kind = recovery.classify_recovery(
+            previous, _recovery_identity(case["current"])
+        )
+        if kind.value != case.get("expectedKind"):
+            raise ValueError(
+                f"Recovery identity classification failed: {case.get('id')}"
+            )
+        if kind.may_reconcile_previous_state is not case.get(
+            "mayReconcilePreviousState"
+        ):
+            raise ValueError(
+                f"Recovery ownership classification failed: {case.get('id')}"
+            )
+        if kind.requires_resolve_only is not case.get("requiresResolveOnly"):
+            raise ValueError(
+                f"Recovery admission classification failed: {case.get('id')}"
+            )
+
+    invalid_identities = _object_cases(scenarios, "invalidIdentityTransitions")
+    for case in invalid_identities:
+        try:
+            recovery.classify_recovery(
+                previous, _recovery_identity(case["current"])
+            )
+        except recovery.RecoveryContractError:
+            pass
+        else:
+            raise ValueError(
+                f"Invalid recovery identity was accepted: {case.get('id')}"
+            )
+
+
+def _verify_recovery_admission(fixture_root: Path) -> None:
+    """Exercise installed resolve-only admission validation."""
+    admission_request_data = _read_json_object(
+        fixture_root / "operation_admission" / "request.json"
+    )
+    admission_response_data = _read_json_object(
+        fixture_root
+        / "operation_admission"
+        / "response-resolved-existing.json"
+    )
+    admission_request_data["sessionBinding"]["expectedSessionId"] = (
+        "session-reconnected-42"
+    )
+    admission_request_data["admissionMode"] = "ADMISSION_MODE_RESOLVE_ONLY"
+    admission_request = ParseDict(
+        admission_request_data,
+        operation_admission_pb2.StartOperationRequest(),
+    )
+    admission_response = ParseDict(
+        admission_response_data,
+        operation_admission_pb2.StartOperationResponse(),
+    )
+    admission_validation.validate_admission_exchange(
+        admission_request, admission_response
+    )
+    accepted_response = ParseDict(
+        _read_json_object(
+            fixture_root / "operation_admission" / "response-accepted-new.json"
+        ),
+        operation_admission_pb2.StartOperationResponse(),
+    )
+    accepted_response.session_id = (
+        admission_request.session_binding.expected_session_id
+    )
+    try:
+        admission_validation.validate_admission_exchange(
+            admission_request, accepted_response
+        )
+    except admission_validation.OperationAdmissionValidationError:
+        pass
+    else:
+        raise ValueError("Installed validator allowed resolve-only admission")
+
+
+def _verify_recovery_trigger(fixture_root: Path) -> None:
+    """Exercise installed trigger replay identity validation."""
+    publication = ParseDict(
+        _read_json_object(
+            fixture_root / "trigger_publication" / "publication.json"
+        ),
+        trigger_publication_pb2.StreamTriggersResponse(),
+    ).publication
+    acknowledgement = ParseDict(
+        _read_json_object(
+            fixture_root
+            / "trigger_publication"
+            / "acknowledgement-accepted-duplicate.json"
+        ),
+        trigger_publication_pb2.StreamTriggersRequest(),
+    ).acknowledgement
+    trigger_validation.validate_publication_acknowledgement(
+        publication, acknowledgement
+    )
+    fingerprint = _read_json_object(
+        fixture_root
+        / "trigger_publication"
+        / "content-fingerprint-vector.json"
+    )["fingerprint"]
+    if (
+        trigger_validation.compute_publication_content_fingerprint(publication)
+        != fingerprint
+    ):
+        raise ValueError(
+            "Installed Trigger Publication fingerprint is invalid"
+        )
+
+
+def _verify_recovery_lifecycle(fixture_root: Path) -> None:
+    """Exercise installed lifecycle cursor and transition validation."""
+    watch_request_data = _read_json_object(
+        fixture_root / "operation_lifecycle" / "watch-request.json"
+    )
+    watch_response_data = _read_json_object(
+        fixture_root / "operation_lifecycle" / "watch-terminal.json"
+    )
+    watch_request_data["sessionBinding"]["expectedSessionId"] = (
+        "session-reconnected-42"
+    )
+    watch_request_data["afterSequence"] = "2"
+    watch_response_data["sessionId"] = "session-reconnected-42"
+    watch_response_data["updatesSkipped"] = True
+    lifecycle_validation.validate_watch_exchange(
+        ParseDict(
+            copy.deepcopy(watch_request_data),
+            operation_lifecycle_pb2.WatchOperationRequest(),
+        ),
+        ParseDict(
+            copy.deepcopy(watch_response_data),
+            operation_lifecycle_pb2.WatchOperationResponse(),
+        ),
+    )
+
+    lifecycle_snapshots = _read_json_object(
+        fixture_root / "operation_lifecycle" / "snapshots.json"
+    )
+    running = ParseDict(
+        copy.deepcopy(lifecycle_snapshots["running"]),
+        operation_lifecycle_pb2.OperationSnapshot(),
+    )
+    cancelled_data = copy.deepcopy(lifecycle_snapshots["cancelled"])
+    cancelled_data["sequence"] = "3"
+    cancelled_data["updatedAt"] = "2026-09-19T12:00:02Z"
+    cancelled_data.pop("progress", None)
+    cancelled = ParseDict(
+        cancelled_data,
+        operation_lifecycle_pb2.OperationSnapshot(),
+    )
+    try:
+        lifecycle_validation.validate_snapshot_transition(running, cancelled)
+    except lifecycle_validation.OperationLifecycleValidationError:
+        pass
+    else:
+        raise ValueError("Installed validator allowed direct cancellation")
+
+
+def _verify_recovery_contracts(fixture_root: Path) -> int:
+    """Exercise installed recovery classifiers and procedure validators."""
+    scenarios = _read_json_object(
+        fixture_root / "disconnection_recovery" / "scenarios.json"
+    )
+    _verify_recovery_identities(scenarios)
+    _verify_recovery_admission(fixture_root)
+    _verify_recovery_trigger(fixture_root)
+    _verify_recovery_lifecycle(fixture_root)
+
+    return sum(
+        len(_object_cases(scenarios, name))
+        for name in (
+            "identityTransitions",
+            "invalidIdentityTransitions",
+            "admissionRecovery",
+            "triggerRecovery",
+            "watchRecovery",
+        )
+    )
+
+
 def _is_within(path: Path, parent: Path) -> bool:
     """Return whether ``path`` is contained below ``parent``."""
     try:
@@ -305,6 +525,7 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
     capability_assessment_vector_count = (
         _verify_capability_assessment_validation(fixture_root)
     )
+    recovery_scenario_count = _verify_recovery_contracts(fixture_root)
 
     return {
         "distribution": _DISTRIBUTION,
@@ -318,6 +539,7 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
         "capability_assessment_vector_count": (
             capability_assessment_vector_count
         ),
+        "recovery_scenario_count": recovery_scenario_count,
     }
 
 
