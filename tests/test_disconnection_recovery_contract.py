@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -93,6 +94,36 @@ def test_stale_or_impossible_identity_is_not_recovery(
         recovery.classify_recovery(
             _PREVIOUS_IDENTITY, _identity(case["current"])
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("provider_instance_id", "11111111-1111-4111-8111-111111111111"),
+        (
+            "provider_runtime_id",
+            UUID("00000000-0000-1000-8000-000000000000"),
+        ),
+        ("endpoint_generation", 0),
+        ("endpoint_generation", True),
+        ("session_id", ""),
+        ("session_id", "x" * 256),
+    ],
+)
+def test_session_identity_rejects_values_outside_owning_contracts(
+    field: str,
+    value: object,
+) -> None:
+    identity: dict[str, Any] = {
+        "provider_instance_id": UUID("11111111-1111-4111-8111-111111111111"),
+        "endpoint_generation": 42,
+        "provider_runtime_id": UUID("33333333-3333-4333-8333-333333333333"),
+        "session_id": "session-admission-42",
+    }
+    identity[field] = value
+
+    with pytest.raises(recovery.RecoveryContractError):
+        recovery.EndpointSessionIdentity(**identity)
 
 
 def test_trigger_replay_preserves_content_and_creates_no_second_event() -> (

@@ -14,6 +14,7 @@ from stateforge_protocol.sfp.manifest.v1.validation import (
     bounded_json,
     canonical_bytes,
     compute_manifest_revision,
+    contract_validator,
     validate_manifest_key,
     validate_manifest_response,
     validate_schema,
@@ -54,6 +55,13 @@ def test_validates_and_canonicalizes_the_cross_language_vector() -> None:
         )
         == _GOLDEN_REVISION
     )
+
+
+def test_public_contract_validator_uses_the_packaged_schema() -> None:
+    validator = contract_validator("schemaDocument")
+
+    validator.validate(_schema())
+    assert not validator.is_valid({"type": "unknown"})
 
 
 def test_rejects_revision_mismatch() -> None:
@@ -100,6 +108,45 @@ def test_rejects_indirect_secret_values_without_echoing_them(
         validate_schema(document, "manifest.configurationSchema")
 
     assert secret not in str(error.value)
+
+
+def test_local_reference_propagates_write_only_secret_semantics() -> None:
+    secret = "sensitive-canary-never-in-errors"  # noqa: S105
+    document = _schema(
+        properties={
+            "token": {
+                "writeOnly": True,
+                "$ref": "#/$defs/tokenValue",
+            }
+        },
+        **{
+            "$defs": {
+                "tokenValue": {
+                    "type": "string",
+                    "default": secret,
+                }
+            }
+        },
+    )
+
+    with pytest.raises(ManifestValidationError) as error:
+        validate_schema(document, "manifest.configurationSchema")
+
+    assert secret not in str(error.value)
+
+
+def test_rejects_nested_schema_dialect_changes() -> None:
+    document = _schema(
+        properties={
+            "value": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "string",
+            }
+        }
+    )
+
+    with pytest.raises(ManifestValidationError, match="nested schema dialect"):
+        validate_schema(document, "manifest.configurationSchema")
 
 
 def test_enforces_contract_and_tighter_runtime_resource_limits() -> None:
@@ -158,4 +205,26 @@ def test_validates_manifest_revision_cache_keys() -> None:
             invalid.provider_instance_id,
             invalid.manifest_schema_version,
             invalid.manifest_revision,
+        )
+
+
+@pytest.mark.parametrize(
+    ("provider_instance_id", "schema_version", "message"),
+    [
+        ("not-a-uuid", 1, "identity"),
+        ("7F7DB7D8-68B4-4F71-9769-065B5C4F941C", 1, "identity"),
+        ("7f7db7d8-68b4-4f71-9769-065b5c4f941c", 0, "schema version"),
+        ("7f7db7d8-68b4-4f71-9769-065b5c4f941c", True, "schema version"),
+    ],
+)
+def test_manifest_cache_key_rejects_invalid_identity_or_version(
+    provider_instance_id: str,
+    schema_version: int,
+    message: str,
+) -> None:
+    with pytest.raises(ManifestValidationError, match=message):
+        validate_manifest_key(
+            provider_instance_id,
+            schema_version,
+            "sha256:" + ("a" * 64),
         )

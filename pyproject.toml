@@ -45,10 +45,12 @@ dev = [
     "pytest>=8.4",
     "pytest-asyncio>=1",
     "pytest-cov>=6.2",
+    "pyyaml>=6.0",
     "ruff>=0.12",
     "types-grpcio",
     "types-grpcio-health-checking",
     "types-jsonschema",
+    "types-pyyaml",
     "types-protobuf",
 ]
 docs = [
@@ -178,4 +180,24 @@ addopts = [
     "--strict-markers",
 ]
 testpaths = ["tests"]
+pythonpath = ["."]
 asyncio_mode = "strict"
+
+
+[tool.coverage.run]
+branch = true
+source = [
+    "stateforge_protocol",
+    "scripts.ci.audit_consumer",
+    "scripts.ci.verify_consumer_protocol",
+]
+omit = [
+    "*/sfp/*/v*/*_pb2.py",
+    "*/sfp/*/v*/*_pb2_grpc.py",
+]
+
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+skip_covered = true

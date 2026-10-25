@@ -16,6 +16,9 @@ from stateforge_protocol.sfp.operation_admission.v1 import (
     contract,
     operation_admission_pb2,
 )
+from stateforge_protocol.sfp.operation_admission.v1 import (
+    validation as admission_validation,
+)
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "operation_admission"
 _SCHEMA = json.loads(
@@ -477,6 +480,7 @@ def test_error_detail_round_trips_for_every_documented_case(case) -> None:
         detail,
         operation_admission_pb2.OperationAdmissionErrorDetail(),
     )
+    admission_validation.validate_admission_error_detail(message)
     projected = json_format.MessageToDict(
         message,
         always_print_fields_with_no_presence=True,
@@ -496,6 +500,13 @@ def test_retry_after_is_forbidden_for_non_retryable_error() -> None:
 
     with pytest.raises(ValidationError):
         _ERROR_VALIDATOR.validate(detail)
+
+    message = json_format.ParseDict(
+        detail,
+        operation_admission_pb2.OperationAdmissionErrorDetail(),
+    )
+    with pytest.raises(admission_validation.OperationAdmissionValidationError):
+        admission_validation.validate_admission_error_detail(message)
 
 
 def test_scenarios_cover_required_idempotency_boundaries() -> None:

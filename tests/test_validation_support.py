@@ -5,7 +5,7 @@ import importlib
 from pathlib import Path
 
 import pytest
-from google.protobuf.struct_pb2 import Struct
+from google.protobuf.struct_pb2 import ListValue, Struct
 
 from stateforge_protocol.sfp import _validation
 
@@ -103,6 +103,30 @@ def test_shared_context_bounds_json_and_protojson_containers() -> None:
             maximum_nodes=10,
             maximum_bytes=64,
         )
+    with pytest.raises(ExampleValidationError, match="keys must be strings"):
+        context.require_bounded_json(
+            {1: "value"},
+            "document",
+            maximum_depth=2,
+            maximum_nodes=4,
+            maximum_bytes=64,
+        )
+    with pytest.raises(ExampleValidationError, match="invalid Unicode"):
+        context.require_bounded_json(
+            "\ud800",
+            "document",
+            maximum_depth=2,
+            maximum_nodes=4,
+            maximum_bytes=64,
+        )
+    with pytest.raises(ExampleValidationError, match="non-JSON value"):
+        context.require_bounded_json(
+            object(),
+            "document",
+            maximum_depth=2,
+            maximum_nodes=4,
+            maximum_bytes=64,
+        )
 
     protojson = Struct()
     protojson.fields["nested"].struct_value.fields[
@@ -111,6 +135,17 @@ def test_shared_context_bounds_json_and_protojson_containers() -> None:
     with pytest.raises(ExampleValidationError, match="proto nesting"):
         context.require_bounded_protojson_container(
             protojson,
+            maximum_depth=1,
+            maximum_entries=2,
+            nesting_message="proto nesting",
+            container_message="proto breadth",
+        )
+
+    protojson_list = ListValue()
+    protojson_list.values.add().list_value.values.add().number_value = 1
+    with pytest.raises(ExampleValidationError, match="proto nesting"):
+        context.require_bounded_protojson_container(
+            protojson_list,
             maximum_depth=1,
             maximum_entries=2,
             nesting_message="proto nesting",
@@ -134,6 +169,13 @@ def test_shared_context_bounds_canonical_json() -> None:
         context.canonicalize_json(
             {"value": "too large"},
             maximum_bytes=4,
+            limit_message="canonical limit",
+            invalid_message="invalid canonical value",
+        )
+    with pytest.raises(ExampleValidationError, match="invalid canonical"):
+        context.canonicalize_json(
+            float("nan"),
+            maximum_bytes=None,
             limit_message="canonical limit",
             invalid_message="invalid canonical value",
         )

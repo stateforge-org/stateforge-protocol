@@ -74,7 +74,10 @@ def _record_import(
     if procedure is None:
         return
     record = imports.setdefault(procedure, _ProcedureImports())
-    record.generated |= any("_pb2" in name for name in names)
+    module_name = module.rsplit(".", 1)[-1]
+    record.generated |= "_pb2" in module_name or any(
+        "_pb2" in name for name in names
+    )
     record.contract |= module.endswith(".contract") or "contract" in names
     record.validation |= (
         module.endswith(".validation") or "validation" in names
@@ -141,6 +144,8 @@ def _audit_node(
 
 def audit(source: Path) -> list[Finding]:
     """Return ownership violations below one consumer source tree."""
+    if not source.is_dir():
+        raise ValueError("consumer source directory does not exist")
     findings: list[Finding] = []
     imports: dict[str, _ProcedureImports] = {}
     for path in sorted(source.rglob("*.py")):
@@ -197,5 +202,5 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - exercised through main().
     raise SystemExit(main())

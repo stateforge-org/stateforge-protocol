@@ -28,14 +28,21 @@ contracts rather than introducing new RPC services.
 Every pull request and release candidate must pass:
 
 1. Source conformance, deterministic generation, compatibility, typing, and
-   documentation checks.
+   documentation checks. Handwritten Protocol and verification code must keep
+   at least 95 percent branch coverage; generated protobuf bindings are
+   excluded because their source is verified separately through deterministic
+   generation.
 2. Exact wheel and sdist installation on every supported Python/platform
    combination.
 3. Installed execution of every catalog entry using only packaged resources.
 4. Independent Agent and Provider suites using the exact built Protocol wheel.
 5. Consumer ownership auditing that rejects private validation imports, copied
-   service identities or limits, and generated-binding use without the public
-   contract and validator.
+   service identities or limits, and every supported generated-binding import
+   form without the public contract and validator.
+
+The installed-package verifier runs independently in clean wheel and source
+distribution environments. Its execution is release evidence rather than part
+of the source-suite coverage percentage.
 
 Missing catalog coverage is a release-blocking error, not an informational
 report.

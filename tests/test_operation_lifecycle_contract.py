@@ -21,6 +21,9 @@ from stateforge_protocol.sfp.operation_lifecycle.v1 import (
 from stateforge_protocol.sfp.operation_lifecycle.v1 import (
     operation_lifecycle_pb2_grpc as rpc,
 )
+from stateforge_protocol.sfp.operation_lifecycle.v1 import (
+    validation as lifecycle_validation,
+)
 from stateforge_protocol.sfp.operation_lifecycle.v1.contract import (
     MAX_ERROR_DETAIL_BYTES,
     MAX_EXPLANATION_CODE_POINTS,
@@ -519,12 +522,38 @@ def test_terminal_replay_is_identical_across_new_session() -> None:
     )
     _validator("watchOperationResponse").validate(response)
     recovered = json_format.ParseDict(response, pb.WatchOperationResponse())
+    lifecycle_validation.validate_terminal_replay(
+        original.snapshot, recovered.snapshot
+    )
     assert recovered.snapshot == original.snapshot
     assert (
         recovered.snapshot.admission_record.admitted_endpoint_generation
         < recovered.endpoint_generation
     )
     assert recovered.session_id != original.session_id
+
+
+def test_terminal_replay_rejects_changed_or_nonterminal_state() -> None:
+    retained = json_format.ParseDict(
+        _SNAPSHOTS["succeeded"], pb.OperationSnapshot()
+    )
+    changed = copy.deepcopy(retained)
+    changed.success.result.fields["reclaimedBytes"].number_value = 8192
+
+    with pytest.raises(
+        lifecycle_validation.OperationLifecycleValidationError,
+        match="terminal snapshot changed",
+    ):
+        lifecycle_validation.validate_terminal_replay(retained, changed)
+
+    running = json_format.ParseDict(
+        _SNAPSHOTS["running"], pb.OperationSnapshot()
+    )
+    with pytest.raises(
+        lifecycle_validation.OperationLifecycleValidationError,
+        match="not terminal",
+    ):
+        lifecycle_validation.validate_terminal_replay(running, running)
 
 
 @pytest.mark.parametrize(
@@ -684,6 +713,7 @@ def test_structured_transport_errors_are_not_business_outcomes(case) -> None:
     detail = case["detail"]
     _validator("operationLifecycleErrorDetail").validate(detail)
     message = json_format.ParseDict(detail, pb.OperationLifecycleErrorDetail())
+    lifecycle_validation.validate_lifecycle_error_detail(message)
     assert _project(message) == detail
     assert case["grpcCode"] in grpc.StatusCode.__members__
     assert case["grpcCode"] != "OK"
@@ -772,9 +802,57 @@ def test_state_transition_retains_progress_and_wall_clock_is_not_order() -> (
     after = copy.deepcopy(_SNAPSHOTS["requested"])
     after["updatedAt"] = "2026-09-19T11:59:59Z"
     _assert_committed_pair(before, after)
+    lifecycle_validation.validate_snapshot_transition(
+        json_format.ParseDict(before, pb.OperationSnapshot()),
+        json_format.ParseDict(after, pb.OperationSnapshot()),
+    )
     after["progress"]["message"] = "Unsequenced progress mutation."
     with pytest.raises(AssertionError):
         _assert_committed_pair(before, after)
+
+
+def test_same_state_transition_requires_new_progress() -> None:
+    before = json_format.ParseDict(
+        _SNAPSHOTS["progress-25"], pb.OperationSnapshot()
+    )
+    after = json_format.ParseDict(
+        _SNAPSHOTS["progress-100"], pb.OperationSnapshot()
+    )
+
+    lifecycle_validation.validate_snapshot_transition(before, after)
+
+    unchanged = copy.deepcopy(after)
+    unchanged.progress.CopyFrom(before.progress)
+    with pytest.raises(
+        lifecycle_validation.OperationLifecycleValidationError,
+        match="new progress",
+    ):
+        lifecycle_validation.validate_snapshot_transition(before, unchanged)
+
+
+def test_state_transition_without_progress_remains_valid() -> None:
+    accepted = json_format.ParseDict(
+        _SNAPSHOTS["accepted"], pb.OperationSnapshot()
+    )
+    running = json_format.ParseDict(
+        _SNAPSHOTS["running"], pb.OperationSnapshot()
+    )
+
+    lifecycle_validation.validate_snapshot_transition(accepted, running)
+
+
+def test_snapshot_wraps_an_invalid_admission_record() -> None:
+    snapshot = copy.deepcopy(_SNAPSHOTS["running"])
+    snapshot["admissionRecord"]["recordExpiresAt"] = snapshot[
+        "admissionRecord"
+    ]["admittedAt"]
+    message = json_format.ParseDict(snapshot, pb.OperationSnapshot())
+
+    with pytest.raises(
+        lifecycle_validation.OperationLifecycleValidationError,
+        match="admission record is invalid",
+    ):
+        lifecycle_validation.validate_operation_snapshot(message)
 
 
 def test_structured_error_has_versioned_any_identity() -> None:

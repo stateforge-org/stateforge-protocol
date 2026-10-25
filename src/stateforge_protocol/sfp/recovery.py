@@ -59,12 +59,13 @@ class EndpointSessionIdentity:
         """Reject identity values outside their owning Protocol contracts."""
         for name in ("provider_instance_id", "provider_runtime_id"):
             value = getattr(self, name)
-            try:
-                primitives.parse_canonical_uuid4(str(value))
-            except primitives.ProtocolScalarError as error:
+            if (
+                not isinstance(value, UUID)
+                or value.version != primitives.CANONICAL_UUID_VERSION
+            ):
                 raise RecoveryContractError(
                     f"{name} must be a canonical UUIDv4"
-                ) from error
+                )
         if not discovery_contract.is_allocated_endpoint_generation(
             self.endpoint_generation
         ):

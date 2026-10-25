@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import jsonschema
@@ -57,13 +58,16 @@ def test_canonical_document_matches_packaged_json_schema() -> None:
 @pytest.mark.parametrize(
     ("field", "value"),
     [
+        ("schema_version", None),
         ("schema_version", "2"),
+        ("provider_instance_id", 1),
         ("provider_instance_id", "not-a-uuid"),
         ("provider_instance_id", str(_PROVIDER_INSTANCE_ID).upper()),
         ("endpoint_generation", True),
         ("endpoint_generation", 0),
         ("endpoint_generation", contract.MAX_ENDPOINT_GENERATION + 1),
         ("transport", {"type": "tcp", "socket_path": _SOCKET_PATH}),
+        ("transport", {"type": "unix", "socket_path": 1}),
         ("transport", {"type": "unix", "socket_path": "relative.sock"}),
     ],
 )
@@ -106,3 +110,80 @@ def test_rejects_oversized_descriptor_before_parsing() -> None:
         match="exceeds",
     ):
         contract.parse_descriptor(b"x" * (contract.MAX_DESCRIPTOR_BYTES + 1))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema_version", "2"),
+        (
+            "provider_instance_id",
+            UUID("00000000-0000-1000-8000-000000000000"),
+        ),
+        ("endpoint_generation", 0),
+        ("endpoint_generation", True),
+        ("socket_path", ""),
+        ("socket_path", "relative.sock"),
+        ("socket_path", "/run/provider\x00.sock"),
+    ],
+)
+def test_direct_descriptor_construction_enforces_the_contract(
+    field: str,
+    value: object,
+) -> None:
+    values: dict[str, Any] = {
+        "provider_instance_id": _PROVIDER_INSTANCE_ID,
+        "endpoint_generation": 4,
+        "socket_path": _SOCKET_PATH,
+        "schema_version": contract.SCHEMA_VERSION,
+    }
+    values[field] = value
+
+    with pytest.raises(contract.EndpointDescriptorContractError):
+        contract.EndpointDescriptor(**values)
+
+
+def test_descriptor_serialization_enforces_the_byte_limit() -> None:
+    descriptor = contract.EndpointDescriptor(
+        provider_instance_id=_PROVIDER_INSTANCE_ID,
+        endpoint_generation=4,
+        socket_path="/" + ("x" * contract.MAX_DESCRIPTOR_BYTES),
+    )
+
+    with pytest.raises(
+        contract.EndpointDescriptorContractError, match="exceeds"
+    ):
+        descriptor.to_json_bytes()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b"",
+        b"not-json",
+        b"[]",
+        (
+            b'{"schema_version":"1","provider_instance_id":"'
+            + str(_PROVIDER_INSTANCE_ID).encode()
+            + b'","endpoint_generation":4,"transport":[]}'
+        ),
+    ],
+)
+def test_rejects_unparseable_descriptor_documents(content: bytes) -> None:
+    with pytest.raises(contract.EndpointDescriptorContractError):
+        contract.parse_descriptor(content)
+
+
+def test_descriptor_naming_rejects_invalid_identity_and_generation() -> None:
+    invalid_id = UUID("00000000-0000-1000-8000-000000000000")
+
+    with pytest.raises(contract.EndpointDescriptorContractError):
+        contract.descriptor_filename(invalid_id)
+    with pytest.raises(contract.EndpointDescriptorContractError):
+        contract.socket_filename(_PROVIDER_INSTANCE_ID, 0)
+    with pytest.raises(contract.EndpointDescriptorContractError):
+        contract.provider_instance_id_from_descriptor_filename("provider.json")
+    with pytest.raises(contract.EndpointDescriptorContractError):
+        contract.provider_instance_id_from_descriptor_filename(
+            f"{str(_PROVIDER_INSTANCE_ID).upper()}.sfp.json"
+        )

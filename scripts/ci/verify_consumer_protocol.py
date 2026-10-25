@@ -67,7 +67,12 @@ def verify(wheel: Path) -> dict[str, str]:
     """Verify the installed distribution and return evidence."""
     if not wheel.is_file() or wheel.suffix != ".whl":
         raise ValueError("Expected Protocol wheel does not exist")
-    distribution = importlib.metadata.distribution(_DISTRIBUTION)
+    try:
+        distribution = importlib.metadata.distribution(_DISTRIBUTION)
+    except importlib.metadata.PackageNotFoundError as error:
+        raise ValueError(
+            "Installed Protocol distribution does not exist"
+        ) from error
     raw_direct_url = distribution.read_text("direct_url.json")
     if raw_direct_url is None:
         raise ValueError("Installed Protocol has no direct_url.json evidence")
@@ -103,5 +108,5 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - exercised through main().
     raise SystemExit(main())

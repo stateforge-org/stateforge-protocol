@@ -39,5 +39,5 @@ runs:
           if [[ -n "${BREAKING_AGAINST}" ]]; then
             buf breaking --against "${BREAKING_AGAINST}"
           fi
-          python -m pytest
+          python -m pytest --cov
         } 2>&1 | tee "${EVIDENCE_DIRECTORY}/contracts.log"
