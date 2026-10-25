@@ -38,5 +38,7 @@ message HandshakeResponse {
   uint64 endpoint_generation = 2;
   ProtocolVersion selected_sfp_version = 3;
   string provider_runtime_id = 4;
+  // Fresh for every successful Handshake within one Provider installation.
+  // Unrelated installations need not coordinate this opaque namespace.
   string session_id = 5;
 }

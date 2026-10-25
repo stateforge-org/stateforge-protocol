@@ -19,6 +19,11 @@ runs:
       with:
         evidence-directory: ${{ inputs.evidence-directory }}/health
 
+    - name: Validate disconnection recovery contracts
+      uses: ./.github/actions/contracts/recovery
+      with:
+        evidence-directory: ${{ inputs.evidence-directory }}/recovery
+
     - name: Validate Protocol contracts
       shell: bash
       env:

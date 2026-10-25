@@ -1,0 +1,189 @@
+{
+  "identityTransitions": [
+    {
+      "id": "same-process-reconnect",
+      "current": {
+        "providerInstanceId": "11111111-1111-4111-8111-111111111111",
+        "endpointGeneration": 42,
+        "providerRuntimeId": "33333333-3333-4333-8333-333333333333",
+        "sessionId": "session-reconnected-42"
+      },
+      "expectedKind": "same_process_reconnect",
+      "mayReconcilePreviousState": true,
+      "requiresResolveOnly": false
+    },
+    {
+      "id": "endpoint-replaced",
+      "current": {
+        "providerInstanceId": "11111111-1111-4111-8111-111111111111",
+        "endpointGeneration": 43,
+        "providerRuntimeId": "33333333-3333-4333-8333-333333333333",
+        "sessionId": "session-replaced-43"
+      },
+      "expectedKind": "endpoint_replaced",
+      "mayReconcilePreviousState": true,
+      "requiresResolveOnly": true
+    },
+    {
+      "id": "process-restarted",
+      "current": {
+        "providerInstanceId": "11111111-1111-4111-8111-111111111111",
+        "endpointGeneration": 43,
+        "providerRuntimeId": "44444444-4444-4444-8444-444444444444",
+        "sessionId": "session-restarted-43"
+      },
+      "expectedKind": "process_restarted",
+      "mayReconcilePreviousState": true,
+      "requiresResolveOnly": true
+    },
+    {
+      "id": "installation-replaced",
+      "current": {
+        "providerInstanceId": "55555555-5555-4555-8555-555555555555",
+        "endpointGeneration": 1,
+        "providerRuntimeId": "66666666-6666-4666-8666-666666666666",
+        "sessionId": "session-admission-42"
+      },
+      "expectedKind": "installation_replaced",
+      "mayReconcilePreviousState": false,
+      "requiresResolveOnly": false
+    }
+  ],
+  "invalidIdentityTransitions": [
+    {
+      "id": "reused-session",
+      "current": {
+        "providerInstanceId": "11111111-1111-4111-8111-111111111111",
+        "endpointGeneration": 42,
+        "providerRuntimeId": "33333333-3333-4333-8333-333333333333",
+        "sessionId": "session-admission-42"
+      }
+    },
+    {
+      "id": "generation-moved-backward",
+      "current": {
+        "providerInstanceId": "11111111-1111-4111-8111-111111111111",
+        "endpointGeneration": 41,
+        "providerRuntimeId": "33333333-3333-4333-8333-333333333333",
+        "sessionId": "session-stale-41"
+      }
+    },
+    {
+      "id": "runtime-changed-without-generation",
+      "current": {
+        "providerInstanceId": "11111111-1111-4111-8111-111111111111",
+        "endpointGeneration": 42,
+        "providerRuntimeId": "44444444-4444-4444-8444-444444444444",
+        "sessionId": "session-invalid-runtime"
+      }
+    }
+  ],
+  "admissionRecovery": [
+    {
+      "id": "lost-reply-same-generation",
+      "generationBoundary": false,
+      "retainedRecord": true,
+      "requiredMode": "ADMISSION_MODE_ADMIT_OR_RESOLVE",
+      "expectedDisposition": "ADMISSION_DISPOSITION_RESOLVED_EXISTING",
+      "mayDispatchAbsentWork": true,
+      "outcome": "resolved"
+    },
+    {
+      "id": "lost-reply-after-generation-change-retained",
+      "generationBoundary": true,
+      "retainedRecord": true,
+      "requiredMode": "ADMISSION_MODE_RESOLVE_ONLY",
+      "expectedDisposition": "ADMISSION_DISPOSITION_RESOLVED_EXISTING",
+      "mayDispatchAbsentWork": false,
+      "outcome": "resolved"
+    },
+    {
+      "id": "lost-reply-after-generation-change-state-lost",
+      "generationBoundary": true,
+      "retainedRecord": false,
+      "requiredMode": "ADMISSION_MODE_RESOLVE_ONLY",
+      "expectedReason": "ADMISSION_ERROR_REASON_OPERATION_RECORD_UNAVAILABLE",
+      "mayDispatchAbsentWork": false,
+      "outcome": "indeterminate"
+    },
+    {
+      "id": "retention-expired",
+      "generationBoundary": true,
+      "retainedRecord": false,
+      "requiredMode": "ADMISSION_MODE_RESOLVE_ONLY",
+      "expectedReason": "ADMISSION_ERROR_REASON_OPERATION_RECORD_EXPIRED",
+      "mayDispatchAbsentWork": false,
+      "outcome": "indeterminate"
+    }
+  ],
+  "triggerRecovery": [
+    {
+      "id": "lost-acknowledgement-identical-replay",
+      "sameInstallation": true,
+      "samePublicationId": true,
+      "sameCanonicalContent": true,
+      "expectedDisposition": "TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_ACCEPTED_DUPLICATE",
+      "createsLogicalTrigger": false
+    },
+    {
+      "id": "publication-id-content-conflict",
+      "sameInstallation": true,
+      "samePublicationId": true,
+      "sameCanonicalContent": false,
+      "expectedReason": "TRIGGER_REJECTION_REASON_IDEMPOTENCY_CONFLICT",
+      "createsLogicalTrigger": false
+    },
+    {
+      "id": "replacement-installation-has-distinct-publication-namespace",
+      "sameInstallation": false,
+      "samePublicationId": true,
+      "sameCanonicalContent": true,
+      "expectedDisposition": "TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_ACCEPTED_NEW",
+      "createsLogicalTrigger": true
+    }
+  ],
+  "watchRecovery": [
+    {
+      "id": "adjacent-cursor",
+      "afterSequence": 4,
+      "responseSequence": 5,
+      "updatesSkipped": false,
+      "outcome": "current"
+    },
+    {
+      "id": "cursor-gap",
+      "afterSequence": 2,
+      "responseSequence": 5,
+      "updatesSkipped": true,
+      "outcome": "current"
+    },
+    {
+      "id": "cursor-equals-current",
+      "afterSequence": 5,
+      "responseSequence": 5,
+      "updatesSkipped": false,
+      "outcome": "current"
+    },
+    {
+      "id": "cursor-ahead",
+      "afterSequence": 6,
+      "responseSequence": 5,
+      "expectedReason": "LIFECYCLE_ERROR_REASON_CURSOR_AHEAD",
+      "outcome": "indeterminate"
+    },
+    {
+      "id": "admission-retained-lifecycle-lost",
+      "afterSequence": 0,
+      "expectedReason": "LIFECYCLE_ERROR_REASON_OPERATION_STATE_UNAVAILABLE",
+      "outcome": "indeterminate"
+    }
+  ],
+  "availabilityPrerequisites": [
+    "transportCurrent",
+    "sessionCurrent",
+    "generationCurrent",
+    "manifestAccepted",
+    "healthWatchCurrent",
+    "healthServing"
+  ]
+}

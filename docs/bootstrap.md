@@ -33,6 +33,14 @@ unchanged by consumers; its length is measured in Unicode code points rather
 than encoded bytes. Procedure-specific checks remain required even when the
 shared gRPC channel accepts a larger message for another SFP procedure.
 
+Every successful Handshake creates a fresh session ID within that Provider
+installation. The Provider must not reuse an earlier session ID from the same
+installation, including after endpoint replacement or process restart. Session
+IDs need not be globally unique across unrelated Provider installations because
+all session bindings also carry `provider_instance_id`. Freshness is a
+live-context obligation and therefore cannot be established by the
+context-independent response validator alone.
+
 The canonical validator requires lowercase UUIDv4 runtime and Provider
 identities, an allocated endpoint generation, at least one unique valid SFP
 wire version, and a non-empty bounded session identifier. Consumers then apply

@@ -149,6 +149,19 @@ class ValidationContext(Generic[_ValidationError]):
             )
         return projected
 
+    def require_serialized_size(
+        self,
+        message: Message,
+        *,
+        maximum_bytes: int,
+        path: str,
+    ) -> None:
+        """Require one protobuf message to fit its RPC boundary."""
+        self.require(
+            message.ByteSize() <= maximum_bytes,
+            f"{path}: serialized message exceeds the protocol limit",
+        )
+
     def validate_schema_definition(
         self,
         schema: PackagedSchema,
@@ -264,11 +277,16 @@ class ValidationContext(Generic[_ValidationError]):
         self,
         value: object,
         *,
-        maximum_bytes: int,
+        maximum_bytes: int | None,
         limit_message: str,
         invalid_message: str,
     ) -> bytes:
-        """Return bounded RFC 8785 bytes for a JSON-compatible value."""
+        """Return RFC 8785 bytes with an optional encoded-output bound."""
+        if maximum_bytes is None:
+            try:
+                return rfc8785.dumps(cast(Any, value))
+            except rfc8785.CanonicalizationError:
+                raise self.error_type(invalid_message) from None
         stream = _BoundedBuffer(
             maximum_bytes=maximum_bytes,
             error_type=self.error_type,

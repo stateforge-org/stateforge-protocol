@@ -121,6 +121,9 @@ class HandshakeResponse(_message.Message):
     endpoint_generation: _builtins.int
     provider_runtime_id: _builtins.str
     session_id: _builtins.str
+    """Fresh for every successful Handshake within one Provider installation.
+    Unrelated installations need not coordinate this opaque namespace.
+    """
     @_builtins.property
     def selected_sfp_version(self) -> Global___ProtocolVersion: ...
     def __init__(

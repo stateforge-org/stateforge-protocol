@@ -73,3 +73,15 @@ def test_health_contract_is_registered_in_reusable_validation() -> None:
     assert (
         "./.github/workflows/protocol-build-and-verify.yml" in release_workflow
     )
+
+
+def test_recovery_contract_is_registered_in_reusable_validation() -> None:
+    """Run recovery vectors through every standard source-verification path."""
+    recovery_action = read(ACTIONS / "contracts" / "recovery" / "action.yml")
+    contract_action = read(ACTIONS / "contracts" / "validate" / "action.yml")
+    installed_verifier = read(ROOT / "scripts" / "ci" / "verify_installed.py")
+
+    assert "tests/test_disconnection_recovery_contract.py" in recovery_action
+    assert "./.github/actions/contracts/recovery" in contract_action
+    assert "_verify_recovery_contracts" in installed_verifier
+    assert '"recovery_scenario_count"' in installed_verifier
