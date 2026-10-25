@@ -1,8 +1,8 @@
 # SFP procedure map
 
 StateForge Protocol is defined as a set of related procedures executed over a
-multiplexed local gRPC channel. The diagrams in this section are the original
-sequence diagrams maintained with the StateForge Protocol specification.
+multiplexed local gRPC channel. Each page describes a procedure's sequence,
+messages, validation rules, state transitions, and failure behavior.
 
 | Procedure | Purpose |
 | --- | --- |

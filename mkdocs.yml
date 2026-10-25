@@ -14,6 +14,9 @@ theme:
     - navigation.sections
     - navigation.top
 
+extra_css:
+  - stylesheets/extra.css
+
 nav:
   - Overview: index.md
   - SFP procedures:
@@ -27,12 +30,10 @@ nav:
       - Operation admission and idempotency: procedures/operation-admission.md
       - Progress, results, and cancellation: procedures/progress-results-cancellation.md
       - Disconnection and recovery: procedures/disconnection-recovery.md
-  - Non-normative profile design notes:
-      - Backup preparation: procedures/backup-preparation.md
-      - Disaster-recovery execution: procedures/disaster-recovery.md
   - Generated Python contracts: reference/python-contracts.md
   - Responsibility boundaries: reference/responsibility-boundaries.md
   - Conformance coverage: reference/conformance-coverage.md
+  - CI/CD and artifact verification: reference/ci-automation.md
 
 plugins:
   - search

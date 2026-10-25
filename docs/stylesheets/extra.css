@@ -1,0 +1,12 @@
+.md-typeset .mermaid {
+  display: block;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.md-typeset .mermaid > svg {
+  display: block;
+  height: auto;
+  margin-inline: auto;
+  max-width: 100%;
+}
