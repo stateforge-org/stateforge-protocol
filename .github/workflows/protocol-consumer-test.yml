@@ -1,0 +1,291 @@
+name: Protocol / Consumer verification
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: Exact Protocol distribution artifact to test.
+        required: true
+        type: string
+      agent-ref:
+        description: Agent branch, tag, or commit to verify.
+        required: false
+        type: string
+        default: mvp/implementation
+      provider-ref:
+        description: Provider branch, tag, or commit to verify.
+        required: false
+        type: string
+        default: mvp/implementation
+      evidence-prefix:
+        description: Prefix used for consumer evidence artifacts.
+        required: false
+        type: string
+        default: stateforge-protocol-consumer-evidence
+      retention-days:
+        description: Number of days to retain consumer evidence.
+        required: false
+        type: number
+        default: 14
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Resolve consumer revisions once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      agent-commit: ${{ steps.revisions.outputs.agent-commit }}
+      provider-commit: ${{ steps.revisions.outputs.provider-commit }}
+    steps:
+      - name: Check out Agent source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: stateforge-org/stateforge-agent
+          ref: ${{ inputs.agent-ref }}
+          path: consumers/agent
+          persist-credentials: false
+
+      - name: Check out Provider source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: stateforge-org/stateforge-provider-python
+          ref: ${{ inputs.provider-ref }}
+          path: consumers/provider
+          persist-credentials: false
+
+      - name: Record immutable consumer revisions
+        id: revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "agent-commit=$(git -C consumers/agent rev-parse --verify HEAD)"
+            echo "provider-commit=$(git -C consumers/provider rev-parse --verify HEAD)"
+          } >> "${GITHUB_OUTPUT}"
+
+  agent:
+    name: Agent against exact Protocol wheel
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out Protocol verification source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out immutable Agent source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: stateforge-org/stateforge-agent
+          ref: ${{ needs.resolve.outputs.agent-commit }}
+          path: consumer
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Download exact Protocol distributions
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ runner.temp }}/stateforge-protocol-dist
+
+      - name: Install Agent with the exact Protocol wheel
+        shell: bash
+        env:
+          ARTIFACT_DIRECTORY: ${{ runner.temp }}/stateforge-protocol-dist
+        run: |
+          set -euo pipefail
+          (
+            cd "${ARTIFACT_DIRECTORY}"
+            sha256sum --check SHA256SUMS
+          )
+          shopt -s nullglob
+          protocol_wheels=("${ARTIFACT_DIRECTORY}"/stateforge_protocol-*.whl)
+          if [[ ${#protocol_wheels[@]} -ne 1 ]]; then
+            echo "Expected exactly one Protocol wheel" >&2
+            exit 1
+          fi
+          python -m pip install --disable-pip-version-check --upgrade pip
+          python -m pip install --disable-pip-version-check \
+            "${protocol_wheels[0]}"
+          (
+            cd consumer
+            python -m pip install --disable-pip-version-check \
+              --group dev \
+              --group docs \
+              .
+          )
+          mkdir -p evidence/consumers/agent
+          python scripts/ci/verify_consumer_protocol.py \
+            --wheel "${protocol_wheels[0]}" \
+            --output evidence/consumers/agent/protocol-install.json
+          sha256sum "${protocol_wheels[0]}" \
+            > evidence/consumers/agent/protocol-wheel-sha256.txt
+          python -m pip freeze --all \
+            > evidence/consumers/agent/environment.txt
+
+      - name: Audit Agent Protocol ownership
+        shell: bash
+        run: |
+          python scripts/ci/audit_consumer.py \
+            --source consumer/src/stateforge_agent/_sfp \
+            --output evidence/consumers/agent/ownership.json
+
+      - name: Run complete Agent consumer suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            cd consumer
+            python -m ruff format --check .
+            python -m ruff check .
+            python -m mypy src
+            python -m pytest
+            python -m mkdocs build --strict
+          } 2>&1 | tee evidence/consumers/agent/quality.log
+
+      - name: Record Agent consumer identity
+        shell: bash
+        env:
+          AGENT_COMMIT: ${{ needs.resolve.outputs.agent-commit }}
+          AGENT_REF: ${{ inputs.agent-ref }}
+        run: |
+          printf '%s\n' \
+            "requested-ref=${AGENT_REF}" \
+            "resolved-commit=${AGENT_COMMIT}" \
+            > evidence/consumers/agent/consumer.txt
+
+      - name: Collect bounded Agent consumer evidence
+        if: ${{ always() }}
+        uses: ./.github/actions/evidence/collect
+        with:
+          stage: agent-consumer
+          evidence-directory: evidence/consumers/agent
+
+      - name: Upload Agent consumer evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.evidence-prefix }}-agent
+          path: evidence/consumers/agent
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+  provider:
+    name: Provider against exact Protocol wheel
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out Protocol verification source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out immutable Provider source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: stateforge-org/stateforge-provider-python
+          ref: ${{ needs.resolve.outputs.provider-commit }}
+          path: consumer
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Download exact Protocol distributions
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ runner.temp }}/stateforge-protocol-dist
+
+      - name: Install Provider with the exact Protocol wheel
+        shell: bash
+        env:
+          ARTIFACT_DIRECTORY: ${{ runner.temp }}/stateforge-protocol-dist
+        run: |
+          set -euo pipefail
+          (
+            cd "${ARTIFACT_DIRECTORY}"
+            sha256sum --check SHA256SUMS
+          )
+          shopt -s nullglob
+          protocol_wheels=("${ARTIFACT_DIRECTORY}"/stateforge_protocol-*.whl)
+          if [[ ${#protocol_wheels[@]} -ne 1 ]]; then
+            echo "Expected exactly one Protocol wheel" >&2
+            exit 1
+          fi
+          python -m pip install --disable-pip-version-check --upgrade pip
+          python -m pip install --disable-pip-version-check \
+            "${protocol_wheels[0]}"
+          (
+            cd consumer
+            python -m pip install --disable-pip-version-check \
+              --group dev \
+              --group docs \
+              .
+          )
+          mkdir -p evidence/consumers/provider
+          python scripts/ci/verify_consumer_protocol.py \
+            --wheel "${protocol_wheels[0]}" \
+            --output evidence/consumers/provider/protocol-install.json
+          sha256sum "${protocol_wheels[0]}" \
+            > evidence/consumers/provider/protocol-wheel-sha256.txt
+          python -m pip freeze --all \
+            > evidence/consumers/provider/environment.txt
+
+      - name: Audit Provider Protocol ownership
+        shell: bash
+        run: |
+          python scripts/ci/audit_consumer.py \
+            --source consumer/src/stateforge_provider \
+            --output evidence/consumers/provider/ownership.json
+
+      - name: Run complete Provider consumer suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            cd consumer
+            python -m ruff format --check .
+            python -m ruff check .
+            python -m mypy src
+            python -m pytest
+            python -m mkdocs build --strict
+          } 2>&1 | tee evidence/consumers/provider/quality.log
+
+      - name: Record Provider consumer identity
+        shell: bash
+        env:
+          PROVIDER_COMMIT: ${{ needs.resolve.outputs.provider-commit }}
+          PROVIDER_REF: ${{ inputs.provider-ref }}
+        run: |
+          printf '%s\n' \
+            "requested-ref=${PROVIDER_REF}" \
+            "resolved-commit=${PROVIDER_COMMIT}" \
+            > evidence/consumers/provider/consumer.txt
+
+      - name: Collect bounded Provider consumer evidence
+        if: ${{ always() }}
+        uses: ./.github/actions/evidence/collect
+        with:
+          stage: provider-consumer
+          evidence-directory: evidence/consumers/provider
+
+      - name: Upload Provider consumer evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.evidence-prefix }}-provider
+          path: evidence/consumers/provider
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}

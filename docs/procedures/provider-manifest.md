@@ -100,41 +100,19 @@ identifier, not interpreted by the protocol package. An unfamiliar requirement
 is not evidence that the Agent satisfies it; assessment/admission policy is
 owned by their later contracts.
 
-An operation's `implements` list contains zero or more **profile claims**:
-versioned semantic roles such as `stateforge.backup.v1.prepare` and
-`stateforge.disaster_recovery.v1.reconstruct`. A role is not a user permission,
-a Provider category, or an individual Control Plane contract. Multiple entries
-mean that one operation claims to satisfy multiple profiles; each claim must
-be validated independently. Different Control Plane contracts may later
-require the same profile without adding contract identifiers to `implements`.
-The Provider does not need to receive or interpret those contracts through
-this manifest.
-
-An operation named "backup" with an empty `implements` list makes no profile
-claim. Unknown roles may be transported but cannot establish a recognized
-compliance profile. A known claim must be checked against that profile's exact
-versioned input/result schemas and semantic requirements before use. The
-versioned operation identifier identifies its input/result contract; an
-incompatible operation contract change requires a new identifier version.
+An operation's `implements` list contains zero or more extensible **profile
+claims**, such as `example.vendor.profile.v1.read_only`. SFP validates their
+identifier shape and transports them without assigning application-specific
+meaning. Another specification may define a profile's schemas and semantics;
+that meaning is not part of Manifest Exchange. An operation name never implies
+a profile claim, and an empty `implements` list claims none.
 
 Every operation declaration contains exactly `input_schema`, `result_schema`,
 and `implements`. The operation's `result_schema` is the only manifest-level
-declaration of terminal result shape. Generic, custom, backup-profile, and
-DR-profile operations all use the same structure. Construction and structural
-validation must not infer additional result modes from names, roles, or schema
-payloads. Protobuf field 4 and `backup_source_modes` are reserved; the ProtoJSON
-schema rejects `backupSourceModes` and `backup_source_modes` as unknown
-operation properties, including empty values. Names inside embedded schemas
-remain ordinary schema data and do not create manifest fields or claims.
-
-The later backup-preparation profile will define the exact terminal result
-schema as an explicitly tagged choice between `materialized_source` and
-`provider_reference`. This manifest contract does not define its tag key or
-variant fields. The Provider prepares data and returns one schema-valid
-result. The Agent validates the variant; it may route a materialized source
-to an Agent-owned BackupEngine, while a Provider reference bypasses it.
-Engine configuration, capabilities, routing, credentials, and lifecycle have
-no place in Manifest Exchange. Providers do not choose or invoke an engine.
+declaration of terminal result shape. All operations use the same structure.
+Construction and structural validation must not infer additional result modes
+from names, roles, or schema payloads. Names inside embedded schemas remain
+ordinary schema data and do not create manifest fields or claims.
 
 ## Structural and semantic validation
 

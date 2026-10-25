@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ACTIONS = ROOT / ".github" / "actions"
 WORKFLOWS = ROOT / ".github" / "workflows"
 SOURCE_ROOT_RESOLUTION_COUNT = 2
+CONSUMER_COUNT = 2
 
 
 def read(path: Path) -> str:
@@ -45,17 +46,16 @@ def test_protocol_builder_preserves_artifact_contract() -> None:
 
 
 def test_installed_verifier_covers_wheel_and_sdist() -> None:
-    """Verify both distribution formats without multiplying the full matrix."""
+    """Verify both distribution formats throughout the full matrix."""
     action = read(ACTIONS / "python" / "test-installed" / "action.yml")
     workflow = read(WORKFLOWS / "protocol-installed-test.yml")
 
     assert "verify-sdist:" in action
     assert "sdist-path=${sdist_path}" in action
     assert "installed-sdist.log" in action
-    assert (
-        "verify-sdist: ${{ matrix.os == 'ubuntu-24.04' && "
-        "matrix.python == '3.13' }}" in workflow
-    )
+    assert 'verify-sdist: "true"' in workflow
+    assert "wheel-conformance.json" in action
+    assert "sdist-conformance.json" in action
 
 
 def test_health_contract_is_registered_in_reusable_validation() -> None:
@@ -85,3 +85,29 @@ def test_recovery_contract_is_registered_in_reusable_validation() -> None:
     assert "./.github/actions/contracts/recovery" in contract_action
     assert "_verify_recovery_contracts" in installed_verifier
     assert '"recovery_scenario_count"' in installed_verifier
+
+
+def test_complete_gate_runs_independent_consumers_against_exact_wheel() -> (
+    None
+):
+    """Keep Agent and Provider compatibility in the standard release gate."""
+    consumer = read(WORKFLOWS / "protocol-consumer-test.yml")
+    build = read(WORKFLOWS / "protocol-build-and-verify.yml")
+    release = read(WORKFLOWS / "protocol-release-candidate.yml")
+
+    for repository in (
+        "stateforge-org/stateforge-agent",
+        "stateforge-org/stateforge-provider-python",
+    ):
+        assert repository in consumer
+    assert "sha256sum --check SHA256SUMS" in consumer
+    assert "scripts/ci/audit_consumer.py" in consumer
+    assert "scripts/ci/verify_consumer_protocol.py" in consumer
+    assert consumer.count("protocol-install.json") == CONSUMER_COUNT
+    assert "python -m pytest" in consumer
+    assert "python -m mypy src" in consumer
+    assert "python -m mkdocs build --strict" in consumer
+    assert "./.github/workflows/protocol-consumer-test.yml" in build
+    for input_name in ("agent-ref", "provider-ref"):
+        assert f"{input_name}:" in build
+        assert f"{input_name}: ${{{{ inputs.{input_name} }}}}" in release

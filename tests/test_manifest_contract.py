@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import rfc8785
-from google.protobuf import descriptor_pb2, json_format
+from google.protobuf import json_format
 from google.protobuf.descriptor import FieldDescriptor
 from jsonschema import Draft202012Validator, ValidationError
 
@@ -199,10 +199,6 @@ def test_operation_identifiers_are_string_map_keys() -> None:
 def test_provider_manifest_has_no_generic_target_kinds() -> None:
     descriptor = manifest_pb2.ProviderManifest.DESCRIPTOR
     assert "target_kinds" not in descriptor.fields_by_name
-    message = descriptor_pb2.DescriptorProto()
-    descriptor.CopyToProto(message)
-    assert not message.reserved_range
-    assert not message.reserved_name
     schema = _SCHEMA["$defs"]["providerManifest"]
     assert "targetKinds" not in schema["properties"]
     assert "targetKinds" not in schema["required"]
@@ -269,14 +265,14 @@ def test_secret_schema_fields_cannot_embed_values(
 def test_custom_operations_do_not_imply_compliance(response, validator):
     operations = response["manifest"]["operations"]
     declaration = operations.pop("stateforge.git/reference.resolve@1")
-    operations["example.vendor/backup.prepare@3"] = declaration
+    operations["example.vendor/resource.inspect@3"] = declaration
     validator.validate(response)
 
     message = json_format.ParseDict(
         response, manifest_pb2.GetManifestResponse()
     )
     assert not message.manifest.operations[
-        "example.vendor/backup.prepare@3"
+        "example.vendor/resource.inspect@3"
     ].implements
 
 
@@ -303,7 +299,7 @@ def test_compliance_claims_and_trigger_schemas_survive_wire(
 ):
     manifest = response["manifest"]
     operation = next(iter(manifest["operations"].values()))
-    operation["implements"] = ["stateforge.backup.v1.prepare"]
+    operation["implements"] = ["example.vendor.profile.v1.read_only"]
     manifest["triggers"]["stateforge.git/reference.changed@1"] = {
         "payloadSchema": copy.deepcopy(operation["resultSchema"])
     }
@@ -318,7 +314,7 @@ def test_compliance_claims_and_trigger_schemas_survive_wire(
         decoded.manifest.operations[
             "stateforge.git/reference.resolve@1"
         ].implements
-    ) == ["stateforge.backup.v1.prepare"]
+    ) == ["example.vendor.profile.v1.read_only"]
     assert "stateforge.git/reference.changed@1" in decoded.manifest.triggers
 
 
@@ -354,7 +350,7 @@ def test_interoperability_changes_change_revision(response, change):
         ] = {"count": {"type": "integer"}}
     else:
         next(iter(manifest["operations"].values()))["implements"] = [
-            "stateforge.backup.v1.prepare"
+            "example.vendor.profile.v1.read_only"
         ]
     assert hashlib.sha256(_preimage(response)).digest() != original
 
@@ -371,38 +367,13 @@ def test_protobuf_decoding_does_not_perform_semantic_validation(validator):
         )
 
 
-def test_operation_fields_and_legacy_reservations():
+def test_operation_declaration_contains_only_generic_fields():
     descriptor = manifest_pb2.OperationDeclaration.DESCRIPTOR
     assert {field.name: field.number for field in descriptor.fields} == {
         "input_schema": 1,
         "result_schema": 2,
         "implements": 3,
     }
-    proto = descriptor_pb2.DescriptorProto()
-    descriptor.CopyToProto(proto)
-    assert [(item.start, item.end) for item in proto.reserved_range] == [
-        (4, 5)
-    ]
-    assert list(proto.reserved_name) == ["backup_source_modes"]
-
-
-def test_checked_in_legacy_property_fixture_is_rejected():
-    response = json.loads(
-        (_FIXTURES / "invalid-backup-source-modes.json").read_text()
-    )
-    with pytest.raises(ValidationError, match="Additional properties"):
-        Draft202012Validator(_SCHEMA).validate(response)
-    with pytest.raises(json_format.ParseError, match="backupSourceModes"):
-        json_format.ParseDict(response, manifest_pb2.GetManifestResponse())
-
-
-@pytest.mark.parametrize("field", ["backupSourceModes", "backup_source_modes"])
-@pytest.mark.parametrize("value", [[], ["provider_reference"]])
-def test_no_legacy_property_even_when_empty(response, field, value):
-    operation = next(iter(response["manifest"]["operations"].values()))
-    operation[field] = value
-    with pytest.raises(ValidationError, match="Additional properties"):
-        Draft202012Validator(_SCHEMA).validate(response)
 
 
 @pytest.mark.parametrize(
@@ -419,11 +390,11 @@ def test_all_declaration_fields_are_explicitly_required(response, field):
     ("identifier", "roles"),
     [
         ("stateforge.git/reference.resolve@1", []),
-        ("example.vendor/backup.prepare@3", []),
-        ("example.vendor/collect@1", ["stateforge.backup.v1.prepare"]),
+        ("example.vendor/resource.inspect@3", []),
+        ("example.vendor/collect@1", ["example.vendor.profile.v1.read_only"]),
         (
-            "example.vendor/reconstruct@1",
-            ["stateforge.disaster_recovery.v1.reconstruct"],
+            "example.vendor/resource.update@1",
+            ["example.vendor.profile.v1.mutating"],
         ),
         ("example.vendor/custom@2", ["example.vendor.manifest_pb2.custom"]),
     ],
@@ -431,8 +402,8 @@ def test_all_declaration_fields_are_explicitly_required(response, field):
 def test_all_operation_categories_share_generic_declaration(
     response, identifier, roles
 ):
-    # These are structural claim examples, not certification of the future
-    # backup/DR profiles. Their exact schemas belong to those milestones.
+    # These are structural claim examples. SFP transports but does not assign
+    # semantics to extensible profile identifiers.
     operation = next(iter(response["manifest"]["operations"].values()))
     operation["implements"] = roles
     response["manifest"]["operations"] = {identifier: operation}
@@ -450,10 +421,10 @@ def test_all_operation_categories_share_generic_declaration(
 
 def test_incidental_result_shape_creates_no_manifest_semantics(response):
     operation = next(iter(response["manifest"]["operations"].values()))
-    # A custom schema can use these words as data without a compliance role.
+    # A custom schema remains data and does not create a compliance role.
     operation["resultSchema"]["properties"] = {
-        "backupSourceModes": {"type": "string"},
-        "kind": {"enum": ["materialized_source", "provider_reference"]},
+        "applicationMode": {"type": "string"},
+        "kind": {"enum": ["inline", "reference"]},
     }
     Draft202012Validator(_SCHEMA).validate(response)
     message = json_format.ParseDict(

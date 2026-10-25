@@ -1,17 +1,13 @@
 """Tests for private mechanics shared by procedure-owned validators."""
 
 import ast
+import importlib
 from pathlib import Path
 
 import pytest
 from google.protobuf.struct_pb2 import Struct
 
 from stateforge_protocol.sfp import _validation
-from stateforge_protocol.sfp.bootstrap.v1 import validation as bootstrap
-from stateforge_protocol.sfp.capability_assessment.v1 import (
-    validation as capability_assessment,
-)
-from stateforge_protocol.sfp.manifest.v1 import validation as manifest
 
 _SOURCE_ROOT = (
     Path(__file__).parents[1] / "src" / "stateforge_protocol" / "sfp"
@@ -169,6 +165,13 @@ def test_procedure_validators_do_not_reimplement_shared_mechanics() -> None:
 
 
 def test_procedure_validator_public_surfaces_are_explicit() -> None:
-    assert bootstrap.__all__
-    assert capability_assessment.__all__
-    assert manifest.__all__
+    validators = sorted(_SOURCE_ROOT.glob("*/v*/validation.py"))
+    assert validators
+
+    for path in validators:
+        relative = path.relative_to(_SOURCE_ROOT).with_suffix("")
+        module = importlib.import_module(
+            ".".join(("stateforge_protocol", "sfp", *relative.parts))
+        )
+        assert module.__all__, path
+        assert all(hasattr(module, name) for name in module.__all__), path

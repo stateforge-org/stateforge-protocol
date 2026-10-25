@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "procedures": [
+    {
+      "id": "endpoint-discovery",
+      "kind": "filesystem",
+      "serviceName": null,
+      "contractModule": "stateforge_protocol.sfp.endpoint_discovery.v1.contract",
+      "validationModule": null,
+      "validationException": "Descriptor parsing and semantic validation are the public contract API.",
+      "schemaResources": [
+        "stateforge_protocol/sfp/endpoint_discovery/v1/endpoint_descriptor.schema.json"
+      ],
+      "fixtureRoots": [
+        "stateforge_protocol/fixtures/endpoint_discovery"
+      ],
+      "sourceTests": [
+        "tests/test_endpoint_discovery_contract.py"
+      ],
+      "installedResultKey": "endpoint-discovery"
+    },
+    {
+      "id": "bootstrap",
+      "kind": "grpc",
+      "serviceName": "stateforge.sfp.bootstrap.v1.BootstrapService",
+      "contractModule": "stateforge_protocol.sfp.bootstrap.v1.contract",
+      "validationModule": "stateforge_protocol.sfp.bootstrap.v1.validation",
+      "validationException": null,
+      "schemaResources": [],
+      "fixtureRoots": [
+        "stateforge_protocol/fixtures/bootstrap"
+      ],
+      "sourceTests": [
+        "tests/test_bootstrap_contract.py"
+      ],
+      "installedResultKey": "bootstrap"
+    },
+    {
+      "id": "health",
+      "kind": "standard-grpc",
+      "serviceName": "grpc.health.v1.Health",
+      "contractModule": "stateforge_protocol.sfp.health_contract",
+      "validationModule": null,
+      "validationException": "Uses the standard grpc.health.v1 service and status vocabulary.",
+      "schemaResources": [],
+      "fixtureRoots": [
+        "stateforge_protocol/fixtures/health"
+      ],
+      "sourceTests": [
+        "tests/test_health_contract.py"
+      ],
+      "installedResultKey": "health"
+    },
+    {
+      "id": "manifest",
+      "kind": "grpc",
+      "serviceName": "stateforge.sfp.manifest.v1.ManifestService",
+      "contractModule": "stateforge_protocol.sfp.manifest.v1.contract",
+      "validationModule": "stateforge_protocol.sfp.manifest.v1.validation",
+      "validationException": null,
+      "schemaResources": [
+        "stateforge_protocol/sfp/manifest/v1/manifest.schema.json"
+      ],
+      "fixtureRoots": [
+        "stateforge_protocol/fixtures/manifest"
+      ],
+      "sourceTests": [
+        "tests/test_manifest_contract.py",
+        "tests/test_manifest_session_contract.py",
+        "tests/test_manifest_validation.py"
+      ],
+      "installedResultKey": "manifest"
+    },
+    {
+      "id": "capability-assessment",
+      "kind": "grpc",
+      "serviceName": "stateforge.sfp.capability_assessment.v1.CapabilityAssessmentService",
+      "contractModule": "stateforge_protocol.sfp.capability_assessment.v1.contract",
+      "validationModule": "stateforge_protocol.sfp.capability_assessment.v1.validation",
+      "validationException": null,
+      "schemaResources": [
+        "stateforge_protocol/sfp/capability_assessment/v1/capability_assessment.schema.json"
+      ],
+      "fixtureRoots": [
+        "stateforge_protocol/fixtures/capability_assessment"
+      ],
+      "sourceTests": [
+        "tests/test_capability_assessment_contract.py",
+        "tests/test_capability_assessment_validation.py"
+      ],
+      "installedResultKey": "capability-assessment"
+    },
+    {
+      "id": "trigger-publication",
+      "kind": "grpc",
+      "serviceName": "stateforge.sfp.trigger_publication.v1.TriggerPublicationService",
+      "contractModule": "stateforge_protocol.sfp.trigger_publication.v1.contract",
+      "validationModule": "stateforge_protocol.sfp.trigger_publication.v1.validation",
+      "validationException": null,
+      "schemaResources": [
+        "stateforge_protocol/sfp/trigger_publication/v1/trigger_publication.schema.json"
+      ],
+      "fixtureRoots": [
+        "stateforge_protocol/fixtures/trigger_publication"
+      ],
+      "sourceTests": [
+        "tests/test_trigger_publication_contract.py"
+      ],
+      "installedResultKey": "trigger-publication"
+    },
+    {
+      "id": "operation-admission",
+      "kind": "grpc",
+      "serviceName": "stateforge.sfp.operation_admission.v1.OperationAdmissionService",
+      "contractModule": "stateforge_protocol.sfp.operation_admission.v1.contract",
+      "validationModule": "stateforge_protocol.sfp.operation_admission.v1.validation",
+      "validationException": null,
+      "schemaResources": [
+        "stateforge_protocol/sfp/operation_admission/v1/operation_admission.schema.json"
+      ],
+      "fixtureRoots": [
+        "stateforge_protocol/fixtures/operation_admission"
+      ],
+      "sourceTests": [
+        "tests/test_operation_admission_contract.py"
+      ],
+      "installedResultKey": "operation-admission"
+    },
+    {
+      "id": "operation-lifecycle",
+      "kind": "grpc",
+      "serviceName": "stateforge.sfp.operation_lifecycle.v1.OperationLifecycleService",
+      "contractModule": "stateforge_protocol.sfp.operation_lifecycle.v1.contract",
+      "validationModule": "stateforge_protocol.sfp.operation_lifecycle.v1.validation",
+      "validationException": null,
+      "schemaResources": [
+        "stateforge_protocol/sfp/operation_lifecycle/v1/operation_lifecycle.schema.json"
+      ],
+      "fixtureRoots": [
+        "stateforge_protocol/fixtures/operation_lifecycle"
+      ],
+      "sourceTests": [
+        "tests/test_operation_lifecycle_contract.py"
+      ],
+      "installedResultKey": "operation-lifecycle"
+    },
+    {
+      "id": "disconnection-recovery",
+      "kind": "cross-procedure",
+      "serviceName": null,
+      "contractModule": "stateforge_protocol.sfp.recovery",
+      "validationModule": null,
+      "validationException": "Composes the public procedure validators and recovery classifiers.",
+      "schemaResources": [],
+      "fixtureRoots": [
+        "stateforge_protocol/fixtures/disconnection_recovery"
+      ],
+      "sourceTests": [
+        "tests/test_disconnection_recovery_contract.py"
+      ],
+      "installedResultKey": "disconnection-recovery"
+    },
+    {
+      "id": "shared-endpoint",
+      "kind": "aggregate",
+      "serviceName": null,
+      "contractModule": "stateforge_protocol.sfp.shared_endpoint",
+      "validationModule": null,
+      "validationException": "Aggregates the authoritative per-procedure transport limits.",
+      "schemaResources": [],
+      "fixtureRoots": [
+        "stateforge_protocol/fixtures/conformance"
+      ],
+      "sourceTests": [
+        "tests/test_shared_endpoint_limits.py"
+      ],
+      "installedResultKey": "shared-endpoint"
+    }
+  ],
+  "ciEntryPoints": {
+    "sourceAction": ".github/actions/contracts/validate/action.yml",
+    "installedAction": ".github/actions/python/test-installed/action.yml",
+    "standardWorkflow": ".github/workflows/protocol-build-and-verify.yml"
+  }
+}

@@ -25,12 +25,14 @@ nav:
       - Capability assessment: procedures/capability-assessment.md
       - Trigger publication and acknowledgement: procedures/triggers.md
       - Operation admission and idempotency: procedures/operation-admission.md
-      - Backup preparation: procedures/backup-preparation.md
-      - Disaster-recovery execution: procedures/disaster-recovery.md
       - Progress, results, and cancellation: procedures/progress-results-cancellation.md
       - Disconnection and recovery: procedures/disconnection-recovery.md
+  - Non-normative profile design notes:
+      - Backup preparation: procedures/backup-preparation.md
+      - Disaster-recovery execution: procedures/disaster-recovery.md
   - Generated Python contracts: reference/python-contracts.md
   - Responsibility boundaries: reference/responsibility-boundaries.md
+  - Conformance coverage: reference/conformance-coverage.md
 
 plugins:
   - search

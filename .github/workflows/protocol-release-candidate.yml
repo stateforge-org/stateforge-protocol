@@ -13,6 +13,16 @@ on:
         required: false
         type: number
         default: 30
+      agent-ref:
+        description: Agent revision tested as an independent consumer.
+        required: false
+        type: string
+        default: mvp/implementation
+      provider-ref:
+        description: Provider revision tested as an independent consumer.
+        required: false
+        type: string
+        default: mvp/implementation
 
 permissions:
   contents: read
@@ -28,4 +38,6 @@ jobs:
     with:
       artifact-name: stateforge-protocol-candidate-${{ github.run_id }}-${{ github.run_attempt }}
       breaking-against: ${{ inputs.breaking-against }}
+      agent-ref: ${{ inputs.agent-ref }}
+      provider-ref: ${{ inputs.provider-ref }}
       retention-days: ${{ inputs.retention-days }}

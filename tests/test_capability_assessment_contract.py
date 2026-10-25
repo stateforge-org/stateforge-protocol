@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 import rfc8785
-from google.protobuf import descriptor_pb2, json_format
+from google.protobuf import json_format
 from jsonschema import Draft202012Validator, ValidationError
 
 from stateforge_protocol.sfp.capability_assessment.v1 import (
@@ -264,10 +264,6 @@ def test_request_has_no_generic_target_fields() -> None:
     descriptor = capability_assessment_pb2.AssessCapabilitiesRequest.DESCRIPTOR
     assert "target_kind" not in descriptor.fields_by_name
     assert "target_configuration" not in descriptor.fields_by_name
-    message = descriptor_pb2.DescriptorProto()
-    descriptor.CopyToProto(message)
-    assert not message.reserved_range
-    assert not message.reserved_name
     properties = _SCHEMA["$defs"]["assessCapabilitiesRequest"]["properties"]
     assert "targetKind" not in properties
     assert "targetConfiguration" not in properties
@@ -391,7 +387,9 @@ def test_mixed_support_states_correlate_by_identifier(response) -> None:
             "SUPPORT_STATE_SUPPORTED_WITH_REQUIREMENTS"
         ),
         "stateforge.git/tag.list@1": "SUPPORT_STATE_UNSUPPORTED",
-        "stateforge.git/backup.prepare@1": "SUPPORT_STATE_INDETERMINATE",
+        "stateforge.git/configuration.inspect@1": (
+            "SUPPORT_STATE_INDETERMINATE"
+        ),
     }
 
 
@@ -562,18 +560,6 @@ def test_constraint_detail_round_trips(response) -> None:
 
 
 # -- Operation-generic findings -------------------------------------------
-
-
-def test_capability_finding_has_no_backup_specific_field() -> None:
-    fields = (
-        capability_assessment_pb2.CapabilityFinding.DESCRIPTOR.fields_by_name
-    )
-
-    assert "backup_source_modes" not in fields
-    assert (
-        "backupSourceModes"
-        not in _SCHEMA["$defs"]["capabilityFinding"]["properties"]
-    )
 
 
 # -- Identifiers, context, and secrecy -------------------------------------
@@ -996,13 +982,3 @@ def test_operation_identifiers_are_declared_in_accepted_manifest(
     declared = set(manifest_response["manifest"]["operations"])
     requested = set(request_data["operationIdentifiers"])
     assert requested <= declared
-
-
-def test_ordinary_operation_backup_relevance_is_absent_from_manifest_too(
-    manifest_response,
-) -> None:
-    ordinary = manifest_response["manifest"]["operations"][
-        "stateforge.git/reference.resolve@1"
-    ]
-    assert "backupSourceModes" not in ordinary
-    assert ordinary["implements"] == []

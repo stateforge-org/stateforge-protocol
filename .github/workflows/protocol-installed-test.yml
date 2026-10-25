@@ -62,7 +62,7 @@ jobs:
         with:
           artifact-directory: ${{ runner.temp }}/stateforge-protocol-dist
           evidence-directory: evidence/installed
-          verify-sdist: ${{ matrix.os == 'ubuntu-24.04' && matrix.python == '3.13' }}
+          verify-sdist: "true"
 
       - name: Collect bounded installed-package evidence
         if: ${{ always() }}

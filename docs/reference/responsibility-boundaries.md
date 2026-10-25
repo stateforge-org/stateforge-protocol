@@ -40,3 +40,10 @@ procedure-specific constants or policy. Procedure `validation.py` modules keep
 the public error surface and domain rules; specialized private modules may hold
 complex algorithms that belong only to that procedure. Architectural tests
 enforce this split so future procedures follow the same ownership model.
+
+The packaged conformance inventory and standard CI gate enforce this matrix.
+Every contract surface must name its authoritative module, packaged evidence,
+source tests, installed-artifact result, and CI entry points. Agent and
+Provider are tested as independent consumers against the exact built Protocol
+wheel; their source audit rejects private helper imports and copied normative
+identities or limits.

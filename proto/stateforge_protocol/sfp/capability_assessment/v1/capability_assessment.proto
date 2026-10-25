@@ -135,9 +135,6 @@ message AssessCapabilitiesResponse {
 // secrets, credentials, customer data, or a StateForge project/component
 // assignment.
 message CapabilityFinding {
-  reserved 6;
-  reserved "backup_source_modes";
-
   // Exact operation identifier as requested.
   string operation_identifier = 1;
   // Bounded, normalized support outcome. Never UNSPECIFIED in a
