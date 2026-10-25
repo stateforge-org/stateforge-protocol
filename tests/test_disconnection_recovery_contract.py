@@ -12,6 +12,9 @@ from google.protobuf.json_format import ParseDict
 
 from stateforge_protocol.sfp import recovery
 from stateforge_protocol.sfp.operation_admission.v1 import (
+    contract as admission_contract,
+)
+from stateforge_protocol.sfp.operation_admission.v1 import (
     operation_admission_pb2 as admission_pb,
 )
 from stateforge_protocol.sfp.operation_admission.v1 import (
@@ -193,6 +196,20 @@ def test_resolve_only_response_cannot_claim_new_admission() -> None:
 
     with pytest.raises(admission_validation.OperationAdmissionValidationError):
         admission_validation.validate_admission_exchange(request, response)
+
+
+def test_canonical_invocation_does_not_add_an_output_size_limit() -> None:
+    request_document = _read("operation_admission/request.json")
+    assert isinstance(request_document, dict)
+    invocation = request_document["invocation"]
+    assert isinstance(invocation, dict)
+    invocation["payload"] = {f"value{i}": "\x00" * 65_536 for i in range(24)}
+    request = ParseDict(request_document, admission_pb.StartOperationRequest())
+
+    assert request.ByteSize() < admission_contract.MAX_REQUEST_BYTES
+    canonical = admission_validation.canonical_invocation(request.invocation)
+    assert len(canonical) > admission_contract.MAX_REQUEST_BYTES
+    admission_validation.validate_start_operation_request(request)
 
 
 def test_lost_cancel_reply_can_resolve_the_same_atomic_decision() -> None:

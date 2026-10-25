@@ -206,6 +206,11 @@ def canonical_invocation(
         operation_admission_pb2.OperationInvocation,
         "invocation: expected OperationInvocation",
     )
+    _VALIDATION.require_serialized_size(
+        invocation,
+        maximum_bytes=contract.MAX_REQUEST_BYTES,
+        path="invocation",
+    )
     projected = _VALIDATION.project_message(invocation, "invocation")
     contract_context = projected.get("contract")
     if not isinstance(contract_context, dict):
@@ -222,7 +227,7 @@ def canonical_invocation(
     roles.sort()
     return _VALIDATION.canonicalize_json(
         projected,
-        maximum_bytes=contract.MAX_REQUEST_BYTES,
+        maximum_bytes=None,
         limit_message="invocation: canonical content limit exceeded",
         invalid_message="invocation: content is not canonical JSON",
     )
