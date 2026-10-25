@@ -271,8 +271,9 @@ def _recovery_identity(value: object) -> recovery.EndpointSessionIdentity:
     )
 
 
-def _verify_recovery_identities(scenarios: dict[str, object]) -> None:
+def _verify_recovery_identities(scenarios: dict[str, object]) -> int:
     """Exercise installed recovery identity classification."""
+    verified = 0
     previous = recovery.EndpointSessionIdentity(
         provider_instance_id=UUID("11111111-1111-4111-8111-111111111111"),
         endpoint_generation=42,
@@ -298,6 +299,7 @@ def _verify_recovery_identities(scenarios: dict[str, object]) -> None:
             raise ValueError(
                 f"Recovery admission classification failed: {case.get('id')}"
             )
+        verified += 1
 
     invalid_identities = _object_cases(scenarios, "invalidIdentityTransitions")
     for case in invalid_identities:
@@ -306,38 +308,133 @@ def _verify_recovery_identities(scenarios: dict[str, object]) -> None:
                 previous, _recovery_identity(case["current"])
             )
         except recovery.RecoveryContractError:
-            pass
+            verified += 1
         else:
             raise ValueError(
                 f"Invalid recovery identity was accepted: {case.get('id')}"
             )
+    return verified
 
 
-def _verify_recovery_admission(fixture_root: Path) -> None:
-    """Exercise installed resolve-only admission validation."""
-    admission_request_data = _read_json_object(
+def _recovery_admission_request(
+    template: dict[str, object],
+    case: dict[str, object],
+) -> operation_admission_pb2.StartOperationRequest:
+    """Build the admission request described by one recovery scenario."""
+    request_data = copy.deepcopy(template)
+    binding = request_data["sessionBinding"]
+    if not isinstance(binding, dict):
+        raise ValueError("Admission recovery session binding is invalid")
+    generation = 43 if case.get("generationBoundary") is True else 42
+    binding["expectedEndpointGeneration"] = str(generation)
+    binding["expectedSessionId"] = "session-reconnected-42"
+    request_data["admissionMode"] = str(case.get("requiredMode"))
+    request = ParseDict(
+        request_data,
+        operation_admission_pb2.StartOperationRequest(),
+    )
+    admission_validation.validate_start_operation_request(request)
+    may_dispatch = (
+        request.admission_mode
+        == operation_admission_pb2.ADMISSION_MODE_ADMIT_OR_RESOLVE
+    )
+    if may_dispatch is not case.get("mayDispatchAbsentWork"):
+        raise ValueError(
+            f"Recovery admission mode is inconsistent: {case.get('id')}"
+        )
+    return request
+
+
+def _verify_retained_admission(
+    request: operation_admission_pb2.StartOperationRequest,
+    response_template: dict[str, object],
+    case: dict[str, object],
+) -> None:
+    """Verify one recovery scenario with a retained operation record."""
+    response_data = copy.deepcopy(response_template)
+    response_data["endpointGeneration"] = str(
+        request.session_binding.expected_endpoint_generation
+    )
+    response_data["sessionId"] = request.session_binding.expected_session_id
+    response_data["disposition"] = str(case.get("expectedDisposition"))
+    response = ParseDict(
+        response_data,
+        operation_admission_pb2.StartOperationResponse(),
+    )
+    admission_validation.validate_admission_exchange(request, response)
+    actual_disposition = operation_admission_pb2.AdmissionDisposition.Name(
+        response.disposition
+    )
+    if actual_disposition != case.get("expectedDisposition"):
+        raise ValueError(
+            f"Recovery admission disposition mismatch: {case.get('id')}"
+        )
+    if case.get("outcome") != "resolved":
+        raise ValueError(
+            f"Retained recovery is not resolved: {case.get('id')}"
+        )
+
+
+def _verify_lost_admission(
+    request: operation_admission_pb2.StartOperationRequest,
+    case: dict[str, object],
+) -> None:
+    """Verify one recovery scenario whose operation record was lost."""
+    expected_reason = str(case.get("expectedReason"))
+    detail = operation_admission_pb2.OperationAdmissionErrorDetail(
+        operation_id=request.invocation.operation_id,
+        reason=operation_admission_pb2.AdmissionErrorReason.Value(
+            expected_reason
+        ),
+        retryable=False,
+        explanation="Recovery could not prove a retained record.",
+    )
+    admission_validation.validate_admission_error_detail(detail)
+    actual_reason = operation_admission_pb2.AdmissionErrorReason.Name(
+        detail.reason
+    )
+    if actual_reason != expected_reason:
+        raise ValueError(
+            f"Recovery admission reason mismatch: {case.get('id')}"
+        )
+    if case.get("outcome") != "indeterminate":
+        raise ValueError(
+            f"Lost recovery state is not indeterminate: {case.get('id')}"
+        )
+
+
+def _verify_recovery_admission(
+    fixture_root: Path,
+    scenarios: dict[str, object],
+) -> int:
+    """Exercise every installed recovery admission scenario."""
+    request_template = _read_json_object(
         fixture_root / "operation_admission" / "request.json"
     )
-    admission_response_data = _read_json_object(
+    response_template = _read_json_object(
         fixture_root
         / "operation_admission"
         / "response-resolved-existing.json"
     )
-    admission_request_data["sessionBinding"]["expectedSessionId"] = (
-        "session-reconnected-42"
-    )
-    admission_request_data["admissionMode"] = "ADMISSION_MODE_RESOLVE_ONLY"
-    admission_request = ParseDict(
-        admission_request_data,
-        operation_admission_pb2.StartOperationRequest(),
-    )
-    admission_response = ParseDict(
-        admission_response_data,
-        operation_admission_pb2.StartOperationResponse(),
-    )
-    admission_validation.validate_admission_exchange(
-        admission_request, admission_response
-    )
+    verified = 0
+    resolve_only_request: (
+        operation_admission_pb2.StartOperationRequest | None
+    ) = None
+    for case in _object_cases(scenarios, "admissionRecovery"):
+        request = _recovery_admission_request(request_template, case)
+        if case.get("retainedRecord") is True:
+            _verify_retained_admission(request, response_template, case)
+        else:
+            _verify_lost_admission(request, case)
+        if (
+            request.admission_mode
+            == operation_admission_pb2.ADMISSION_MODE_RESOLVE_ONLY
+        ):
+            resolve_only_request = request
+        verified += 1
+
+    if resolve_only_request is None:
+        raise ValueError("Recovery fixtures contain no resolve-only admission")
     accepted_response = ParseDict(
         _read_json_object(
             fixture_root / "operation_admission" / "response-accepted-new.json"
@@ -345,74 +442,234 @@ def _verify_recovery_admission(fixture_root: Path) -> None:
         operation_admission_pb2.StartOperationResponse(),
     )
     accepted_response.session_id = (
-        admission_request.session_binding.expected_session_id
+        resolve_only_request.session_binding.expected_session_id
+    )
+    accepted_response.endpoint_generation = (
+        resolve_only_request.session_binding.expected_endpoint_generation
+    )
+    accepted_response.record.admitted_endpoint_generation = (
+        accepted_response.endpoint_generation
     )
     try:
         admission_validation.validate_admission_exchange(
-            admission_request, accepted_response
+            resolve_only_request, accepted_response
         )
     except admission_validation.OperationAdmissionValidationError:
         pass
     else:
         raise ValueError("Installed validator allowed resolve-only admission")
+    return verified
 
 
-def _verify_recovery_trigger(fixture_root: Path) -> None:
+def _verify_recovery_trigger(
+    fixture_root: Path,
+    scenarios: dict[str, object],
+) -> int:
     """Exercise installed trigger replay identity validation."""
-    publication = ParseDict(
+    publication_template = ParseDict(
         _read_json_object(
             fixture_root / "trigger_publication" / "publication.json"
         ),
         trigger_publication_pb2.StreamTriggersResponse(),
     ).publication
-    acknowledgement = ParseDict(
-        _read_json_object(
-            fixture_root
-            / "trigger_publication"
-            / "acknowledgement-accepted-duplicate.json"
-        ),
-        trigger_publication_pb2.StreamTriggersRequest(),
-    ).acknowledgement
-    trigger_validation.validate_publication_acknowledgement(
-        publication, acknowledgement
-    )
-    fingerprint = _read_json_object(
+    expected_fingerprint = _read_json_object(
         fixture_root
         / "trigger_publication"
         / "content-fingerprint-vector.json"
     )["fingerprint"]
     if (
-        trigger_validation.compute_publication_content_fingerprint(publication)
-        != fingerprint
+        trigger_validation.compute_publication_content_fingerprint(
+            publication_template
+        )
+        != expected_fingerprint
     ):
         raise ValueError(
             "Installed Trigger Publication fingerprint is invalid"
         )
+    verified = 0
+    for case in _object_cases(scenarios, "triggerRecovery"):
+        publication = copy.deepcopy(publication_template)
+        if case.get("samePublicationId") is not True:
+            publication.publication_id = "77777777-7777-4777-8777-777777777777"
+        if case.get("sameCanonicalContent") is not True:
+            publication.payload.fields[
+                "ref"
+            ].string_value = "refs/heads/recovery-conflict"
+        trigger_validation.validate_trigger_publication(publication)
+        actual_same_content = (
+            trigger_validation.compute_publication_content_fingerprint(
+                publication
+            )
+            == expected_fingerprint
+        )
+        if actual_same_content is not case.get("sameCanonicalContent"):
+            raise ValueError(
+                f"Recovery trigger content mismatch: {case.get('id')}"
+            )
+
+        expected_disposition = case.get("expectedDisposition")
+        if expected_disposition is not None:
+            acknowledgement = trigger_publication_pb2.TriggerAcknowledgement(
+                publication_id=publication.publication_id,
+                disposition=(
+                    trigger_publication_pb2.TriggerAcknowledgementDisposition.Value(
+                        str(expected_disposition)
+                    )
+                ),
+            )
+            trigger_validation.validate_publication_acknowledgement(
+                publication, acknowledgement
+            )
+            accepted_new = "TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_ACCEPTED_NEW"
+            creates_logical_trigger = (
+                trigger_publication_pb2.TriggerAcknowledgementDisposition.Name(
+                    acknowledgement.disposition
+                )
+                == accepted_new
+            )
+        else:
+            expected_reason = str(case.get("expectedReason"))
+            acknowledgement = trigger_publication_pb2.TriggerAcknowledgement(
+                publication_id=publication.publication_id,
+                disposition=(
+                    trigger_publication_pb2.TRIGGER_ACKNOWLEDGEMENT_DISPOSITION_REJECTED
+                ),
+                rejection=trigger_publication_pb2.TriggerRejection(
+                    reason=trigger_publication_pb2.TriggerRejectionReason.Value(
+                        expected_reason
+                    ),
+                    retryable=False,
+                    explanation=(
+                        "The publication identity has conflicting content."
+                    ),
+                ),
+            )
+            trigger_validation.validate_publication_acknowledgement(
+                publication, acknowledgement
+            )
+            if (
+                trigger_publication_pb2.TriggerRejectionReason.Name(
+                    acknowledgement.rejection.reason
+                )
+                != expected_reason
+            ):
+                raise ValueError(
+                    f"Recovery trigger reason mismatch: {case.get('id')}"
+                )
+            creates_logical_trigger = False
+
+        if creates_logical_trigger is not case.get("createsLogicalTrigger"):
+            raise ValueError(
+                f"Recovery trigger delivery mismatch: {case.get('id')}"
+            )
+        same_installation = case.get("sameInstallation") is True
+        expected_new = not same_installation and actual_same_content
+        if expected_new is not creates_logical_trigger:
+            raise ValueError(
+                f"Recovery trigger namespace mismatch: {case.get('id')}"
+            )
+        verified += 1
+    return verified
 
 
-def _verify_recovery_lifecycle(fixture_root: Path) -> None:
-    """Exercise installed lifecycle cursor and transition validation."""
-    watch_request_data = _read_json_object(
+def _verify_recovery_watch_response(
+    request_template: dict[str, object],
+    response_template: dict[str, object],
+    case: dict[str, object],
+) -> None:
+    """Verify the Watch exchange represented by one recovery scenario."""
+    request_data = copy.deepcopy(request_template)
+    binding = request_data["sessionBinding"]
+    if not isinstance(binding, dict):
+        raise ValueError("Watch recovery session binding is invalid")
+    binding["expectedSessionId"] = "session-reconnected-42"
+    request_data["afterSequence"] = str(case.get("afterSequence"))
+    request = ParseDict(
+        request_data,
+        operation_lifecycle_pb2.WatchOperationRequest(),
+    )
+    lifecycle_validation.validate_watch_operation_request(request)
+    if "responseSequence" not in case:
+        return
+    response_data = copy.deepcopy(response_template)
+    response_data["sessionId"] = binding["expectedSessionId"]
+    snapshot = response_data["snapshot"]
+    if not isinstance(snapshot, dict):
+        raise ValueError("Watch recovery snapshot is invalid")
+    snapshot["sequence"] = str(case.get("responseSequence"))
+    response_data["updatesSkipped"] = case.get("updatesSkipped", False)
+    response = ParseDict(
+        response_data,
+        operation_lifecycle_pb2.WatchOperationResponse(),
+    )
+    if case.get("expectedReason") is None:
+        lifecycle_validation.validate_watch_exchange(request, response)
+        return
+    try:
+        lifecycle_validation.validate_watch_exchange(request, response)
+    except lifecycle_validation.OperationLifecycleValidationError:
+        return
+    raise ValueError(f"Invalid recovery cursor was accepted: {case.get('id')}")
+
+
+def _verify_recovery_lifecycle_error(case: dict[str, object]) -> None:
+    """Verify the structured error represented by a recovery scenario."""
+    expected_reason = case.get("expectedReason")
+    if expected_reason is None:
+        return
+    detail = operation_lifecycle_pb2.OperationLifecycleErrorDetail(
+        operation_id="22222222-2222-4222-8222-222222222222",
+        reason=operation_lifecycle_pb2.LifecycleErrorReason.Value(
+            str(expected_reason)
+        ),
+        explanation="Recovery cannot provide the requested state.",
+    )
+    lifecycle_validation.validate_lifecycle_error_detail(detail)
+    actual_reason = operation_lifecycle_pb2.LifecycleErrorReason.Name(
+        detail.reason
+    )
+    if actual_reason != expected_reason:
+        raise ValueError(
+            f"Recovery lifecycle reason mismatch: {case.get('id')}"
+        )
+
+
+def _verify_recovery_lifecycle(
+    fixture_root: Path,
+    scenarios: dict[str, object],
+) -> int:
+    """Exercise every installed lifecycle recovery scenario."""
+    request_template = _read_json_object(
         fixture_root / "operation_lifecycle" / "watch-request.json"
     )
-    watch_response_data = _read_json_object(
+    response_template = _read_json_object(
         fixture_root / "operation_lifecycle" / "watch-terminal.json"
     )
-    watch_request_data["sessionBinding"]["expectedSessionId"] = (
-        "session-reconnected-42"
-    )
-    watch_request_data["afterSequence"] = "2"
-    watch_response_data["sessionId"] = "session-reconnected-42"
-    watch_response_data["updatesSkipped"] = True
+    verified = 0
+    for case in _object_cases(scenarios, "watchRecovery"):
+        _verify_recovery_watch_response(
+            request_template, response_template, case
+        )
+        _verify_recovery_lifecycle_error(case)
+        if case.get("outcome") not in {"current", "indeterminate"}:
+            raise ValueError(
+                f"Recovery lifecycle outcome is invalid: {case.get('id')}"
+            )
+        verified += 1
+
+    later_request_data = copy.deepcopy(request_template)
+    later_response_data = copy.deepcopy(response_template)
+    later_response_data["updatesSkipped"] = True
     lifecycle_validation.validate_watch_exchange(
         ParseDict(
-            copy.deepcopy(watch_request_data),
+            later_request_data,
             operation_lifecycle_pb2.WatchOperationRequest(),
         ),
         ParseDict(
-            copy.deepcopy(watch_response_data),
+            later_response_data,
             operation_lifecycle_pb2.WatchOperationResponse(),
         ),
+        previous_sequence=2,
     )
 
     lifecycle_snapshots = _read_json_object(
@@ -436,6 +693,7 @@ def _verify_recovery_lifecycle(fixture_root: Path) -> None:
         pass
     else:
         raise ValueError("Installed validator allowed direct cancellation")
+    return verified
 
 
 def _verify_recovery_contracts(fixture_root: Path) -> int:
@@ -443,19 +701,12 @@ def _verify_recovery_contracts(fixture_root: Path) -> int:
     scenarios = _read_json_object(
         fixture_root / "disconnection_recovery" / "scenarios.json"
     )
-    _verify_recovery_identities(scenarios)
-    _verify_recovery_admission(fixture_root)
-    _verify_recovery_trigger(fixture_root)
-    _verify_recovery_lifecycle(fixture_root)
-
     return sum(
-        len(_object_cases(scenarios, name))
-        for name in (
-            "identityTransitions",
-            "invalidIdentityTransitions",
-            "admissionRecovery",
-            "triggerRecovery",
-            "watchRecovery",
+        (
+            _verify_recovery_identities(scenarios),
+            _verify_recovery_admission(fixture_root, scenarios),
+            _verify_recovery_trigger(fixture_root, scenarios),
+            _verify_recovery_lifecycle(fixture_root, scenarios),
         )
     )
 
