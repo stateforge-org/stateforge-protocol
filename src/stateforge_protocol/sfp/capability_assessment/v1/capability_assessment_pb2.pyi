@@ -375,7 +375,7 @@ class ReasonDetail(_message.Message):
     EXPLANATION_FIELD_NUMBER: _builtins.int
     reason_code: _builtins.str
     """Extensible dotted reason-code identifier. See
-    docs/procedures/capability-assessment.md for the canonical core
+    docs/v0.1.0/procedures/capability-assessment.md for the canonical core
     vocabulary and the Provider-namespacing rule for custom codes.
     """
     explanation: _builtins.str

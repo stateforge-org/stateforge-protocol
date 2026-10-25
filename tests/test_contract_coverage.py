@@ -145,7 +145,7 @@ def test_inventory_itself_is_packaged_as_conformance_evidence() -> None:
 
 def test_documented_coverage_matches_inventory() -> None:
     documentation = (
-        _ROOT / "docs" / "reference" / "conformance-coverage.md"
+        _ROOT / "docs" / "v0.1.0" / "reference" / "conformance-coverage.md"
     ).read_text(encoding="utf-8")
     for procedure in _procedures():
         assert f"`{procedure['id']}`" in documentation

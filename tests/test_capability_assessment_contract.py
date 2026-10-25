@@ -127,7 +127,9 @@ def test_versioned_contract_exposes_canonical_reason_codes() -> None:
         name: getattr(contract, name) for name in _CANONICAL_REASON_CODES
     } == _CANONICAL_REASON_CODES
 
-    procedure = Path("docs/procedures/capability-assessment.md").read_text()
+    procedure = Path(
+        "docs/v0.1.0/procedures/capability-assessment.md"
+    ).read_text()
     reason_section = procedure.split("### Reason-code vocabulary", 1)[1].split(
         "## Structural and semantic validation", 1
     )[0]

@@ -6,37 +6,35 @@ copyright: Copyright &copy; StateForge
 strict: true
 
 theme:
-  name: material
-  language: en
-  features:
-    - content.code.copy
-    - navigation.indexes
-    - navigation.sections
-    - navigation.top
+  name: stateforge
 
 extra_css:
-  - stylesheets/extra.css
+  - v0.1.0/stylesheets/extra.css
 
 nav:
-  - Overview: index.md
-  - SFP procedures:
-      - Procedure map: procedures/index.md
-      - Endpoint discovery and channel establishment: procedures/endpoint-discovery.md
-      - Handshake and version negotiation: bootstrap.md
-      - Provider manifest exchange: procedures/provider-manifest.md
-      - Health and availability monitoring: procedures/health.md
-      - Capability assessment: procedures/capability-assessment.md
-      - Trigger publication and acknowledgement: procedures/triggers.md
-      - Operation admission and idempotency: procedures/operation-admission.md
-      - Progress, results, and cancellation: procedures/progress-results-cancellation.md
-      - Disconnection and recovery: procedures/disconnection-recovery.md
-  - Generated Python contracts: reference/python-contracts.md
-  - Responsibility boundaries: reference/responsibility-boundaries.md
-  - Conformance coverage: reference/conformance-coverage.md
-  - CI/CD and artifact verification: reference/ci-automation.md
+  - Documentation versions: index.md
+  - v0.1.0:
+      - Overview: v0.1.0/index.md
+      - SFP procedures:
+          - Procedure map: v0.1.0/procedures/index.md
+          - Endpoint discovery and channel establishment: v0.1.0/procedures/endpoint-discovery.md
+          - Handshake and version negotiation: v0.1.0/bootstrap.md
+          - Provider manifest exchange: v0.1.0/procedures/provider-manifest.md
+          - Health and availability monitoring: v0.1.0/procedures/health.md
+          - Capability assessment: v0.1.0/procedures/capability-assessment.md
+          - Trigger publication and acknowledgement: v0.1.0/procedures/triggers.md
+          - Operation admission and idempotency: v0.1.0/procedures/operation-admission.md
+          - Progress, results, and cancellation: v0.1.0/procedures/progress-results-cancellation.md
+          - Disconnection and recovery: v0.1.0/procedures/disconnection-recovery.md
+      - Generated Python contracts: v0.1.0/reference/python-contracts.md
+      - Responsibility boundaries: v0.1.0/reference/responsibility-boundaries.md
+      - Conformance coverage: v0.1.0/reference/conformance-coverage.md
+      - CI/CD and artifact verification: v0.1.0/reference/ci-automation.md
 
 plugins:
   - search
+  - stateforge:
+      component: protocol
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -55,6 +53,10 @@ markdown_extensions:
   - admonition
   - attr_list
   - pymdownx.details
+  - pymdownx.snippets:
+      base_path:
+        - .
+      check_paths: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid

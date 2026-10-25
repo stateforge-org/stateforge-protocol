@@ -9,7 +9,7 @@ import "google/protobuf/struct.proto";
 // This read-only service does not admit operations or change Provider state.
 service ManifestService {
   // GetManifest selects the highest mutually supported manifest schema version.
-  // See docs/procedures/provider-manifest.md for validation, errors and retries.
+  // See docs/v0.1.0/procedures/provider-manifest.md for validation, errors and retries.
   rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
 }
 

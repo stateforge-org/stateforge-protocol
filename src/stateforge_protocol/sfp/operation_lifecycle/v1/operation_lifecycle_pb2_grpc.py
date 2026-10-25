@@ -8,7 +8,7 @@ from stateforge_protocol.sfp.operation_lifecycle.v1 import operation_lifecycle_p
 class OperationLifecycleServiceStub:
     """OperationLifecycleService observes or cancels an already admitted operation
     on the existing negotiated SFP channel. Neither method creates or dispatches
-    work. See docs/procedures/progress-results-cancellation.md for normative
+    work. See docs/v0.1.0/procedures/progress-results-cancellation.md for normative
     transitions, retention, correlation, limits, races, and retry behavior.
     """
 
@@ -33,7 +33,7 @@ class OperationLifecycleServiceStub:
 class OperationLifecycleServiceServicer:
     """OperationLifecycleService observes or cancels an already admitted operation
     on the existing negotiated SFP channel. Neither method creates or dispatches
-    work. See docs/procedures/progress-results-cancellation.md for normative
+    work. See docs/v0.1.0/procedures/progress-results-cancellation.md for normative
     transitions, retention, correlation, limits, races, and retry behavior.
     """
 
@@ -79,7 +79,7 @@ def add_OperationLifecycleServiceServicer_to_server(servicer, server):
 class OperationLifecycleService:
     """OperationLifecycleService observes or cancels an already admitted operation
     on the existing negotiated SFP channel. Neither method creates or dispatches
-    work. See docs/procedures/progress-results-cancellation.md for normative
+    work. See docs/v0.1.0/procedures/progress-results-cancellation.md for normative
     transitions, retention, correlation, limits, races, and retry behavior.
     """
 

@@ -41,7 +41,7 @@ class OperationAdmissionServiceStub:
     """StartOperation either creates one retained admission record and dispatches
     once, or resolves an existing matching record without dispatching again.
     Rejections create no accepted operation record. See
-    docs/procedures/operation-admission.md for ordering, errors, and retries.
+    docs/v0.1.0/procedures/operation-admission.md for ordering, errors, and retries.
     """
 
 @_typing.type_check_only
@@ -57,7 +57,7 @@ class OperationAdmissionServiceAsyncStub(OperationAdmissionServiceStub):
     """StartOperation either creates one retained admission record and dispatches
     once, or resolves an existing matching record without dispatching again.
     Rejections create no accepted operation record. See
-    docs/procedures/operation-admission.md for ordering, errors, and retries.
+    docs/v0.1.0/procedures/operation-admission.md for ordering, errors, and retries.
     """
 
 class OperationAdmissionServiceServicer(metaclass=_abc_1.ABCMeta):
@@ -76,7 +76,7 @@ class OperationAdmissionServiceServicer(metaclass=_abc_1.ABCMeta):
         """StartOperation either creates one retained admission record and dispatches
         once, or resolves an existing matching record without dispatching again.
         Rejections create no accepted operation record. See
-        docs/procedures/operation-admission.md for ordering, errors, and retries.
+        docs/v0.1.0/procedures/operation-admission.md for ordering, errors, and retries.
         """
 
 def add_OperationAdmissionServiceServicer_to_server(servicer: OperationAdmissionServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

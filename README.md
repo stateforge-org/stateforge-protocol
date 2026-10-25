@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/brand/stateforge-mark.svg" width="112" alt="StateForge">
+  <img src="docs/v0.1.0/assets/brand/stateforge-mark.svg" width="112" alt="StateForge">
 </p>
 
 <h1 align="center">StateForge Protocol</h1>
@@ -17,9 +17,9 @@
 
 <p align="center">
   <a href="https://stateforge.net">StateForge</a> ·
-  <a href="docs/index.md">Documentation</a> ·
-  <a href="docs/procedures/index.md">Procedure map</a> ·
-  <a href="docs/reference/python-contracts.md">Python contracts</a>
+  <a href="docs/v0.1.0/index.md">Documentation</a> ·
+  <a href="docs/v0.1.0/procedures/index.md">Procedure map</a> ·
+  <a href="docs/v0.1.0/reference/python-contracts.md">Python contracts</a>
 </p>
 
 StateForge Protocol (SFP) defines how a StateForge Agent discovers, identifies,
@@ -34,7 +34,7 @@ and recovery.
 
 ## Protocol flow
 
-[![StateForge Protocol flow from endpoint discovery through recovery](docs/assets/diagrams/protocol-flow.svg)](docs/assets/diagrams/protocol-flow.svg)
+[![StateForge Protocol flow from endpoint discovery through recovery](docs/v0.1.0/assets/diagrams/protocol-flow.svg)](docs/v0.1.0/assets/diagrams/protocol-flow.svg)
 
 1. A Provider publishes an endpoint descriptor and the Agent opens a local
    channel.
@@ -82,17 +82,17 @@ python -m pip install .
 ```
 
 Public modules and supported imports are documented in the
-[Python contract reference](docs/reference/python-contracts.md). Generated
+[Python contract reference](docs/v0.1.0/reference/python-contracts.md). Generated
 `*_pb2.py`, `*_pb2.pyi`, and `*_pb2_grpc.py` modules are derived artifacts and
 must not be edited manually.
 
 ## Documentation
 
-- [Protocol overview](docs/index.md)
-- [SFP procedure map](docs/procedures/index.md)
-- [Generated Python contracts](docs/reference/python-contracts.md)
-- [Runtime responsibility boundaries](docs/reference/responsibility-boundaries.md)
-- [Conformance coverage](docs/reference/conformance-coverage.md)
+- [Protocol overview](docs/v0.1.0/index.md)
+- [SFP procedure map](docs/v0.1.0/procedures/index.md)
+- [Generated Python contracts](docs/v0.1.0/reference/python-contracts.md)
+- [Runtime responsibility boundaries](docs/v0.1.0/reference/responsibility-boundaries.md)
+- [Conformance coverage](docs/v0.1.0/reference/conformance-coverage.md)
 
 Build the documentation locally with:
 
@@ -134,7 +134,7 @@ python -m mkdocs build --strict
 ```
 
 Maintainers can find the reusable workflow interfaces and evidence model in
-[CI/CD and artifact verification](docs/reference/ci-automation.md).
+[CI/CD and artifact verification](docs/v0.1.0/reference/ci-automation.md).
 
 ## License
 

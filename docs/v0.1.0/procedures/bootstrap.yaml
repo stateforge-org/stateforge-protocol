@@ -1,0 +1,574 @@
+schema: stateforge.docs/procedure/v1
+procedure: bootstrap
+title: Handshake and version negotiation
+summary: From endpoint publication to a fenced local SFP session.
+default_scenario: success
+
+entities:
+  - id: provider
+    label: Provider Process
+    kind: process
+    role: Publishes and serves one local endpoint
+  - id: discovery-directory
+    label: Discovery Directory
+    kind: storage
+    role: Carries atomic endpoint descriptors
+  - id: unix-socket
+    label: Unix Socket
+    kind: resource
+    role: Carries the local HTTP/2 channel
+  - id: agent
+    label: StateForge Agent
+    kind: process
+    role: Discovers the endpoint and establishes a session
+
+scenarios:
+  success:
+    label: Successful session
+    steps:
+      - id: publish-endpoint
+        title: Publish the endpoint
+        detail: The Provider binds its socket and atomically publishes the descriptor for the live endpoint.
+        phase: Endpoint publication
+        active: [provider, discovery-directory, unix-socket]
+        fields: [provider_instance_id, endpoint_generation, socket_path]
+        transitions:
+          - source: provider
+            target: unix-socket
+            label: bind
+          - source: provider
+            target: discovery-directory
+            label: descriptor.json
+        activities:
+          provider:
+            title: Create a discoverable endpoint
+            items:
+              - Bind the Unix socket
+              - Atomically publish the descriptor
+          discovery-directory:
+            title: Expose one complete observation
+            items:
+              - Preserve filename and content correlation
+          unix-socket:
+            title: Listen for local connections
+            items:
+              - Own the published socket path
+        context:
+          kind: Published file
+          value: /run/stateforge-agent/providers/<instance>.1.json
+
+      - id: discover-endpoint
+        title: Discover and validate
+        detail: A filesystem event is only a hint; the Agent validates the complete final descriptor.
+        phase: Endpoint discovery
+        active: [discovery-directory, agent]
+        fields: [bounded read, canonical JSON, identity correlation]
+        transitions:
+          - source: discovery-directory
+            target: agent
+            label: descriptor event
+        activities:
+          discovery-directory:
+            title: Return the final descriptor
+            items:
+              - Keep the published observation stable
+          agent:
+            title: Validate the observation
+            items:
+              - Read the bounded final file
+              - Confirm identity, socket, and generation
+        context:
+          kind: Trust boundary
+          value: instance + generation + socket must agree
+
+      - id: open-channel
+        title: Open the provisional channel
+        detail: The Agent connects to the validated Unix socket without trusting the peer yet.
+        phase: Channel establishment
+        active: [agent, unix-socket, provider]
+        fields: [HTTP/2, Unix socket, transport ceilings]
+        transitions:
+          - source: agent
+            target: unix-socket
+            label: connect
+          - source: unix-socket
+            target: provider
+            label: local channel
+        activities:
+          provider:
+            title: Accept local gRPC transport
+            items:
+              - Serve Bootstrap on the shared channel
+          unix-socket:
+            title: Carry the provisional channel
+            items:
+              - Remain bound to this endpoint generation
+          agent:
+            title: Configure the client channel
+            items:
+              - Use the validated socket path
+              - Apply aggregate transport ceilings
+        context:
+          kind: Transport
+          value: unix:///run/stateforge-agent/providers/<instance>.1.sock
+
+      - id: validate-request
+        title: Validate the request
+        detail: The Provider checks the Protocol contract and compares the requested endpoint with its live identity.
+        phase: Handshake
+        active: [agent, provider]
+        fields: [expected_provider_instance_id, expected_endpoint_generation, supported_sfp_versions]
+        transitions:
+          - source: agent
+            target: provider
+            label: HandshakeRequest
+        activities:
+          provider:
+            title: Enforce the live endpoint fences
+            items:
+              - Validate the canonical request
+              - Compare Provider instance and generation
+          agent:
+            title: Await a fenced response
+            items:
+              - Retain the discovery observation
+              - Apply the Bootstrap deadline
+        context:
+          kind: RPC
+          value: BootstrapService.Handshake
+
+      - id: negotiate-session
+        title: Negotiate the session
+        detail: The Provider selects the highest mutual wire version and issues a fresh session identifier.
+        phase: Session negotiation
+        active: [provider, agent]
+        fields: [provider_runtime_id, session_id, selected_sfp_version]
+        transitions:
+          - source: provider
+            target: agent
+            label: HandshakeResponse
+            tone: success
+        activities:
+          provider:
+            title: Create the session
+            items:
+              - Select the highest mutual version
+              - Generate a fresh session ID
+          agent:
+            title: Validate the response fences
+            items:
+              - Compare identity and generation
+              - Confirm the selected version was offered
+        context:
+          kind: Session fence
+          value: instance + generation + runtime + session + version
+
+      - id: bind-session
+        title: Bind the negotiated session
+        detail: Later SFP procedures may now use the channel under the accepted session fences.
+        phase: Session bound
+        active: [agent, provider]
+        fields: [session bound, "next: GetManifest"]
+        transitions:
+          - source: agent
+            target: provider
+            label: session active
+            tone: success
+        activities:
+          provider:
+            title: Serve the active session
+            items:
+              - Reject stale or foreign session IDs
+          agent:
+            title: Retain the Provider session
+            items:
+              - Fence every later SFP procedure
+        context:
+          kind: Result
+          value: The provisional channel is trusted for this session
+
+  incompatible:
+    label: No common wire version
+    prefix:
+      scenario: success
+      through: validate-request
+    steps:
+      - title: Reject incompatible versions
+        detail: The peers have no mutually supported SFP version, so the Provider creates no session.
+        phase: Handshake rejected
+        active: [agent, provider]
+        fields: [UNIMPLEMENTED, no session created]
+        transitions:
+          - source: provider
+            target: agent
+            label: UNIMPLEMENTED
+            tone: warning
+        activities:
+          provider:
+            title: Return the canonical status
+            items:
+              - Retain no session state
+          agent:
+            title: Mark the generation incompatible
+            items:
+              - Do not retry an unchanged generation indefinitely
+        context:
+          kind: Negotiation
+          value: offered versions intersection supported versions is empty
+
+  invalid-request:
+    label: Malformed request
+    prefix:
+      scenario: success
+      through: open-channel
+    steps:
+      - title: Send the handshake request
+        detail: The Agent sends a request containing a malformed or semantically invalid field.
+        phase: Request validation
+        active: [agent, provider]
+        fields: [HandshakeRequest]
+        transitions:
+          - source: agent
+            target: provider
+            label: invalid request
+            tone: failure
+        activities:
+          agent:
+            title: Submit the request
+            items:
+              - Retain the expected discovery fences
+          provider:
+            title: Validate the canonical contract
+            items:
+              - Reject missing or malformed fields
+              - Treat no invalid value as a wildcard
+        context:
+          kind: Contract boundary
+          value: Context-independent validation runs before session creation
+
+      - title: Reject the malformed request
+        detail: The Provider returns INVALID_ARGUMENT and creates no session.
+        phase: Handshake rejected
+        active: [provider, agent]
+        fields: [INVALID_ARGUMENT, no session created]
+        transitions:
+          - source: provider
+            target: agent
+            label: INVALID_ARGUMENT
+            tone: failure
+        activities:
+          provider:
+            title: Return the canonical status
+            items:
+              - Retain no session state
+          agent:
+            title: Correct the request
+            items:
+              - Do not retry the same invalid message
+        context:
+          kind: Required behavior
+          value: Correct the request before another attempt
+
+  message-too-large:
+    label: Message exceeds its limit
+    prefix:
+      scenario: success
+      through: open-channel
+    steps:
+      - title: Enforce the procedure boundary
+        detail: A serialized Bootstrap request or response exceeds its procedure-specific byte limit.
+        phase: Message boundary
+        active: [agent, provider]
+        fields: [64 KiB request, 8 KiB response]
+        transitions:
+          - source: agent
+            target: provider
+            label: oversized message
+            tone: failure
+        activities:
+          agent:
+            title: Enforce the request and response limits
+            items:
+              - Reject an oversized response without binding a session
+          provider:
+            title: Enforce the request and response limits
+            items:
+              - Reject an oversized request
+              - Do not return an oversized response
+        context:
+          kind: Procedure limit
+          value: Shared transport ceilings do not replace Bootstrap byte limits
+
+      - title: Reject the oversized message
+        detail: The receiver reports RESOURCE_EXHAUSTED and neither side accepts a session.
+        phase: Handshake rejected
+        active: [provider, agent]
+        fields: [RESOURCE_EXHAUSTED, no session accepted]
+        transitions:
+          - source: provider
+            target: agent
+            label: RESOURCE_EXHAUSTED
+            tone: failure
+        activities:
+          provider:
+            title: Refuse the message
+            items:
+              - Retain no session state
+          agent:
+            title: Reject the attempt
+            items:
+              - Do not bind the channel
+        context:
+          kind: Required behavior
+          value: Reduce the message before another attempt
+
+  endpoint-mismatch:
+    label: Endpoint identity changed
+    prefix:
+      scenario: success
+      through: open-channel
+    steps:
+      - title: Compare the live endpoint fences
+        detail: The request names a Provider instance or generation that the serving endpoint does not own.
+        phase: Identity validation
+        active: [agent, provider]
+        fields: [expected_provider_instance_id, expected_endpoint_generation]
+        transitions:
+          - source: agent
+            target: provider
+            label: stale endpoint fences
+            tone: warning
+        activities:
+          agent:
+            title: Present the discovered identity
+            items:
+              - Keep the descriptor observation correlated
+          provider:
+            title: Compare with the live endpoint
+            items:
+              - Reject another instance
+              - Reject a stale generation
+        context:
+          kind: Identity fence
+          value: The request must identify the endpoint serving this RPC
+
+      - title: Revalidate endpoint discovery
+        detail: The Provider returns FAILED_PRECONDITION; the Agent discards the attempt and discovers the current endpoint.
+        phase: Discovery required
+        active: [provider, agent, discovery-directory]
+        fields: [FAILED_PRECONDITION, no session created]
+        transitions:
+          - source: provider
+            target: agent
+            label: FAILED_PRECONDITION
+            tone: warning
+          - source: agent
+            target: discovery-directory
+            label: revalidate
+        activities:
+          provider:
+            title: Refuse the stale identity
+            items:
+              - Retain no session state
+          discovery-directory:
+            title: Expose the current endpoint
+            items:
+              - Preserve identity and generation correlation
+          agent:
+            title: Restart from discovery
+            items:
+              - Connect only to the current endpoint
+        context:
+          kind: Required behavior
+          value: Revalidate discovery before trying again
+
+  provider-stopping:
+    label: Provider is stopping
+    prefix:
+      scenario: success
+      through: validate-request
+    steps:
+      - title: Refuse session creation while stopping
+        detail: The live Provider begins shutdown before it can safely create a new session.
+        phase: Provider shutdown
+        active: [agent, provider]
+        fields: [UNAVAILABLE, no session created]
+        transitions:
+          - source: provider
+            target: agent
+            label: UNAVAILABLE
+            tone: warning
+        activities:
+          provider:
+            title: Reject new session state
+            items:
+              - Complete shutdown without issuing a session
+          agent:
+            title: Treat the failure as transient
+            items:
+              - Apply bounded reconnect policy
+              - Revalidate the endpoint before retrying
+        context:
+          kind: Retryability
+          value: Retry only through bounded reconnect behavior
+
+  invalid-response:
+    label: Provider constructs an invalid response
+    prefix:
+      scenario: success
+      through: validate-request
+    steps:
+      - title: Validate the response before returning it
+        detail: The Provider constructs a response that violates the canonical Bootstrap response contract.
+        phase: Response validation
+        active: [provider]
+        fields: [HandshakeResponse, INTERNAL]
+        transitions:
+          - source: provider
+            target: provider
+            label: invalid response
+            tone: failure
+        activities:
+          provider:
+            title: Detect the internal contract violation
+            items:
+              - Validate the complete response
+              - Do not expose malformed session state
+        context:
+          kind: Provider fault
+          value: A Provider must validate its response before returning it
+
+      - title: Reject the Provider session
+        detail: The Provider reports INTERNAL and the Agent does not bind the channel.
+        phase: Handshake failed
+        active: [provider, agent]
+        fields: [INTERNAL, no session accepted]
+        transitions:
+          - source: provider
+            target: agent
+            label: INTERNAL
+            tone: failure
+        activities:
+          provider:
+            title: Report its contract violation
+            items:
+              - Retain no usable session
+          agent:
+            title: Reject the attempt
+            items:
+              - Do not continue to manifest exchange
+        context:
+          kind: Required behavior
+          value: Treat the Provider as violating its own contract
+
+  response-mismatch:
+    label: Response does not match the request
+    prefix:
+      scenario: success
+      through: validate-request
+    steps:
+      - title: Receive a structurally valid response
+        detail: The Provider response passes independent validation but does not match the descriptor, request, or offered versions.
+        phase: Response correlation
+        active: [provider, agent]
+        fields: [identity, generation, selected_sfp_version]
+        transitions:
+          - source: provider
+            target: agent
+            label: HandshakeResponse
+            tone: warning
+        activities:
+          provider:
+            title: Return the candidate session
+            items:
+              - Supply response identity and version fields
+          agent:
+            title: Compare Agent-owned fences
+            items:
+              - Match descriptor identity and generation
+              - Confirm the selected version was offered
+        context:
+          kind: Correlation boundary
+          value: Structural validity is not sufficient to bind a session
+
+      - title: Reject the mismatched response
+        detail: The Agent records a local protocol failure and refuses to bind the channel.
+        phase: Local protocol failure
+        active: [agent]
+        fields: [no session bound]
+        transitions:
+          - source: agent
+            target: agent
+            label: reject response
+            tone: failure
+        activities:
+          agent:
+            title: Discard the candidate session
+            items:
+              - Stop before Provider Manifest Exchange
+              - Preserve the failure for diagnostics
+        context:
+          kind: Required behavior
+          value: Never accept a response that violates Agent-owned fences
+
+  reconnect:
+    label: Connection lost after Bootstrap
+    prefix:
+      scenario: success
+      through: bind-session
+    steps:
+      - title: Lose the active channel
+        detail: Transport loss, Provider restart, endpoint replacement, or channel replacement invalidates the active connection.
+        phase: Session interrupted
+        active: [provider, unix-socket, agent]
+        fields: [old session stale]
+        transitions:
+          - source: unix-socket
+            target: agent
+            label: channel lost
+            tone: warning
+        activities:
+          provider:
+            title: Stop serving the old connection
+            items:
+              - Never authorize reuse of a superseded session
+          unix-socket:
+            title: Stop carrying the old channel
+            items:
+              - Expose no continuity guarantee
+          agent:
+            title: Invalidate the active session
+            items:
+              - Reject late messages from the old session
+        context:
+          kind: Session boundary
+          value: A previously negotiated session cannot be reused
+
+      - title: Establish a fresh session
+        detail: The Agent returns to discovery and performs Bootstrap again against the current endpoint.
+        phase: Reconnect
+        active: [discovery-directory, agent, provider]
+        fields: [new handshake, fresh session_id]
+        transitions:
+          - source: agent
+            target: discovery-directory
+            label: rediscover
+          - source: agent
+            target: provider
+            label: new HandshakeRequest
+        activities:
+          discovery-directory:
+            title: Expose the current generation
+            items:
+              - Correlate the current identity and socket
+          provider:
+            title: Create a new session
+            items:
+              - Issue a fresh session identifier
+          agent:
+            title: Repeat the complete handshake
+            items:
+              - Revalidate discovery and response fences
+        context:
+          kind: Recovery rule
+          value: Reconnection always creates a new Bootstrap session

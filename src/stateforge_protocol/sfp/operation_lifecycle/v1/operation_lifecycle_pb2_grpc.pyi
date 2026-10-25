@@ -29,7 +29,7 @@ GRPC_VERSION: str
 class OperationLifecycleServiceStub:
     """OperationLifecycleService observes or cancels an already admitted operation
     on the existing negotiated SFP channel. Neither method creates or dispatches
-    work. See docs/procedures/progress-results-cancellation.md for normative
+    work. See docs/v0.1.0/procedures/progress-results-cancellation.md for normative
     transitions, retention, correlation, limits, races, and retry behavior.
     """
 
@@ -52,7 +52,7 @@ class OperationLifecycleServiceStub:
 class OperationLifecycleServiceAsyncStub(OperationLifecycleServiceStub):
     """OperationLifecycleService observes or cancels an already admitted operation
     on the existing negotiated SFP channel. Neither method creates or dispatches
-    work. See docs/procedures/progress-results-cancellation.md for normative
+    work. See docs/v0.1.0/procedures/progress-results-cancellation.md for normative
     transitions, retention, correlation, limits, races, and retry behavior.
     """
 
@@ -71,7 +71,7 @@ class OperationLifecycleServiceAsyncStub(OperationLifecycleServiceStub):
 class OperationLifecycleServiceServicer(metaclass=_abc_1.ABCMeta):
     """OperationLifecycleService observes or cancels an already admitted operation
     on the existing negotiated SFP channel. Neither method creates or dispatches
-    work. See docs/procedures/progress-results-cancellation.md for normative
+    work. See docs/v0.1.0/procedures/progress-results-cancellation.md for normative
     transitions, retention, correlation, limits, races, and retry behavior.
     """
 

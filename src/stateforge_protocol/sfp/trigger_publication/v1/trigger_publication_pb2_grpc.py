@@ -38,7 +38,7 @@ class TriggerPublicationServiceServicer:
         """StreamTriggers binds one stream to an active negotiated session and exact
         accepted manifest revision. The first request must be open; the first
         response must be ready. Later requests are acknowledgements and later
-        responses are publications. See docs/procedures/triggers.md for validation,
+        responses are publications. See docs/v0.1.0/procedures/triggers.md for validation,
         idempotency, retry, ordering, flow-control, and termination semantics.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)

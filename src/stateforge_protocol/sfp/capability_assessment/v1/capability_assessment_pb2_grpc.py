@@ -41,7 +41,7 @@ class CapabilityAssessmentServiceServicer:
     def AssessCapabilities(self, request, context):
         """AssessCapabilities returns one normalized finding per requested
         operation identifier. See
-        docs/procedures/capability-assessment.md for validation, findings,
+        docs/v0.1.0/procedures/capability-assessment.md for validation, findings,
         failure mapping, deadlines, and retries.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)

@@ -15,7 +15,7 @@ import "google/protobuf/timestamp.proto";
 service CapabilityAssessmentService {
   // AssessCapabilities returns one normalized finding per requested
   // operation identifier. See
-  // docs/procedures/capability-assessment.md for validation, findings,
+  // docs/v0.1.0/procedures/capability-assessment.md for validation, findings,
   // failure mapping, deadlines, and retries.
   rpc AssessCapabilities(AssessCapabilitiesRequest) returns (AssessCapabilitiesResponse);
 }
@@ -178,7 +178,7 @@ message RequirementFinding {
 // operation payload.
 message ReasonDetail {
   // Extensible dotted reason-code identifier. See
-  // docs/procedures/capability-assessment.md for the canonical core
+  // docs/v0.1.0/procedures/capability-assessment.md for the canonical core
   // vocabulary and the Provider-namespacing rule for custom codes.
   string reason_code = 1;
   // Bounded, sanitized human-readable explanation. Not the discriminator.

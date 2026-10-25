@@ -271,9 +271,9 @@ def test_sanitized_diagnostic_boundary_is_portable() -> None:
 
 
 def test_health_documentation_matches_exported_limits() -> None:
-    documentation = (_ROOT / "docs" / "procedures" / "health.md").read_text(
-        encoding="utf-8"
-    )
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "health.md"
+    ).read_text(encoding="utf-8")
     assert (
         f"| Serialized request | {contract.MAX_REQUEST_BYTES // 1024} KiB |"
         in documentation

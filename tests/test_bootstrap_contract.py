@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+import yaml
 from google.protobuf.message import Message
 
 from stateforge_protocol.sfp import primitives
@@ -259,7 +260,7 @@ def test_session_identifier_limit_is_shared_by_versioned_schemas() -> None:
 
 
 def test_bootstrap_documentation_matches_exported_limits() -> None:
-    documentation = (_ROOT / "docs" / "bootstrap.md").read_text(
+    documentation = (_ROOT / "docs" / "v0.1.0" / "bootstrap.md").read_text(
         encoding="utf-8"
     )
     assert (
@@ -274,3 +275,27 @@ def test_bootstrap_documentation_matches_exported_limits() -> None:
         f"| Session ID | {contract.MAX_SESSION_ID_CODE_POINTS} Unicode code "
         "points |" in documentation
     )
+
+
+def test_bootstrap_walkthrough_covers_every_documented_scenario() -> None:
+    declaration = yaml.safe_load(
+        (
+            _ROOT / "docs" / "v0.1.0" / "procedures" / "bootstrap.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    expected_markers = {
+        "success": "session bound",
+        "invalid-request": "INVALID_ARGUMENT",
+        "message-too-large": "RESOURCE_EXHAUSTED",
+        "endpoint-mismatch": "FAILED_PRECONDITION",
+        "incompatible": "UNIMPLEMENTED",
+        "provider-stopping": "UNAVAILABLE",
+        "invalid-response": "INTERNAL",
+        "response-mismatch": "Local protocol failure",
+        "reconnect": "fresh session_id",
+    }
+
+    assert set(declaration["scenarios"]) == set(expected_markers)
+    for scenario_id, marker in expected_markers.items():
+        serialized = json.dumps(declaration["scenarios"][scenario_id])
+        assert marker in serialized
