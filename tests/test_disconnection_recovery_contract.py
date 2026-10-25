@@ -295,6 +295,49 @@ def test_watch_recovery_uses_last_validated_cursor(
         lifecycle_validation.validate_watch_exchange(request, response)
 
 
+def test_later_watch_response_uses_the_previous_delivered_sequence() -> None:
+    request = ParseDict(
+        _read("operation_lifecycle/watch-request.json"),
+        lifecycle_pb.WatchOperationRequest(),
+    )
+    response_document = _read("operation_lifecycle/watch-terminal.json")
+    snapshots = _read("operation_lifecycle/snapshots.json")
+    assert isinstance(response_document, dict)
+    assert isinstance(snapshots, dict)
+    response_document["snapshot"] = snapshots["progress-100"]
+    response_document["updatesSkipped"] = True
+    response = ParseDict(
+        response_document, lifecycle_pb.WatchOperationResponse()
+    )
+
+    lifecycle_validation.validate_watch_exchange(
+        request,
+        response,
+        previous_sequence=2,
+    )
+
+    response.updates_skipped = False
+    with pytest.raises(lifecycle_validation.OperationLifecycleValidationError):
+        lifecycle_validation.validate_watch_exchange(
+            request,
+            response,
+            previous_sequence=2,
+        )
+
+    lifecycle_validation.validate_watch_exchange(
+        request,
+        response,
+        previous_sequence=3,
+    )
+
+    with pytest.raises(lifecycle_validation.OperationLifecycleValidationError):
+        lifecycle_validation.validate_watch_exchange(
+            request,
+            response,
+            previous_sequence=response.snapshot.sequence,
+        )
+
+
 def test_recovery_matrix_never_turns_uncertainty_into_failure_or_retry() -> (
     None
 ):

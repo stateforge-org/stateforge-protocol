@@ -244,19 +244,34 @@ def validate_operation_snapshot(
 def validate_watch_exchange(
     request: operation_lifecycle_pb2.WatchOperationRequest,
     response: operation_lifecycle_pb2.WatchOperationResponse,
+    *,
+    previous_sequence: int | None = None,
 ) -> None:
-    """Validate a Watch response against its active request and cursor."""
+    """Validate an initial replay or later response on one active Watch."""
     validate_watch_operation_request(request)
     validate_watch_operation_response(response)
     _validate_request_response_correlation(request, response, "watch exchange")
     sequence = response.snapshot.sequence
-    _VALIDATION.require(
-        sequence >= request.after_sequence,
-        "watch exchange: response sequence precedes the cursor",
-    )
-    expected_skipped = (
-        request.after_sequence > 0 and sequence > request.after_sequence + 1
-    )
+    if previous_sequence is None:
+        cursor = request.after_sequence
+        _VALIDATION.require(
+            sequence >= cursor,
+            "watch exchange: response sequence precedes the cursor",
+        )
+    else:
+        cursor = _VALIDATION.require_integer_range(
+            previous_sequence,
+            minimum=1,
+            maximum=(1 << 64) - 1,
+            message=(
+                "watch exchange: previous sequence must be a positive uint64"
+            ),
+        )
+        _VALIDATION.require(
+            sequence > cursor,
+            "watch exchange: subsequent response did not advance",
+        )
+    expected_skipped = cursor > 0 and sequence > cursor + 1
     _VALIDATION.require_equal(
         response.updates_skipped,
         expected_skipped,

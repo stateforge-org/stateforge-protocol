@@ -225,6 +225,11 @@ module. The
 session/fingerprint checks, sequence gaps, immutable terminal outcomes,
 cancellation races, and bounded retention. Validate a success result against
 the originally admitted operation's pinned result schema as a separate step.
+For the initial Watch replay, `validate_watch_exchange` uses the request's
+`after_sequence`. For each later response on that stream, pass the last
+delivered snapshot sequence as `previous_sequence`; later responses must
+strictly advance and their `updates_skipped` flag is evaluated from that
+sequence.
 These bindings do not provide an execution manager or enforce runtime state
 transitions, sanitization, or backpressure.
 
