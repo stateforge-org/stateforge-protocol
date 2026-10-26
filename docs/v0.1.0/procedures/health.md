@@ -1,50 +1,156 @@
-# Provider health and operational eligibility
+# Health and availability monitoring
 
-The Provider exposes the standard `grpc.health.v1.Health` service on the
-existing Agent-established SFP channel. The Provider reports its process-wide
-health through the standard empty service name. The Agent combines that signal
-with its own current transport, session, generation, and accepted manifest
-before it allows new operation admission.
+Health tells the Agent whether a Provider process can accept new SFP work.
+The Provider publishes one process-wide status through the standard gRPC
+Health service. The Agent watches that status and combines it with its current
+session, endpoint generation, and accepted manifest before allowing new
+operation admission.
 
-[![Health and Availability Monitoring sequence diagram](../assets/diagrams/health-and-availability-monitoring.png)](../assets/diagrams/health-and-availability-monitoring.png)
+The authoritative observation is `Health.Watch(service="")` on the existing
+SFP channel. `SERVING` can make an otherwise valid Provider eligible;
+`NOT_SERVING`, an unknown state, or a lost Watch always fails closed.
 
-_Select the diagram to open the full-resolution version._
+## Interactive walkthrough
 
-## Standard wire contract
+```stateforge-procedure
+source: health.yaml
+scenario: success
+```
 
-SFP does not define a StateForge health protobuf. Its wire contract comes
-directly from the canonical
-[`grpc/health/v1/health.proto`](https://github.com/grpc/grpc-proto/blob/master/grpc/health/v1/health.proto)
-definition, including the `grpc.health.v1.Health` service,
-`HealthCheckRequest`, `HealthCheckResponse`, `Check`, and `Watch`. Python
-consumers obtain those official generated bindings from
-`grpcio-health-checking` as `grpc_health.v1.health_pb2` and
-`grpc_health.v1.health_pb2_grpc`; StateForge does not generate or vendor a
-second copy. StateForge's authoritative limits and service-name constants are
-published by `stateforge_protocol.sfp.health_contract`:
+??? info "Health and availability sequence"
+
+    ```mermaid
+    sequenceDiagram
+        participant Provider as Provider Process
+        participant Health as gRPC Health Service
+        participant Agent as StateForge Agent
+
+        Provider->>Health: Register Provider-wide status
+        Provider->>Health: Set NOT_SERVING
+        Note over Provider,Agent: Bootstrap and manifest acceptance succeed
+        Provider->>Health: Startup complete and set SERVING
+        Agent->>Health: Watch Provider-wide status
+        Health-->>Agent: SERVING (current status)
+        Agent->>Agent: Validate Watch binding and prerequisites
+        Agent->>Agent: Mark Provider AVAILABLE
+
+        alt Provider cannot accept new work
+            Provider->>Health: Set NOT_SERVING
+            Health-->>Agent: NOT_SERVING
+            Agent->>Agent: Block new admission
+        else Provider recovers
+            Provider->>Health: Set SERVING
+            Health-->>Agent: SERVING
+            Agent->>Agent: Revalidate and mark AVAILABLE
+        else Watch or channel ends
+            Agent->>Agent: Mark health UNKNOWN
+            Agent->>Agent: Block new admission
+            Agent->>Health: Retry Watch with bounded backoff
+        end
+    ```
+
+## Who implements Health
+
+[StateForge Provider Python](https://github.com/stateforge-org/stateforge-provider-python)
+hosts the standard Health service, starts fail-closed, and translates the
+Provider author's typed health result into `SERVING` or `NOT_SERVING`.
+Provider authors override `Provider.health()` only when readiness depends on
+their own resources and call `Provider.refresh_health()` when that evidence
+changes.
+
+The StateForge Agent opens the Provider-wide Watch after Bootstrap and
+manifest acceptance. It validates every response, fences events to the exact
+session that opened the stream, derives availability, and retries eligible
+Watch failures with bounded backoff.
+
+Use `stateforge-protocol` directly when implementing another Agent or Provider
+runtime, or when building conformance tooling. The package supplies canonical
+service names, message bounds, and status names; the standard gRPC package
+supplies the messages and service bindings.
+
+## Using the Python contract
+
+Install the Protocol package and the official gRPC Health bindings:
+
+```console
+python -m pip install stateforge-protocol grpcio-health-checking
+```
+
+### Contract sources
+
+| Source | Responsibility |
+| --- | --- |
+| [`grpc/health/v1/health.proto`](https://github.com/grpc/grpc-proto/blob/master/grpc/health/v1/health.proto) | Owns `grpc.health.v1.Health`, `Check`, `Watch`, request and response messages, and the serving-status enum. |
+| [`health_contract.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/health_contract.py) | Owns StateForge's Provider-wide service key, diagnostic SFP service names, message limits, and diagnostic-text bound. |
+| [`shared_endpoint.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/shared_endpoint.py) | Includes standard Health in the services and aggregate transport ceilings of the shared SFP endpoint. |
+
+Health has no StateForge protobuf and no separate `validation.py`. The wire
+schema and enum belong to the standard gRPC package. StateForge adds the
+cross-runtime constants in `health_contract.py`; live Watch binding, retry,
+readiness, and admission decisions require runtime state and therefore remain
+with the Agent or Provider.
+
+### Python API surface
+
+| Purpose | Python API |
+| --- | --- |
+| Request and response messages | `grpc_health.v1.health_pb2.HealthCheckRequest` and `HealthCheckResponse` |
+| Asynchronous client stub | `health_pb2_grpc.HealthStub` constructed with a `grpc.aio.Channel` |
+| Server interface and registration | `health_pb2_grpc.HealthServicer` and `add_HealthServicer_to_server` |
+| StateForge names and limits | `stateforge_protocol.sfp.health_contract` |
+| Aggregate endpoint limits | `stateforge_protocol.sfp.shared_endpoint` |
+
+```python
+from grpc_health.v1 import health_pb2, health_pb2_grpc
+from stateforge_protocol.sfp import health_contract
+
+request = health_pb2.HealthCheckRequest(
+    service=health_contract.AUTHORITATIVE_WATCH_SERVICE
+)
+stub = health_pb2_grpc.HealthStub(channel)
+
+async for response in stub.Watch(request):
+    status = response.status
+```
+
+`AUTHORITATIVE_WATCH_SERVICE` is the empty string. The caller must still
+enforce the serialized limits from `health_contract`, apply a deadline where
+the RPC is finite, and bind streamed responses to its current local session.
+
+## Standard Health wire contract
+
+SFP uses the standard methods on the same local channel as every other
+Provider procedure:
+
+```text
+/grpc.health.v1.Health/Check
+/grpc.health.v1.Health/Watch
+```
 
 | Resource | Limit |
 | --- | --- |
 | Serialized request | 4 KiB |
 | Serialized response | 64 bytes |
 
-The limits apply to each serialized `Check` or `Watch` message at the RPC
-boundary, including unknown protobuf fields. Health shares the same local
-HTTP/2 channel, endpoint trust, derived transport ceilings, and process
-lifetime as the negotiated SFP services. It does not create a second
-connection or reverse RPC surface. Its smaller per-procedure limits remain
-mandatory even though another service requires a larger shared-channel
-ceiling.
+These limits apply to every serialized `Check` request and every `Check` or
+`Watch` response, including unknown protobuf fields. The larger shared-channel
+ceiling does not replace the narrower Health limits.
 
-The Agent watches `Health.Watch(service="")`. In standard gRPC Health, the
-empty service name represents the whole server; in SFP it represents the
-whole Provider process. It is the authoritative health stream used as an input
-to Agent-derived operational eligibility.
+### The empty service name means the Provider process
 
-Providers may additionally register the protobuf full names of their hosted
-SFP services for operator diagnostics. For SFP 1.0, those names are:
+```text
+Health.Watch(service="")
+                     └── overall Provider process health
+```
 
-| Service key | Procedure |
+The empty key is the only Health signal that contributes to Provider
+availability. A Provider registers it before becoming discoverable, initializes
+it as `NOT_SERVING`, and changes it to `SERVING` only when the process is ready
+to accept correctly formed SFP requests.
+
+Implementations may also register hosted SFP service names for diagnostics:
+
+| Diagnostic service key | Procedure |
 | --- | --- |
 | `stateforge.sfp.bootstrap.v1.BootstrapService` | Handshake and version negotiation |
 | `stateforge.sfp.manifest.v1.ManifestService` | Provider manifest exchange |
@@ -53,218 +159,151 @@ SFP services for operator diagnostics. For SFP 1.0, those names are:
 | `stateforge.sfp.operation_lifecycle.v1.OperationLifecycleService` | Progress, results, and cancellation |
 | `stateforge.sfp.trigger_publication.v1.TriggerPublicationService` | Trigger publication and acknowledgement |
 
-These are actual protobuf service identities. Implementations must not invent
-an umbrella name such as `StateForgeProvider`, omit the version, use a package
-prefix, or interpret wildcards. A future SFP service may expose diagnostic
-health under its own protobuf full name when that service becomes part of the
-hosted contract.
+These are exact protobuf service identities. Named statuses help operators
+locate a problem, but they never override the empty Provider-wide key and
+never make the Provider eligible.
 
-A StateForge Provider starts the empty key as `NOT_SERVING` and reports
-`SERVING` only after the Provider process has completed startup and can handle
-its SFP contract. It returns to `NOT_SERVING` before the process stops accepting
-new work or begins teardown. Named service states can explain a local problem,
-but they neither override nor replace the Provider-wide state.
+### Check and Watch have different jobs
 
-The standard lookup behavior is preserved:
+=== "Method reference"
 
-| Request | Required result |
+    | Request | Result | Effect on Agent availability |
+    | --- | --- | --- |
+    | `Check` for `""` or a registered name | Return the current status. The caller uses a finite deadline. | Diagnostic only. A successful Check cannot make a Provider available. |
+    | `Check` for an unknown or wildcard-like name | gRPC `NOT_FOUND`. | None. |
+    | `Watch` for `""` or a registered name | Send the current status immediately, then every ordered change. | Only the current Watch for `""` can contribute to availability. |
+    | `Watch` for an unknown name | Send `SERVICE_UNKNOWN`, keep the stream open, and publish a later status if the name is registered. | Fails closed while unknown. |
+
+=== "Example ProtoJSON"
+
+    ``` { .json .annotate title="HealthCheckRequest" }
+    {
+      "service": " (1)"
+    }
+    ```
+
+    1.  The empty service name selects overall Provider process health.
+
+    ``` { .json .annotate title="HealthCheckResponse · current state" }
+    {
+      "status": "SERVING (1)"
+    }
+    ```
+
+    1.  The current Watch for the empty service may contribute this evidence
+        to the Agent's availability decision.
+
+    ``` { .json .annotate title="HealthCheckResponse · later update" }
+    {
+      "status": "NOT_SERVING (1)"
+    }
+    ```
+
+    1.  A later streamed update immediately fails closed for new admission.
+
+`SERVICE_UNKNOWN` is valid only as a Watch response. The status enum has four
+wire values:
+
+| Status | Meaning in StateForge |
 | --- | --- |
-| `Check` for a registered name or `""` | Return that key's current `SERVING` or `NOT_SERVING` status. Callers set a finite deadline. `Check` remains diagnostic. |
-| `Check` for an unknown name, including a wildcard-like name | Fail with gRPC `NOT_FOUND`. |
-| `Watch` for a registered name or `""` | Immediately send the current status, then send every ordered status change. |
-| `Watch` for an unknown name | Immediately send `SERVICE_UNKNOWN`, keep the stream open, and publish a later status if the name becomes registered. |
+| `SERVING` | The Provider process reports that it can accept new SFP work. |
+| `NOT_SERVING` | The Provider process cannot currently accept new SFP work. |
+| `UNKNOWN` | No usable readiness evidence is available. |
+| `SERVICE_UNKNOWN` | The watched service name is not registered yet. |
 
-`SERVICE_UNKNOWN` is valid only as a `Watch` response. `UNKNOWN`,
-`NOT_SERVING`, and `SERVICE_UNKNOWN` all fail closed for Agent eligibility.
+Every state except `SERVING` fails closed.
+
+## From Provider readiness to Agent availability
+
+The Provider owns its process health. The Agent owns the final availability
+decision.
+
+```mermaid
+flowchart LR
+    Transport["Current transport"] --> Gate{"All prerequisites current"}
+    Session["Current session and generation"] --> Gate
+    Manifest["Accepted manifest"] --> Gate
+    Watch["Current Provider-wide Watch"] --> Gate
+    Serving["Latest status is SERVING"] --> Gate
+    Gate -->|Yes| Available["Allow new admission"]
+    Gate -->|No| Unavailable["Block new admission"]
+```
+
+`SERVING` is necessary, but never sufficient by itself. A stale session, a
+replaced endpoint generation, a rejected manifest, or a lost Watch keeps the
+Provider unavailable even when the last received status was `SERVING`.
+
+Provider-wide health answers one question: _can this process accept new SFP
+work?_ It does not decide whether a particular operation is supported for a
+target. Capability Assessment supplies that point-in-time evidence, while
+Operation Admission revalidates the request and current prerequisites.
 
 ## Provider lifecycle
 
-The health registry exists before the endpoint becomes discoverable. The empty
-Provider-wide key starts as `NOT_SERVING`; any named diagnostic keys also start
-as `NOT_SERVING`. The proto3 default `UNKNOWN` is not a startup-ready state.
+| Phase | Provider-wide status | Admission effect |
+| --- | --- | --- |
+| Registry created | `NOT_SERVING` | Blocked. |
+| Startup and declaration validation complete | `SERVING` | Eligible only after every Agent-owned prerequisite also passes. |
+| Degraded operation or maintenance | `NOT_SERVING` | New admission stops. |
+| Recovery complete | `SERVING` | The Agent revalidates prerequisites before restoring availability. |
+| Shutdown begins | `NOT_SERVING` before teardown | New admission stops before Watch streams and transport are closed. |
 
-The Provider moves its Provider-wide status to `SERVING` only after it is ready
-to accept correctly formed SFP requests. In particular:
+StateForge Provider Python maps author-facing `DEGRADED`, `MAINTENANCE`, and
+`NOT_SERVING` to the standard wire status `NOT_SERVING`. Raw probe details and
+hook exceptions remain local to the Provider process.
 
-1. startup validation succeeds, including construction of a valid effective
-   manifest;
-2. the hosted service implementations and their bounded runtime resources are
-   ready;
-3. the Provider publishes `SERVING` for the empty Provider-wide key; and
-4. any named diagnostic states reflect their individual service readiness.
+Providers bound the number of Watch observers, queue capacity, delivery time,
+and shutdown wait. They preserve ordered changes for an observer; if a slow
+observer cannot keep up within those bounds, they terminate that Watch with
+`RESOURCE_EXHAUSTED` instead of dropping or reordering health transitions.
 
-The standard API can expose per-service diagnostics, but StateForge health is
-process-wide. Whenever the Provider cannot safely accept new SFP work,
-including during degraded operation or maintenance, it publishes
-`NOT_SERVING` for the empty key. Recovery changes that key back to `SERVING`
-only after the Provider is operational again. Named statuses may remain more
-specific for diagnosis; the Agent does not combine them into a second health
-authority.
+## Session fencing and Watch recovery
 
-Shutdown reverses readiness before resource teardown. The Provider first sets
-the empty Provider-wide key to `NOT_SERVING`, stops accepting new work, and
-gives active Watch streams a bounded opportunity to observe the transition.
-It may also update named diagnostic keys. It then closes Watch streams, stops
-the gRPC server, releases Provider resources, and withdraws the endpoint.
-The shutdown bound is a runtime configuration, not a new wire field. A slow or
-failed observer cannot hold Provider shutdown open indefinitely.
+Standard Health responses carry no StateForge session, endpoint generation,
+Provider identity, or manifest revision. The Agent therefore binds each Watch
+locally to the exact channel and accepted session that opened it.
 
-Health transitions describe RPC-serving readiness. They do not create,
-rewrite, or delete business state.
+Before applying a response, the Agent checks that this binding is still
+current. A queued `SERVING` event from a replaced channel or session is
+discarded. Reconnecting starts unavailable: the Agent repeats Bootstrap and
+manifest acceptance, opens a new Watch, and waits for that stream's initial
+status.
 
-## Check and Watch
+| Watch outcome | Agent behavior |
+| --- | --- |
+| Ordered status response | Apply it only when the Watch binding is current. |
+| `SERVICE_UNKNOWN` | Keep the stream open and remain unavailable. |
+| Stream ends with `OK` or another retryable status | Immediately become unavailable and retry with capped exponential backoff while the session remains current. |
+| `RESOURCE_EXHAUSTED` | Become unavailable and retry; the Provider may have rejected capacity or a slow observer. |
+| `UNIMPLEMENTED` | Mark Watch unsupported, remain unavailable, and do not retry on the unchanged endpoint generation. |
+| Channel, session, or endpoint replacement | Stop using the old Watch and recover through discovery and Bootstrap. |
 
-`Check` is a finite, point-in-time diagnostic. It is useful for operator tools,
-startup diagnosis, and confirming a suspected state, but a successful Check
-never promotes a Provider to operationally eligible. An Agent must not poll
-Check as a substitute for Watch.
+The retry schedule is bounded Agent policy, not a field in the Health
+protocol.
 
-`Watch` is the authoritative ongoing health observation. After the Agent has a
-current handshake and accepted manifest, it opens one
-`Health.Watch(service="")` on that same channel. The first response is the
-current Provider-wide state, not merely a change notification. Later responses
-on that stream are processed in delivery order. Named `Check` or `Watch`
-requests may support diagnostics, but they do not determine Agent eligibility.
+## Health loss does not rewrite admitted work
 
-Providers must bound the number of concurrent Watch observers and all
-per-observer buffering. The Provider must not drop or reorder state changes to
-keep a slow observer alive. When an observer cannot keep up within the
-implementation's finite delivery bound, terminate that stream with a
-sanitized resource or availability error. Capacity exhaustion uses
-`RESOURCE_EXHAUSTED`. The state publisher and Provider shutdown must never wait
-without a bound for an observer.
+When health becomes unavailable, the Agent blocks **new** operation admission.
+It does not infer an outcome for work that was already admitted.
 
-When a Watch ends for any reason, including an `OK` termination, the Agent
-immediately treats the watched state as unknown and blocks new admission. The
-standard retry behavior applies:
+| Health loss does | Health loss does not |
+| --- | --- |
+| Block new admission. | Mark an operation failed or cancelled. |
+| Invalidate capability evidence tied to the prior availability generation. | Replace progress or an immutable terminal result. |
+| Trigger Watch recovery while the session remains current. | Redispatch work or request cancellation automatically. |
 
-- `UNIMPLEMENTED` means Watch is unsupported. Do not retry it on the same
-  endpoint generation and do not fall back to Check for eligibility.
-- Any other terminal status is retried with capped exponential backoff while
-  the channel and negotiated session remain current.
-- Transport replacement or an invalid session requires normal discovery and
-  handshake recovery before opening a new Watch.
-- `SERVICE_UNKNOWN` does not terminate the stream. It remains ineligible while
-  waiting for that same stream to report a known state.
-
-Retry attempts and local observer limits are bounded runtime policy. They are
-not encoded into the standard Health messages.
-
-## Agent-derived operational eligibility
-
-Provider health is one input; the Agent owns the final decision. New operation
-admission is eligible only when all of these facts are simultaneously true:
-
-```text
-current transport
-AND current successful handshake, session, and endpoint generation
-AND compatible accepted manifest for that current session
-AND current Provider-wide Watch for service=""
-AND latest accepted Watch status is SERVING
-```
-
-Provider-wide `SERVING` alone is insufficient. A Provider can truthfully report
-that it is serving while the Agent rejects its manifest; that Provider remains
-ineligible. Likewise, a valid manifest does not override `NOT_SERVING` or a
-lost Watch. A successful `Check` and named service statuses are diagnostic and
-cannot promote eligibility.
-
-Provider-wide `SERVING` means only that the Provider process is running and
-ready to handle its SFP contract. It is not:
-
-- a capability assessment for a particular operation or target;
-- authorization or a policy decision;
-- proof that runtime requirements are satisfied;
-- proof that every manifest-declared operation will succeed;
-- reservation of Provider capacity; or
-- Control Plane availability.
-
-Capability Assessment supplies point-in-time operation evidence. Operation
-Admission revalidates the current request and prerequisites. Neither fact is
-collapsed into the health status.
-
-## Session and generation fencing
-
-Standard Health responses intentionally contain no StateForge session,
-generation, or manifest fields. The Agent therefore binds each Watch locally
-to the channel identity, Provider instance ID, endpoint generation, negotiated
-session ID, and accepted manifest revision that were current when it opened
-the stream.
-
-Before applying every response, the Agent compares that local binding with its
-current Provider state. A response from a replaced channel, session,
-generation, installation, or rejected/superseded manifest is discarded even
-when it says `SERVING`. Cancelling an old Watch is not sufficient fencing: a
-callback already queued by the transport may still arrive.
-
-A reconnect starts ineligible. The Agent repeats handshake and manifest
-acceptance, opens a newly bound Watch, and waits for its initial `SERVING`
-response. An old stream can never restore eligibility for a new session or
-generation.
-
-## Effect on admitted work
-
-Loss of health affects only new admission. It does not imply that already
-admitted Provider work stopped, failed, or was cancelled. The Agent and
-Provider preserve the operation's existing admission record, lifecycle state,
-progress, and immutable terminal result. They do not replace a result, create a
-failure, request cancellation, or redispatch work because health changed or a
-Watch ended.
-
-Existing operation observation or cooperative cancellation may continue when
-their own current-session contracts permit it. If transport loss makes that
-impossible, the outcome remains unresolved until lifecycle/recovery procedures
-provide evidence. Health is not business-operation truth.
+Existing observation or cooperative cancellation may continue when their own
+current-session contracts permit it. If transport loss prevents observation,
+the operation remains unresolved until lifecycle or recovery procedures supply
+new evidence.
 
 ## Diagnostics and privacy
 
-`HealthCheckResponse` carries only the standard status enum. Implementations
-must not encode diagnostic text, Provider configuration, credentials, customer
-data, target identities, or vendor-specific probe results into service names,
-metadata, or status substitutions.
+`HealthCheckResponse` carries only the standard status enum. Do not encode
+configuration, credentials, customer data, target identities, vendor probe
+results, or free-form diagnostics into service names or substitute statuses.
 
-Local logs may record the fixed service key, accepted status, sanitized gRPC
-code, retry attempt, and current non-secret correlation identities. Any remote
-or exception description is untrusted: sanitize it and limit retained or
-displayed text to 1,024 Unicode code points. Diagnostic text is never a
-machine-readable discriminator and must not be used to restore eligibility.
-
-This procedure does not require or define vendor polling. A Provider may use
-implementation-specific evidence to decide its readiness, but that mechanism
-and its raw details remain inside the Provider.
-
-## Responsibilities
-
-### Provider
-
-- Host the standard Health service on the existing SFP server.
-- Register the empty Provider-wide key and any named diagnostic keys.
-- Start fail-closed, publish ordered transitions, and withdraw admission
-  readiness before shutdown or teardown.
-- Bound observers, buffering, delivery stalls, and shutdown.
-- Keep health responses and failures sanitized.
-
-### Agent
-
-- Watch the empty Provider-wide service key on the current SFP channel.
-- Treat the initial response and every ordered update as health input, while
-  deriving eligibility from all current prerequisites.
-- Fail closed on unknown state, stream loss, invalid manifest, or stale
-  session/generation evidence.
-- Fence late events and retry Watch with bounded backoff where the standard
-  permits it.
-- Preserve already admitted operation truth across health changes.
-
-## Contract boundary
-
-This package defines StateForge's use of standard gRPC Health, the empty
-Provider-wide key, diagnostic service names, conformance vectors, and
-cross-runtime behavior. It adds no custom
-health protobuf, Provider implementation, Agent coordinator, second channel,
-business-operation cancellation, Control Plane report, SF-AOP message, or
-vendor-specific probe contract.
-
-The portable vectors in `tests/fixtures/health` cover named, empty, unknown,
-and wildcard lookups; startup, degradation, recovery, and shutdown; Check and
-Watch; stream loss and backpressure; stale-session fencing; invalid manifest
-despite `SERVING`; admitted work across health loss; and diagnostic bounds.
+Local logs may retain the fixed service key, accepted status, sanitized gRPC
+code, retry attempt, and non-secret correlation identities. Untrusted remote
+or exception descriptions are limited to 1,024 Unicode code points and remain
+human-readable diagnostics; they never restore availability.

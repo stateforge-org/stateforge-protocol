@@ -1,267 +1,437 @@
 # Capability assessment
 
-Capability assessment evaluates a requested operation set without executing
-those operations. The Provider examines its current session, manifest, runtime,
-and bounded non-secret context, then returns normalized support, limits,
-requirements, and blockers. Resource-specific input belongs to each
-operation's declared input schema and later invocation payload.
+Capability Assessment asks a Provider whether its **current runtime** can
+support a set of manifest-declared operations. It evaluates dynamic facts such
+as filesystem access, permissions, installed tooling, and vendor state without
+executing the operations or modifying the inspected environment.
 
-[![Capability Assessment sequence diagram](../assets/diagrams/capability-assessment.png)](../assets/diagrams/capability-assessment.png)
+The Agent calls this procedure only through a current, available Provider
+session. Each response is a point-in-time evidence snapshot: useful for
+planning, but never authorization or a promise that later admission will
+succeed.
 
-_Select the diagram to open the full-resolution version._
+## Interactive walkthrough
+
+```stateforge-procedure
+source: capability-assessment.yaml
+scenario: success
+```
+
+??? info "Capability assessment sequence"
+
+    ```mermaid
+    sequenceDiagram
+        participant Agent as StateForge Agent
+        participant Service as Capability Service
+        participant Checks as Requirement Checks
+        participant Runtime as Runtime Context
+
+        Note over Agent,Service: Current session, accepted manifest, Provider SERVING
+        Agent->>Service: AssessCapabilities(request)
+        Service->>Service: Validate request and live fences
+        Service->>Checks: Run distinct declared checks
+        Checks->>Runtime: Read-only inspection
+        Runtime-->>Checks: Point-in-time evidence
+        Checks-->>Service: Typed outcomes
+        Service->>Service: Normalize ordered findings
+        Service-->>Agent: AssessCapabilitiesResponse
+        Agent->>Agent: Validate exchange and currentness
+
+        alt Requirement unsatisfied
+            Agent->>Agent: Retain SUPPORTED_WITH_REQUIREMENTS
+        else Runtime incompatible
+            Agent->>Agent: Retain UNSUPPORTED
+        else Evidence inconclusive
+            Agent->>Agent: Retain INDETERMINATE
+        else All requirements satisfied
+            Agent->>Agent: Retain SUPPORTED
+        end
+    ```
+
+## Who implements Capability Assessment
+
+The [StateForge Provider Python](https://github.com/stateforge-org/stateforge-provider-python)
+framework hosts the service and turns Provider-authored requirement checks into
+canonical findings. A Provider author declares **what must be checked** and
+returns a typed outcome; the framework owns discovery, manifest publication,
+deduplication, execution, normalization, and gRPC error handling.
+
+The StateForge Agent selects operations from its accepted manifest, supplies
+the active session fences, validates the complete exchange, and retains only
+evidence whose session, manifest, availability generation, operation set, and
+execution context remain current.
+
+Use `stateforge-protocol` directly when implementing another Agent or Provider
+runtime, or when building conformance tooling.
+
+## Declaring runtime requirements in a Provider
+
+Static requirement metadata is published in the Provider manifest. The check
+itself evaluates the runtime only when Capability Assessment is requested.
+
+```python
+import os
+from pathlib import Path
+
+from stateforge_provider import (
+    Provider,
+    ProviderModel,
+    RequirementCheckResult,
+    operation,
+    requirement_check,
+)
+
+
+class WriteRequest(ProviderModel):
+    content: str
+
+
+class WriteResult(ProviderModel):
+    bytes_written: int
+
+
+class ExampleProvider(Provider):
+    @requirement_check(
+        "example.runtime.var_write",
+        "The Provider can write to /var/lib/example",
+    )
+    async def can_write_state(self) -> RequirementCheckResult:
+        directory = Path("/var/lib/example")
+        if directory.is_dir() and os.access(directory, os.W_OK):
+            return RequirementCheckResult.satisfied()
+        return RequirementCheckResult.unsatisfied(
+            "The state directory is not writable"
+        )
+
+    @operation(
+        "example.runtime/state.write@1",
+        requires=("example.runtime.var_write",),
+    )
+    async def write_state(self, request: WriteRequest) -> WriteResult:
+        ...
+```
+
+The operation names the check by its stable identifier. The framework runs a
+shared check at most once per assessment even when several requested
+operations require it.
+
+| Author result | Normalized operation finding |
+| --- | --- |
+| Every check is `satisfied()` | `SUPPORTED` |
+| Any check is `unsatisfied()` and none is stronger | `SUPPORTED_WITH_REQUIREMENTS` |
+| Any check is `incompatible()` | `UNSUPPORTED` |
+| Any check is `unknown()` and none is incompatible | `INDETERMINATE` |
+
+When multiple checks differ, StateForge Provider Python applies this
+precedence: **incompatible → unknown → unsatisfied → satisfied**. Explanations
+must be bounded, sanitized, and safe to return to the Agent.
+
+## Using the Python wire contract
+
+Install the generated Protocol package:
+
+```console
+python -m pip install stateforge-protocol
+```
+
+### Contract sources
+
+| Source | Responsibility |
+| --- | --- |
+| [`capability_assessment.proto`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/proto/stateforge_protocol/sfp/capability_assessment/v1/capability_assessment.proto) | Owns messages, enums, field numbers, the service, and `AssessCapabilities`. |
+| [`capability_assessment.schema.json`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/capability_assessment/v1/capability_assessment.schema.json) | Validates the complete ProtoJSON request and response shapes, field bounds, and finding-state invariants. |
+| [`contract.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/capability_assessment/v1/contract.py) | Exposes the canonical service identity, message limits, assessment bounds, and reusable reason codes. |
+| [`validation.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/capability_assessment/v1/validation.py) | Validates requests, responses, request/response correlation, uniqueness, and complete ordered finding coverage. |
+| Generated `capability_assessment_pb2` and `capability_assessment_pb2_grpc` | Supply Python messages, enums, client stubs, server interfaces, and registration helpers. |
+
+Generated protobuf classes enforce wire types. They do **not** enforce the
+complete StateForge semantic contract. Independent implementations must call
+the public Protocol validators before trusting decoded messages.
+
+### Python API surface
+
+| Purpose | Python API |
+| --- | --- |
+| Request and response messages | `capability_assessment_pb2.AssessCapabilitiesRequest` and `AssessCapabilitiesResponse` |
+| Support and requirement states | `capability_assessment_pb2.SupportState` and `RequirementState` |
+| Asynchronous client | `capability_assessment_pb2_grpc.CapabilityAssessmentServiceStub` |
+| Server interface and registration | `CapabilityAssessmentServiceServicer` and `add_CapabilityAssessmentServiceServicer_to_server` |
+| Stable limits and reason codes | `stateforge_protocol.sfp.capability_assessment.v1.contract` |
+| Canonical validation | `stateforge_protocol.sfp.capability_assessment.v1.validation` |
+
+```python
+from uuid import uuid4
+
+from google.protobuf import struct_pb2
+from stateforge_protocol.sfp.capability_assessment.v1 import (
+    capability_assessment_pb2,
+    capability_assessment_pb2_grpc,
+    validation,
+)
+
+request = capability_assessment_pb2.AssessCapabilitiesRequest(
+    assessment_request_id=str(uuid4()),
+    expected_provider_instance_id=provider_instance_id,
+    expected_endpoint_generation=endpoint_generation,
+    expected_session_id=session_id,
+    expected_manifest_revision=manifest_revision,
+    execution_context=struct_pb2.Struct(),
+    operation_identifiers=("example.runtime/state.write@1",),
+)
+validation.validate_assess_capabilities_request(request)
+
+stub = capability_assessment_pb2_grpc.CapabilityAssessmentServiceStub(channel)
+response = await stub.AssessCapabilities(request, timeout=5.0)
+validation.validate_assessment_exchange(request, response)
+```
+
+The caller still owns transport byte limits, a finite deadline, and checks
+that depend on the live session, accepted manifest, availability, or local
+policy.
 
 ## Wire contract
 
-SFP exposes the unary method
-`/stateforge.sfp.capability_assessment.v1.CapabilityAssessmentService/AssessCapabilities`
-on the same local gRPC channel as bootstrap and manifest exchange. The
-authoritative source is
-`proto/stateforge_protocol/sfp/capability_assessment/v1/capability_assessment.proto`.
+Capability Assessment is one unary RPC on the active SFP channel:
 
-The Agent may call this read-only RPC only after a successful handshake and
-after it has validated and accepted a manifest. It binds every request to
-`expected_provider_instance_id`, `expected_endpoint_generation`,
-`expected_session_id`, and `expected_manifest_revision`. The first two values
-identify only an endpoint generation; `expected_session_id` is the field that
-actually fences the request to one negotiated session, since multiple
-handshakes can in principle occur against the same generation.
-`expected_manifest_revision` must match the Agent's currently accepted
-manifest, so a Provider reload or restart with changed declarations cannot
-produce an apparently current assessment against a manifest the Agent never
-validated.
+```text
+/stateforge.sfp.capability_assessment.v1.CapabilityAssessmentService/AssessCapabilities
+```
 
-This RPC never executes an operation, reserves capacity, creates a
-StateForge binding, or converts a Provider manifest declaration into proof
-that a particular operation payload or resource is compatible. It performs
-only the minimum bounded inspection necessary to assess the requested
-operations and must not mutate resources, dispatch work, or rely on a hidden
-write as a probe.
+The Agent calls it after Bootstrap, manifest acceptance, and Provider Health
+have established a current available session.
 
-## Request model
+### Request
 
-| Field | Schema-1 meaning |
+| Field | Meaning |
 | --- | --- |
-| `assessment_request_id` | Agent-assigned immutable UUIDv4 correlation identity. Reusing it correlates a retry of the same semantic request; changed content requires a new id. |
-| `expected_provider_instance_id` | Copied from Handshake. |
-| `expected_endpoint_generation` | Copied from Handshake, never a process ID. |
-| `expected_session_id` | Copied from `HandshakeResponse.session_id`; the actual session-level fence. |
-| `expected_manifest_revision` | Copied from the Agent's accepted `GetManifestResponse.manifest_revision`. |
-| `execution_context` | Bounded, non-secret situational metadata the Provider inspection may use to refine a finding. Not manifest-schema-validated and never a substitute for operation-specific resource input. |
-| `operation_identifiers` | Bounded, nonempty, unique set of `namespace/name@major` identifiers. Every entry must be declared in the accepted manifest's `operations`. Order conveys no preference; duplicates are invalid. |
+| `assessment_request_id` | Agent-minted canonical UUIDv4 for this exact semantic request. An unchanged retry may reuse it; changed content requires a new identity. |
+| `expected_provider_instance_id` | Provider installation identity copied from the active session. |
+| `expected_endpoint_generation` | Positive endpoint generation copied from the active session. |
+| `expected_session_id` | Exact negotiated session fence. Instance and generation alone do not identify one handshake session. |
+| `expected_manifest_revision` | Revision of the manifest the Agent accepted and used to select operations. |
+| `execution_context` | Bounded, non-secret situational metadata. It is not Provider configuration or an operation invocation payload. |
+| `operation_identifiers` | Nonempty ordered collection of unique `namespace/name@major` identifiers declared by the accepted manifest. |
 
-Identifier syntax for `operation_identifiers` matches
-[provider manifest exchange](provider-manifest.md): `namespace/name@major`,
-case-sensitive, at most 255 characters, never coerced into a closed
-operation enum.
+Operation-specific resource input belongs to the operation's declared
+`input_schema` and its later invocation. Capability Assessment does not carry
+a generic target configuration and does not pre-validate a future operation
+payload.
 
-The manifest's `configuration_schema` describes Provider configuration, not a
-generic target or operation payload. This RPC does not carry Provider secrets
-or resource configuration. Resource selection, where needed, belongs to the
-operation's `input_schema` and later invocation payload.
+### Response envelope
 
-## Normalized findings
+=== "Field reference"
 
-Each per-operation finding uses one of these bounded protocol states. The
-zero/`UNSPECIFIED` value is never valid in a well-formed response.
+    | Field | Meaning |
+    | --- | --- |
+    | `assessment_request_id` | Echo of the request identity. |
+    | `provider_instance_id`, `endpoint_generation`, `session_id` | Echoed session fences that must match the request. |
+    | `manifest_revision` | Exact declaration revision used for the assessment. |
+    | `assessment_id` | New Provider-minted UUIDv4 for this produced snapshot; never derived from the request identity. |
+    | `assessment_timestamp` | Provider-clock capture time. It is evidence metadata, not trusted cross-Provider ordering. |
+    | `findings` | Exactly one finding per requested operation, in request order. Consumers still correlate by identifier. |
+
+=== "Example ProtoJSON"
+
+    ``` { .json .annotate title="AssessCapabilitiesResponse" }
+    {
+      "assessmentRequestId": "3fa85f64-5717-4562-b3fc-2c963f66afa6 (1)",
+      "providerInstanceId": "550e8400-e29b-41d4-a716-446655440000",
+      "endpointGeneration": "4",
+      "sessionId": "session-3d19b6d2-4b7b-4f4a-9c9a-2f3f4f0c9a1b (2)",
+      "manifestRevision": "sha256:dd58cd0518f631e370a095e6ba0c97476b028c8c65fac1f4b8da28d130c94cb7",
+      "assessmentId": "6ba7b810-9dad-41d1-80b4-00c04fd430c8 (3)",
+      "assessmentTimestamp": "2026-09-16T07:30:00Z",
+      "findings": [
+        {
+          "operationIdentifier": "stateforge.git/reference.resolve@1",
+          "supportState": "SUPPORT_STATE_SUPPORTED (4)",
+          "requirementFindings": [],
+          "reasons": [],
+          "constraints": []
+        },
+        {
+          "operationIdentifier": "stateforge.git/branch.list@1",
+          "supportState": "SUPPORT_STATE_SUPPORTED_WITH_REQUIREMENTS (5)",
+          "requirementFindings": [
+            {
+              "requirementId": "stateforge.capability_assessment.v1.tooling_version",
+              "state": "REQUIREMENT_STATE_UNKNOWN",
+              "description": "Vendor tooling version could not be determined.",
+              "versionConstraint": ">=2.30"
+            }
+          ],
+          "reasons": [],
+          "constraints": [
+            {
+              "constraintId": "stateforge.capability_assessment.v1.read_only_window",
+              "value": "",
+              "explanation": "Only usable during the nightly maintenance window."
+            }
+          ]
+        }
+      ]
+    }
+    ```
+
+    1.  Echoes the request identity so the Agent can correlate the exchange.
+    2.  Completes the echoed session fence together with the Provider instance
+        and endpoint generation.
+    3.  Identifies this new point-in-time evidence snapshot.
+    4.  Reports that current evidence satisfies every declared requirement.
+    5.  Keeps unmet or unknown requirements and active constraints attached to
+        the affected operation.
+
+### Finding states
 
 | State | Meaning |
 | --- | --- |
-| `SUPPORTED` | The Provider obtained enough current evidence to support the operation and found no additional unmet requirement. |
-| `SUPPORTED_WITH_REQUIREMENTS` | The operation can be supported only after the returned requirements, constraints, or prerequisites are satisfied. |
-| `UNSUPPORTED` | Current evidence proves that the declared operation is not supported. |
-| `INDETERMINATE` | The Provider cannot establish support or non-support from the available evidence, for example because inspection, access, permissions, or vendor state is insufficient. |
+| `SUPPORTED` | Current evidence supports the operation and contains no unmet or unknown requirement. |
+| `SUPPORTED_WITH_REQUIREMENTS` | Support depends on at least one unmet or unknown requirement, or an explicit constraint. |
+| `UNSUPPORTED` | Current evidence proves the operation is not supported. |
+| `INDETERMINATE` | Available evidence cannot establish support or non-support. |
 
-`SUPPORTED_WITH_REQUIREMENTS`, `UNSUPPORTED`, and `INDETERMINATE` are
-successful domain results, not RPC failures. A mixed request may return
-different states per operation.
+All four are successful domain results. A request for several operations may
+return a different state for each operation.
 
-Each `RequirementFinding` carries one of these states. An unknown
-requirement is never evidence of satisfaction, and an unverified
-`version_constraint` is never evidence of satisfaction either.
+### Finding details
 
-| State | Meaning |
-| --- | --- |
-| `SATISFIED` | The requirement is met. |
-| `UNSATISFIED` | The requirement is not met. |
-| `UNKNOWN` | The Provider could not establish whether the requirement is met. |
+| Detail | Machine-readable identity | Human-readable context | Required rule |
+| --- | --- | --- | --- |
+| Requirement | `requirement_id` | `description` plus optional `version_constraint` | State is `SATISFIED`, `UNSATISFIED`, or `UNKNOWN`. |
+| Reason | `reason_code` | `explanation` | Required for `UNSUPPORTED` and `INDETERMINATE`. |
+| Constraint | `constraint_id` plus `value` | `explanation` | May justify `SUPPORTED_WITH_REQUIREMENTS`. |
 
-### Finding fields
-
-| Message | Fields |
-| --- | --- |
-| `CapabilityFinding` | `operation_identifier` (exact requested identifier), `support_state`, `requirement_findings`, `reasons`, `constraints`. |
-| `RequirementFinding` | `requirement_id` (stable, dotted, extensible), `state`, `description`, `version_constraint` (empty means no constraint; syntax is owned by the named requirement, mirroring `RuntimeRequirement.version_constraint`). |
-| `ReasonDetail` | `reason_code` (dotted, the discriminator), `explanation` (bounded, sanitized; never the discriminator). |
-| `ConstraintDetail` | `constraint_id` (stable, dotted), `value` (bounded, may be empty), `explanation` (bounded, sanitized). |
-
-### Cross-field invariants
-
-- `SUPPORTED` must not carry a `requirement_findings` entry in state
-  `UNSATISFIED` or `UNKNOWN`.
-- `SUPPORTED_WITH_REQUIREMENTS` must carry at least one `requirement_findings`
-  entry in state `UNSATISFIED` or `UNKNOWN`, or at least one `constraints`
-  entry — an actual unmet item, not merely any requirement or an empty
-  finding. A finding whose requirements are all already `SATISFIED` and
-  which carries no constraints has nothing left pending and does not justify
-  this state.
-- `UNSUPPORTED` and `INDETERMINATE` must carry at least one `reasons` entry.
-- `requirement_findings[*].requirement_id`, `reasons[*].reason_code`, and
-  `constraints[*].constraint_id` are each unique within one finding. JSON
-  Schema cannot express uniqueness by a sub-key over an array of objects;
-  this rule is enforced by dedicated tests, not the packaged schema.
+Identifiers are extensible dotted names, not closed enums. Explanations are
+diagnostic text and must never be used as machine-readable discriminators.
 
 ### Reason-code vocabulary
 
-`reason_code` is an open, extensible dotted identifier, not a closed enum.
-Providers should reuse this canonical core vocabulary where applicable:
+Providers should reuse these canonical codes when they fit. Provider-specific
+codes use the Provider's own `provider_identity` namespace.
 
 | Reason code | Meaning |
 | --- | --- |
-| `stateforge.capability_assessment.v1.access_denied` | The Provider could not access evidence needed for assessment. |
-| `stateforge.capability_assessment.v1.permission_uncertain` | The Provider could not determine whether required permissions are present. |
+| `stateforge.capability_assessment.v1.access_denied` | Evidence could not be read because access was denied. |
+| `stateforge.capability_assessment.v1.permission_uncertain` | Required permissions could not be established. |
 | `stateforge.capability_assessment.v1.unsupported_vendor_state` | The current vendor-side state does not support the operation. |
 | `stateforge.capability_assessment.v1.insufficient_evidence` | Inspection could not gather enough evidence to decide. |
-| `stateforge.capability_assessment.v1.requirement_unmet` | A specific declared requirement is not met. |
-
-A runtime adapting declared prerequisite checks uses `requirement_unmet` when
-one of those prerequisites proves incompatible and `insufficient_evidence`
-when inspection cannot decide. `unsupported_vendor_state` is reserved for
-incompatibility specifically caused by the current vendor-side state; it is
-not the generic code for an unsupported operating system, missing executable,
-or other unmet runtime prerequisite.
-
-A Provider-specific reason code must be namespaced under its own
-`provider_identity` to avoid colliding with the core vocabulary or another
-Provider's codes.
-
-Python consumers import these canonical values from
-`stateforge_protocol.sfp.capability_assessment.v1.contract` as
-`REASON_CODE_ACCESS_DENIED`, `REASON_CODE_PERMISSION_UNCERTAIN`,
-`REASON_CODE_UNSUPPORTED_VENDOR_STATE`, `REASON_CODE_INSUFFICIENT_EVIDENCE`,
-and `REASON_CODE_REQUIREMENT_UNMET`. These constants expose the reusable core
-vocabulary; they do not close the extensible `reason_code` namespace.
+| `stateforge.capability_assessment.v1.requirement_unmet` | A declared runtime prerequisite is not met. |
 
 ## Structural and semantic validation
 
-The package ships
-`stateforge_protocol/sfp/capability_assessment/v1/capability_assessment.schema.json`.
-It validates the **ProtoJSON projection** of a complete response; the
-`assessCapabilitiesRequest` definition validates requests. Use lowerCamelCase
-names and `MessageToDict(message, always_print_fields_with_no_presence=True)`,
-matching [provider manifest exchange](provider-manifest.md#structural-and-semantic-validation).
-Every request and response field shown by the schema is required in that
-projection. Proto3 zero/default values are not wildcards: empty identities,
-generation zero, `UNSPECIFIED` enums, a missing findings collection, or an
-empty requested-operation collection are invalid. Empty repeated detail
-collections remain explicit empty arrays in a complete projected response.
+Validation is layered. Passing an earlier layer never skips the layers after
+it.
 
-The protobuf definition owns field names, numbers, types, and service shape.
-The JSON Schema adds required-field, identifier, uniqueness, count, and the
-cross-field invariants above. `execution_context` accepts recursively nested
-JSON. The packaged schema bounds every object and array to 32 entries, every
-property name to 128 characters, and every string value to
-2,048 characters. The packaged Python validator enforces the aggregate
-64-container nesting limit before schema processing. Runtimes enforce the
-serialized-message limits at the transport boundary; JSON Schema cannot
-portably express either limit, and `maxLength` counts Unicode code points
-rather than encoded bytes.
+```mermaid
+flowchart TB
+    Bytes["Serialized protobuf bytes"] --> Decode["Protobuf decoding"]
+    Decode --> Schema["Packaged ProtoJSON schema"]
+    Schema --> Semantics["Canonical message semantics"]
+    Semantics --> Fences["Live session and manifest fences"]
+    Fences --> Inspect["Read-only requirement checks"]
+    Inspect --> Exchange["Response and exchange validation"]
+    Exchange --> Current["Agent currentness check"]
+```
 
-These are structural ceilings only. `execution_context` is not
-manifest-schema-validated and must not carry operation-specific resource input.
-The static schema cannot verify that a response contains exactly one finding
-per requested operation with no duplicates or omissions. The packaged Python
-validator composes the schema with those exchange invariants so Agent and
-Provider implementations do not reproduce Protocol rules.
+| Owner | Validates |
+| --- | --- |
+| Protobuf runtime | Wire types and decodability. |
+| Packaged schema | Required ProtoJSON fields, identifier shapes, enum values, collection bounds, and finding-state invariants. |
+| `validation.py` | Canonical UUIDs and generations, execution-context depth, uniqueness, request/response correlation, and exact ordered finding coverage. |
+| Provider runtime | Active session, current manifest revision, declared operations, Provider readiness, author hook execution, and response byte limit. |
+| Agent runtime | Accepted manifest membership, finite deadline, retries, current availability generation, exact-scope caching, and post-call currentness. |
 
-| Limit | Maximum |
+The schema validates lowerCamelCase ProtoJSON produced with
+`always_print_fields_with_no_presence=True`. Empty proto3 defaults are not
+wildcards. A missing identity, generation zero, an `UNSPECIFIED` enum, an
+empty operation set, or a missing findings collection is invalid.
+
+### Finding invariants
+
+| Finding | Required relationship |
+| --- | --- |
+| `SUPPORTED` | No requirement may be `UNSATISFIED` or `UNKNOWN`. |
+| `SUPPORTED_WITH_REQUIREMENTS` | At least one requirement is `UNSATISFIED` or `UNKNOWN`, or at least one constraint exists. |
+| `UNSUPPORTED` | At least one machine-readable reason exists. |
+| `INDETERMINATE` | At least one machine-readable reason exists. |
+| Every response | Finding identifiers are unique and cover every requested operation exactly once, in request order. |
+
+Requirement IDs, reason codes, and constraint IDs are each unique within one
+operation finding.
+
+### Resource limits
+
+| Resource | Maximum |
 | --- | ---: |
 | Serialized request | 8 MiB |
 | Serialized response | 16 MiB |
 | `execution_context` nesting depth | 64 containers |
-| `execution_context` entries per container | 32 |
-| `execution_context` property name | 128 characters |
-| `execution_context` string value | 2,048 characters |
-| `operation_identifiers` per request | 64 unique entries |
-| `requirement_findings` per finding | 64 entries, unique `requirement_id` |
-| `reasons` per finding | 16 entries, unique `reason_code` |
-| `constraints` per finding | 32 entries, unique `constraint_id` |
-| `explanation` | 1,024 characters |
-| `RequirementFinding.description` | 2,048 characters |
-| `version_constraint` | 255 characters (matches `RuntimeRequirement.version_constraint`) |
-| `ConstraintDetail.value` | 512 characters |
-| `ConstraintDetail.explanation` | 1,024 characters |
+| Entries in each execution-context object or array | 32 |
+| Execution-context property name | 128 characters |
+| Execution-context string value | 2,048 characters |
+| Requested operations | 64 unique identifiers |
+| Requirement findings per operation | 64 |
+| Reasons per operation | 16 |
+| Constraints per operation | 32 |
+| Explanation | 1,024 characters |
+| Requirement description | 2,048 characters |
+| Version constraint | 255 characters |
+| Constraint value | 512 characters |
 
-Configure transport message limits before decoding, matching
-[provider manifest exchange](provider-manifest.md#structural-and-semantic-validation).
-The byte limits are independent of the field-level bounds: a structurally
-valid payload containing multibyte Unicode strings can still exceed the wire
-limit. Reject that payload with `RESOURCE_EXHAUSTED`. After decoding, call the
-packaged request validator. It enforces the nesting limit with a cheap
-iterative walk before schema processing; malformed shape or excessive nesting
-is `INVALID_ARGUMENT` after runtime status translation.
+Serialized byte limits remain independent of field limits. A structurally
+valid message containing multibyte text can still exceed its wire limit.
 
-## Assessment semantics and correlation
+## Evidence lifetime and reuse
 
-An `AssessCapabilitiesResponse` is point-in-time evidence, not an
-authorization, reservation, lease, health guarantee, or promise that later
-admission will succeed. Provider health, manifest declaration, runtime
-compatibility, and requirement satisfaction remain distinct facts; `SERVING`
-and a valid declaration alone do not prove payload- or resource-specific
-support.
+The Agent may reuse an assessment only when every part of its scope still
+matches:
 
-Read-only retries are safe but may observe newer Provider state. Reusing
-`assessment_request_id` correlates the same semantic request; changed
-semantic content requires a new request id. The contract requires no
-persistent assessment or idempotency ledger. `assessment_id` is
-Provider-minted per call and is never derived from `assessment_request_id`,
-since a read-only retry may legitimately yield a new `assessment_id` for an
-unchanged request. `assessment_timestamp` is Provider-clock evidence of when
-the assessment's evidence was captured — point-in-time evidence only, never
-a trusted ordering or authorization mechanism across sessions or Providers.
+| Scope part | Required match |
+| --- | --- |
+| Provider | Same `provider_instance_id`. |
+| Endpoint | Same `endpoint_generation`. |
+| Session | Same `session_id`. |
+| Declaration | Same `manifest_revision`. |
+| Availability | Same `availability_generation`; any Health transition invalidates the snapshot. |
+| Operations | Same identifiers in the same order. |
+| Runtime context | Same deterministic `execution_context` hash. |
 
-A successful response reports exactly one finding per requested operation
-identifier in request order for a deterministic projection. Consumers still
-correlate by `operation_identifier`, not position. The Agent validates a
-successful response against the active session and manifest before normalizing
-it for a consumer; a Provider response cannot add operations or roles absent
-from the accepted manifest. Later operation
-admission performs its own current validation and must not treat an old
-assessment as permission to dispatch.
+!!! important "Reuse rule"
 
-## Failures, deadlines and retries
+    A change to any row invalidates the cached evidence. The Agent must run a new
+    assessment.
+
+Cache reuse avoids repeating the same inspection. It does not authorize later
+operation admission. The Provider keeps no persistent idempotency ledger for this
+read-only RPC: reusing `assessment_request_id` correlates an unchanged retry, but
+the Provider may mint a new `assessment_id` and report newer evidence on every
+call.
+
+## Failures, deadlines, and retries
 
 | Outcome | Required behavior |
 | --- | --- |
-| Malformed fields, invalid identifier syntax, duplicate `operation_identifiers`, invalid or oversized bounds | Provider returns `INVALID_ARGUMENT`. |
-| Missing handshake; instance, generation, or session mismatch; stale or mismatched manifest revision; undeclared operation identifier | Provider returns `FAILED_PRECONDITION`; Agent re-handshakes or re-fetches the manifest before retrying. |
-| Request or response would exceed declared resource limits | Provider returns `RESOURCE_EXHAUSTED`. |
-| Client deadline or cancellation | Standard `DEADLINE_EXCEEDED` / `CANCELLED`; inspection stops where possible and there is no resource mutation to undo. |
-| Transport or whole-service temporary unavailability | `UNAVAILABLE`; bounded retry is safe only after session revalidation. |
-| Unexpected Provider boundary failure that prevents a valid normalized response | Sanitized `INTERNAL`; never expose stack traces, credentials, or raw operation payloads. |
-| Access denial, permission uncertainty, unsupported vendor state, or per-operation inability to inspect, for an otherwise-valid request | **Not an RPC error.** Becomes an explicit `UNSUPPORTED` or `INDETERMINATE` finding. |
+| Malformed fields, duplicate operations, invalid identifiers, or excessive context nesting | `INVALID_ARGUMENT`; correct the request before retrying. |
+| Inactive session, mismatched identity or generation, stale manifest revision, or undeclared operation | `FAILED_PRECONDITION`; reconnect or refresh the manifest before building a new request. |
+| Request or response exceeds its serialized limit | `RESOURCE_EXHAUSTED`. |
+| Provider is not ready before or after inspection | `UNAVAILABLE`; retry only while the captured lease remains current. |
+| Deadline expires or caller cancels | `DEADLINE_EXCEEDED` or `CANCELLED`; stop inspection where possible and return no partial result. |
+| Requirement-check hook fails or the Provider cannot construct a valid response | Sanitized `INTERNAL`; log implementation details only inside the Provider. |
+| Access denial, unmet permissions, incompatibility, or inconclusive inspection for one operation | A normalized finding, not an RPC failure. |
 
-Check request syntax before session binding, then session/manifest fencing,
-then perform read-only operation assessment. Diagnostic text is not a
-machine-readable error discriminator; this contract uses standard gRPC
-statuses and reason codes, not a separate error-detail schema.
+The Agent supplies a finite deadline. Automatic retries are bounded and apply
+only to temporary `UNAVAILABLE` failures. Before every attempt and before
+accepting a response, the Agent confirms the session and availability
+generation are still current.
 
-The Agent supplies a finite per-call deadline; the wire contract defines no
-implicit default. On cancellation or deadline expiry, the Provider stops
-inspection where possible and never returns or acts on a partial result.
-Retries are bounded and use backoff. Reuse `assessment_request_id` only when
-the semantic request is unchanged, and revalidate the negotiated session and
-accepted manifest before every retry; changed content receives a new request
-identity.
+## What an assessment proves
 
-## Contract boundary
+| It does | It does not |
+| --- | --- |
+| Report current Provider evidence for requested declared operations. | Authorize or admit an operation. |
+| Distinguish supported, conditionally supported, unsupported, and unknown. | Reserve Provider capacity or create a lease. |
+| Describe requirements, reasons, and constraints with stable identifiers. | Validate a future operation payload. |
+| Allow fresh reassessment after the runtime changes. | Guarantee the same result at later admission or execution time. |
 
-Capability assessment uses the active handshake session and accepted manifest
-revision. Each request names manifest-declared operations and carries only
-bounded, non-secret execution context; it has no generic target fields. An
-operation's versioned input and result schemas define operation-specific
-resource input and output. Assessment does not validate a future invocation
-payload, admit or dispatch work, or grant authorization.
-
-This package defines the Protocol-only assessment messages, validation schema,
-canonical Python validation API, and conformance vectors. Provider assessment
-behavior and Agent-side use of the results are separate implementations.
+Operation Admission must independently validate the current request and its
+current prerequisites. Capability Assessment remains read-only evidence.

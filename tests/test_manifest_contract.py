@@ -8,9 +8,11 @@ from pathlib import Path
 
 import pytest
 import rfc8785
+import yaml
 from google.protobuf import json_format
 from google.protobuf.descriptor import FieldDescriptor
 from jsonschema import Draft202012Validator, ValidationError
+from tests.documentation import annotated_json_example
 
 from stateforge_protocol.sfp.manifest.v1 import contract, manifest_pb2
 
@@ -90,6 +92,80 @@ def test_versioned_contract_limits_match_packaged_schema() -> None:
         definitions["sessionId"]["maxLength"]
         == contract.MAX_SESSION_ID_CODE_POINTS
     )
+
+
+def test_manifest_walkthrough_covers_every_documented_scenario() -> None:
+    declaration = yaml.safe_load(
+        (
+            Path(__file__).parents[1]
+            / "docs"
+            / "v0.1.0"
+            / "procedures"
+            / "provider-manifest.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    expected_markers = {
+        "success": "accepted for later SFP procedures",
+        "cache-hit": "session headers outside the cache entry",
+        "invalid-request": "Invalid input never selects",
+        "inactive-session": "Endpoint identity alone never proves",
+        "incompatible-schema": "does not imply manifest-schema",
+        "invalid-snapshot": "Health cannot make an invalid manifest usable",
+        "message-too-large": "unchanged oversized message is not retryable",
+        "unavailable": "newer complete manifest revision",
+        "invalid-response": "gRPC success is not manifest acceptance",
+        "superseded-session": "never overrides session fencing",
+    }
+
+    assert set(declaration["scenarios"]) == set(expected_markers)
+    for scenario_id, marker in expected_markers.items():
+        serialized = json.dumps(declaration["scenarios"][scenario_id])
+        assert marker in serialized
+
+
+def test_manifest_documentation_tracks_contract_sources_and_fixture() -> None:
+    documentation = (
+        Path(__file__).parents[1]
+        / "docs"
+        / "v0.1.0"
+        / "procedures"
+        / "provider-manifest.md"
+    ).read_text(encoding="utf-8")
+    response = json.loads((_FIXTURES / "response.json").read_text())
+
+    assert "manifest/v1/contract.py" in documentation
+    assert "manifest/v1/validation.py" in documentation
+    assert response["manifestRevision"] in documentation
+    assert (
+        f"| Serialized request | {contract.MAX_REQUEST_BYTES // 1024} KiB |"
+        in documentation
+    )
+    response_mebibytes = contract.MAX_RESPONSE_BYTES // (1024 * 1024)
+    assert (
+        f"| Serialized response | {response_mebibytes} MiB |" in documentation
+    )
+
+
+def test_documented_manifest_protojson_matches_conformance_fixtures() -> None:
+    documentation = (
+        Path(__file__).parents[1]
+        / "docs"
+        / "v0.1.0"
+        / "procedures"
+        / "provider-manifest.md"
+    ).read_text(encoding="utf-8")
+    request = annotated_json_example(documentation, title="GetManifestRequest")
+    response = annotated_json_example(
+        documentation,
+        title="GetManifestResponse",
+    )
+
+    assert request == json.loads((_FIXTURES / "request.json").read_text())
+    assert response == json.loads((_FIXTURES / "response.json").read_text())
+    Draft202012Validator(
+        {"$ref": "#/$defs/getManifestRequest", "$defs": _SCHEMA["$defs"]}
+    ).validate(request)
+    Draft202012Validator(_SCHEMA).validate(response)
 
 
 def test_response_round_trip_preserves_canonical_representation(

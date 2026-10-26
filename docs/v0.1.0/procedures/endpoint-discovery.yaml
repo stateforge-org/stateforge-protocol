@@ -1,0 +1,407 @@
+schema: stateforge.docs/procedure/v1
+procedure: endpoint-discovery
+title: Endpoint discovery and channel establishment
+summary: From a local Provider endpoint to a validated provisional channel.
+default_scenario: success
+
+entities:
+  - id: provider
+    label: Provider Process
+    kind: process
+    role: Publishes and serves one local endpoint
+  - id: discovery-directory
+    label: Discovery Directory
+    kind: storage
+    role: Carries the current endpoint descriptor
+  - id: unix-socket
+    label: Unix Socket
+    kind: resource
+    role: Carries the local HTTP/2 connection
+  - id: agent
+    label: StateForge Agent
+    kind: process
+    role: Validates and connects to the published endpoint
+
+scenarios:
+  success:
+    label: Endpoint discovered
+    steps:
+      - id: allocate-generation
+        title: Allocate an endpoint generation
+        detail: The Provider retains its installation identity and allocates a monotonically increasing generation for this endpoint.
+        phase: Endpoint preparation
+        active: [provider]
+        fields: [provider_instance_id, endpoint_generation]
+        transitions: []
+        activities:
+          provider:
+            title: Identify the endpoint
+            items:
+              - Reuse the stable Provider instance UUID
+              - Allocate the next endpoint generation
+        context:
+          kind: Identity fence
+          value: Provider installation plus endpoint generation
+
+      - id: bind-socket
+        title: Bind the Unix socket
+        detail: The Provider creates the generation-specific socket before making the endpoint discoverable.
+        phase: Endpoint preparation
+        active: [provider, unix-socket]
+        fields: [canonical socket filename, mode 0660]
+        transitions:
+          - source: provider
+            target: unix-socket
+            label: bind
+        activities:
+          provider:
+            title: Start the local server
+            items:
+              - Use the canonical generation-specific path
+              - Apply the runtime trust boundary
+          unix-socket:
+            title: Accept local connections
+            items:
+              - Remain bound to this endpoint generation
+        context:
+          kind: Socket name
+          value: <provider_instance_id>.<endpoint_generation>.sock
+
+      - id: publish-descriptor
+        title: Publish the descriptor atomically
+        detail: The Provider serializes one complete descriptor and atomically replaces the stable final filename.
+        phase: Endpoint publication
+        active: [provider, discovery-directory]
+        fields: [schema_version, provider_instance_id, endpoint_generation, socket_path]
+        transitions:
+          - source: provider
+            target: discovery-directory
+            label: atomic replace
+        activities:
+          provider:
+            title: Publish one complete observation
+            items:
+              - Serialize the canonical descriptor
+              - Replace the final file atomically
+          discovery-directory:
+            title: Expose the current endpoint
+            items:
+              - Keep the stable descriptor filename
+              - Present only complete final content
+        context:
+          kind: Descriptor name
+          value: <provider_instance_id>.sfp.json
+
+      - id: observe-descriptor
+        title: Observe the final descriptor
+        detail: A filesystem notification is only a hint; the Agent opens and reads the final path as a new observation.
+        phase: Endpoint observation
+        active: [discovery-directory, agent]
+        fields: [bounded read, direct child, no symbolic links]
+        transitions:
+          - source: discovery-directory
+            target: agent
+            label: filesystem hint
+        activities:
+          discovery-directory:
+            title: Return the final path
+            items:
+              - Preserve the descriptor observation
+          agent:
+            title: Read the current artifact
+            items:
+              - Reopen the final filename
+              - Read no more than the contract limit
+        context:
+          kind: Observation rule
+          value: Never trust event payloads or temporary files
+
+      - id: validate-boundary
+        title: Validate descriptor and socket
+        detail: The Agent validates the document, filename correlation, filesystem metadata, and the exact Unix socket before connecting.
+        phase: Trust validation
+        active: [discovery-directory, unix-socket, agent]
+        fields: [canonical UUID, generation, owner, group, mode, socket type]
+        transitions:
+          - source: agent
+            target: discovery-directory
+            label: validate descriptor
+          - source: agent
+            target: unix-socket
+            label: validate socket
+        activities:
+          discovery-directory:
+            title: Supply a correlated descriptor
+            items:
+              - Match filename and Provider identity
+              - Match the canonical document shape
+          unix-socket:
+            title: Supply the named endpoint
+            items:
+              - Match identity and generation
+              - Pass ownership, mode, and type checks
+          agent:
+            title: Cross the local trust boundary
+            items:
+              - Parse with the Protocol contract
+              - Reject unsafe or uncorrelated artifacts
+        context:
+          kind: Correlation fence
+          value: filename plus content plus socket must identify one endpoint
+
+      - id: open-channel
+        title: Open the provisional channel
+        detail: The Agent connects to the validated socket, but does not trust the peer until Bootstrap succeeds.
+        phase: Channel establishment
+        active: [agent, unix-socket, provider]
+        fields: [provisional channel, endpoint generation]
+        transitions:
+          - source: agent
+            target: unix-socket
+            label: connect
+          - source: unix-socket
+            target: provider
+            label: local channel
+            tone: success
+        activities:
+          provider:
+            title: Accept the local transport
+            items:
+              - Serve Bootstrap on the shared endpoint
+          unix-socket:
+            title: Carry the provisional channel
+            items:
+              - Remain correlated with this generation
+          agent:
+            title: Continue to Bootstrap
+            items:
+              - Retain the validated discovery fences
+              - Confirm the peer before using later procedures
+        context:
+          kind: Result
+          value: Endpoint located; peer identity is not yet proven
+
+  invalid-descriptor:
+    label: Invalid descriptor
+    prefix:
+      scenario: success
+      through: bind-socket
+    steps:
+      - id: publish-invalid-descriptor
+        title: Publish an invalid document
+        detail: The observed file is malformed, oversized, incomplete, ambiguous, or uses an unsupported descriptor schema.
+        phase: Endpoint publication
+        active: [provider, discovery-directory]
+        fields: [invalid UTF-8 or JSON, contract violation]
+        transitions:
+          - source: provider
+            target: discovery-directory
+            label: invalid descriptor
+            tone: failure
+        activities:
+          provider:
+            title: Expose a non-conforming observation
+            items:
+              - Violate the descriptor v1 contract
+          discovery-directory:
+            title: Hold the observed bytes
+            items:
+              - Make no claim that the document is valid
+        context:
+          kind: Contract boundary
+          value: Descriptor bytes must satisfy endpoint-discovery v1
+
+      - id: reject-invalid-descriptor
+        title: Reject the observation
+        detail: The Agent rejects the descriptor before using any field to select or connect to a socket.
+        phase: Discovery rejected
+        active: [discovery-directory, agent]
+        fields: [EndpointDescriptorContractError, no channel]
+        transitions:
+          - source: discovery-directory
+            target: agent
+            label: rejected
+            tone: failure
+        activities:
+          discovery-directory:
+            title: Remain untrusted
+            items:
+              - Provide no usable endpoint observation
+          agent:
+            title: Fail closed
+            items:
+              - Create no channel
+              - Wait for a new final-path observation
+        context:
+          kind: Result
+          value: Invalid descriptor data never reaches transport setup
+
+  unsafe-boundary:
+    label: Unsafe filesystem boundary
+    prefix:
+      scenario: success
+      through: observe-descriptor
+    steps:
+      - id: reject-unsafe-boundary
+        title: Reject unsafe endpoint artifacts
+        detail: The document parses, but the descriptor or socket fails path, ownership, group, mode, link, filename, or file-type validation.
+        phase: Discovery rejected
+        active: [discovery-directory, unix-socket, agent]
+        fields: [unsafe metadata, correlation failure, no channel]
+        transitions:
+          - source: agent
+            target: discovery-directory
+            label: descriptor rejected
+            tone: failure
+          - source: agent
+            target: unix-socket
+            label: socket rejected
+            tone: failure
+        activities:
+          discovery-directory:
+            title: Fail the runtime trust policy
+            items:
+              - Do not become a trusted observation
+          unix-socket:
+            title: Fail endpoint correlation
+            items:
+              - Receive no Agent connection
+          agent:
+            title: Fail closed
+            items:
+              - Follow no symbolic links
+              - Create no channel from untrusted metadata
+        context:
+          kind: Result
+          value: Valid JSON is not sufficient to trust a local endpoint
+
+  replacement:
+    label: Endpoint generation replaced
+    prefix:
+      scenario: success
+      through: open-channel
+    steps:
+      - id: publish-replacement
+        title: Publish a newer endpoint generation
+        detail: The Provider binds a new generation-specific socket and atomically replaces the stable descriptor with the higher generation.
+        phase: Endpoint replacement
+        active: [provider, unix-socket, discovery-directory]
+        fields: [higher endpoint_generation, new socket_path]
+        transitions:
+          - source: provider
+            target: unix-socket
+            label: bind replacement
+          - source: provider
+            target: discovery-directory
+            label: atomic replace
+        activities:
+          provider:
+            title: Replace the discoverable endpoint
+            items:
+              - Allocate a higher generation
+              - Publish the new socket correlation
+          discovery-directory:
+            title: Expose the replacement
+            items:
+              - Keep the stable descriptor filename
+          unix-socket:
+            title: Serve the new generation
+            items:
+              - Use a distinct generation-specific path
+        context:
+          kind: Replacement fence
+          value: A new generation is a new endpoint observation
+
+      - id: validate-replacement
+        title: Validate the replacement independently
+        detail: The Agent rereads and validates the replacement instead of carrying trust forward from the previous generation.
+        phase: Replacement validation
+        active: [discovery-directory, unix-socket, agent]
+        fields: [higher generation, fresh observation]
+        transitions:
+          - source: discovery-directory
+            target: agent
+            label: replacement hint
+          - source: agent
+            target: unix-socket
+            label: validate new socket
+        activities:
+          discovery-directory:
+            title: Return the new final descriptor
+            items:
+              - Preserve the new identity correlation
+          unix-socket:
+            title: Match the replacement descriptor
+            items:
+              - Pass the complete socket checks again
+          agent:
+            title: Establish fresh trust
+            items:
+              - Reject reuse of the previous observation
+              - Validate the complete replacement boundary
+        context:
+          kind: Generation rule
+          value: Discovery trust never crosses an endpoint generation
+
+      - id: open-replacement-channel
+        title: Open a replacement provisional channel
+        detail: The Agent connects to the new endpoint and runs Bootstrap again to establish a fresh session.
+        phase: Channel replacement
+        active: [agent, unix-socket, provider]
+        fields: [new provisional channel, fresh Bootstrap session]
+        transitions:
+          - source: agent
+            target: unix-socket
+            label: connect
+          - source: unix-socket
+            target: provider
+            label: replacement channel
+            tone: success
+        activities:
+          provider:
+            title: Serve the replacement endpoint
+            items:
+              - Negotiate a fresh session through Bootstrap
+          unix-socket:
+            title: Carry the replacement channel
+            items:
+              - Remain fenced to the new generation
+          agent:
+            title: Retire the old observation
+            items:
+              - Treat the new channel as provisional
+              - Reconcile only after later recovery checks
+        context:
+          kind: Result
+          value: Replacement discovery does not preserve session trust
+
+  stale-generation:
+    label: Stale generation observed
+    prefix:
+      scenario: success
+      through: open-channel
+    steps:
+      - id: observe-stale-generation
+        title: Observe a lower endpoint generation
+        detail: The stable descriptor changes to a generation older than the Agent's current validated observation.
+        phase: Stale observation
+        active: [discovery-directory, agent]
+        fields: [lower endpoint_generation, current generation retained]
+        transitions:
+          - source: discovery-directory
+            target: agent
+            label: stale descriptor
+            tone: warning
+        activities:
+          discovery-directory:
+            title: Present an older generation
+            items:
+              - Fail monotonic replacement expectations
+          agent:
+            title: Reject rollback
+            items:
+              - Keep the newer validated observation
+              - Open no channel to the stale endpoint
+        context:
+          kind: Result
+          value: Endpoint generations never move backward

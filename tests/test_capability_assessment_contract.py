@@ -9,8 +9,10 @@ from pathlib import Path
 
 import pytest
 import rfc8785
+import yaml
 from google.protobuf import json_format
 from jsonschema import Draft202012Validator, ValidationError
+from tests.documentation import annotated_json_example
 
 from stateforge_protocol.sfp.capability_assessment.v1 import (
     capability_assessment_pb2,
@@ -18,6 +20,7 @@ from stateforge_protocol.sfp.capability_assessment.v1 import (
 )
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "capability_assessment"
+_ROOT = Path(__file__).resolve().parents[1]
 _SCHEMA = json.loads(
     files("stateforge_protocol.sfp.capability_assessment.v1")
     .joinpath("capability_assessment.schema.json")
@@ -984,3 +987,60 @@ def test_operation_identifiers_are_declared_in_accepted_manifest(
     declared = set(manifest_response["manifest"]["operations"])
     requested = set(request_data["operationIdentifiers"])
     assert requested <= declared
+
+
+def test_capability_walkthrough_covers_documented_runtime_outcomes() -> None:
+    declaration = yaml.safe_load(
+        (
+            _ROOT
+            / "docs"
+            / "v0.1.0"
+            / "procedures"
+            / "capability-assessment.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    expected_markers = {
+        "success": "Later admission must still perform",
+        "requirements-pending": "reassessed after the environment changes",
+        "incompatible": "proves the operation is unsupported",
+        "indeterminate": "Inspection uncertainty is data",
+        "temporary-unavailable": "fresh point-in-time evidence",
+        "stale-fence": "cannot cross a session or manifest boundary",
+        "invalid-request": "distinct from runtime support evidence",
+        "message-limit": "do not replace serialized byte limits",
+        "check-failure": "not an indeterminate finding",
+        "availability-changed": "fresh availability",
+        "cache-reuse": "grants no execution permission",
+    }
+
+    assert set(declaration["scenarios"]) == set(expected_markers)
+    for scenario_id, marker in expected_markers.items():
+        serialized = json.dumps(declaration["scenarios"][scenario_id])
+        assert marker in serialized
+
+
+def test_capability_documentation_identifies_contract_ownership() -> None:
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "capability-assessment.md"
+    ).read_text(encoding="utf-8")
+
+    assert "capability_assessment.proto" in documentation
+    assert "capability_assessment.schema.json" in documentation
+    assert "capability_assessment/v1/contract.py" in documentation
+    assert "capability_assessment/v1/validation.py" in documentation
+    assert "@requirement_check" in documentation
+    assert "requires=(" in documentation
+    assert "Operation Admission must independently validate" in documentation
+    assert "| Serialized request | 8 MiB |" in documentation
+    assert "| Serialized response | 16 MiB |" in documentation
+
+
+def test_documented_response_protojson_matches_the_packaged_schema() -> None:
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "capability-assessment.md"
+    ).read_text(encoding="utf-8")
+    example = annotated_json_example(
+        documentation,
+        title="AssessCapabilitiesResponse",
+    )
+    Draft202012Validator(_SCHEMA).validate(example)

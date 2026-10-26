@@ -1,0 +1,673 @@
+schema: stateforge.docs/procedure/v1
+procedure: health
+title: Health and availability monitoring
+summary: From process readiness to one fenced Agent availability decision.
+default_scenario: success
+
+entities:
+  - id: provider
+    label: Provider Process
+    kind: process
+    role: Decides whether the process can accept new SFP work
+  - id: health
+    label: gRPC Health Service
+    kind: service
+    role: Publishes Provider-wide and named diagnostic statuses
+  - id: channel
+    label: SFP Channel
+    kind: resource
+    role: Carries the ordered Health Watch stream
+  - id: agent
+    label: StateForge Agent
+    kind: process
+    role: Fences Health events and derives Provider availability
+
+scenarios:
+  success:
+    label: Provider becomes available
+    steps:
+      - id: initialize-health
+        title: Start fail-closed
+        detail: The Provider creates its Health registry before advertising the endpoint and initializes the empty Provider-wide key as NOT_SERVING.
+        phase: Provider startup
+        active: [provider, health]
+        fields: ['service=""', NOT_SERVING]
+        transitions:
+          - source: provider
+            target: health
+            label: register
+        activities:
+          provider:
+            title: Prepare the runtime
+            items:
+              - Validate declarations and initialize resources
+              - Accept no new SFP work yet
+          health:
+            title: Hold the initial state
+            items:
+              - Register the empty Provider-wide key
+              - Publish NOT_SERVING
+        context:
+          kind: Startup invariant
+          value: UNKNOWN is never treated as startup readiness
+
+      - id: publish-serving
+        title: Complete Provider startup
+        detail: Once the process can handle its SFP contract, the Provider publishes SERVING for the empty key.
+        phase: Provider readiness
+        active: [provider, health]
+        fields: [SERVING, process-wide readiness]
+        transitions:
+          - source: provider
+            target: health
+            label: SERVING
+            tone: success
+        activities:
+          provider:
+            title: Accept new SFP work
+            items:
+              - Finish startup validation
+              - Make bounded service resources ready
+          health:
+            title: Publish current readiness
+            items:
+              - Record SERVING for the empty key
+        context:
+          kind: Provider claim
+          value: The process can accept correctly formed SFP requests
+
+      - id: open-watch
+        title: Open the Provider-wide Watch
+        detail: After Bootstrap and manifest acceptance, the Agent opens Health.Watch for the empty service name on the same channel.
+        phase: Health observation
+        active: [agent, channel, health]
+        fields: ['Watch(service="")', current session binding]
+        transitions:
+          - source: agent
+            target: channel
+            label: Watch
+          - source: channel
+            target: health
+            label: service=""
+        activities:
+          health:
+            title: Accept the observer
+            items:
+              - Bound observer count and buffering
+          channel:
+            title: Carry the current stream
+            items:
+              - Remain tied to one endpoint generation
+          agent:
+            title: Fence the observation
+            items:
+              - Bind the Watch to the current session and manifest
+        context:
+          kind: Authority
+          value: Named service statuses remain diagnostic only
+
+      - id: replay-current-status
+        title: Receive the current status
+        detail: Watch immediately replays SERVING, then remains open for every ordered change.
+        phase: Initial Watch response
+        active: [health, channel, agent]
+        fields: [SERVING, ordered stream]
+        transitions:
+          - source: health
+            target: channel
+            label: SERVING
+            tone: success
+          - source: channel
+            target: agent
+            label: current status
+            tone: success
+        activities:
+          health:
+            title: Replay current state
+            items:
+              - Keep the Watch open after the first response
+          channel:
+            title: Preserve delivery order
+            items:
+              - Carry every later state change
+          agent:
+            title: Validate the response
+            items:
+              - Enforce the response byte limit
+              - Confirm the Watch binding is still current
+        context:
+          kind: Watch behavior
+          value: The first response is current state, not only a change event
+
+      - id: derive-availability
+        title: Mark the Provider available
+        detail: The Agent combines SERVING with the current transport, session, endpoint generation, accepted manifest, and Watch binding.
+        phase: Availability decision
+        active: [agent]
+        fields: [AVAILABLE, eligible=true]
+        transitions: []
+        activities:
+          agent:
+            title: Open the admission gate
+            items:
+              - Require every prerequisite simultaneously
+              - Record a new availability generation
+        context:
+          kind: Result
+          value: New operation admission may proceed
+
+  degraded-recovery:
+    label: Provider degrades and recovers
+    prefix:
+      scenario: success
+      through: derive-availability
+    steps:
+      - id: publish-not-serving
+        title: Report loss of readiness
+        detail: A Provider-owned resource becomes unavailable, so the Provider publishes NOT_SERVING for the empty key.
+        phase: Degraded operation
+        active: [provider, health, channel, agent]
+        fields: [NOT_SERVING, eligible=false]
+        transitions:
+          - source: provider
+            target: health
+            label: NOT_SERVING
+            tone: warning
+          - source: health
+            target: agent
+            label: ordered update
+            tone: warning
+        activities:
+          provider:
+            title: Fail closed
+            items:
+              - Map degraded or maintenance state to NOT_SERVING
+          health:
+            title: Publish the transition
+            items:
+              - Preserve stream order
+          channel:
+            title: Keep the Watch open
+            items:
+              - Carry the changed status
+          agent:
+            title: Block new admission
+            items:
+              - Invalidate availability-bound capability evidence
+        context:
+          kind: Availability
+          value: Existing admitted work is not rewritten
+
+      - id: recover-serving
+        title: Re-establish readiness
+        detail: After its resource recovers, the Provider publishes SERVING and the Agent revalidates every availability prerequisite.
+        phase: Provider recovery
+        active: [provider, health, agent]
+        fields: [SERVING, prerequisites revalidated]
+        transitions:
+          - source: provider
+            target: health
+            label: SERVING
+            tone: success
+          - source: health
+            target: agent
+            label: ordered update
+            tone: success
+        activities:
+          provider:
+            title: Report recovered readiness
+            items:
+              - Publish only after the process is ready
+          health:
+            title: Preserve the current stream
+            items:
+              - Deliver the next ordered status
+          agent:
+            title: Restore availability
+            items:
+              - Confirm session, generation, manifest, and Watch are current
+        context:
+          kind: Result
+          value: Availability returns without creating a new operation outcome
+
+  watch-lost:
+    label: Watch fails and reconnects
+    prefix:
+      scenario: success
+      through: derive-availability
+    steps:
+      - id: lose-watch
+        title: Lose the Health Watch
+        detail: The current stream ends with UNAVAILABLE, so the Agent immediately discards its last health evidence.
+        phase: Watch failure
+        active: [channel, agent]
+        fields: [UNAVAILABLE, eligible=false]
+        transitions:
+          - source: channel
+            target: agent
+            label: UNAVAILABLE
+            tone: failure
+        activities:
+          channel:
+            title: End the current stream
+            items:
+              - Supply no further health evidence
+          agent:
+            title: Fail closed
+            items:
+              - Mark Provider availability unknown
+              - Block new admission immediately
+        context:
+          kind: Rule
+          value: A previous SERVING response never survives Watch loss
+
+      - id: retry-watch
+        title: Retry with bounded backoff
+        detail: While the channel and session remain current, the Agent opens another Watch after capped exponential backoff.
+        phase: Watch recovery
+        active: [agent, channel, health]
+        fields: [bounded backoff, same current session]
+        transitions:
+          - source: agent
+            target: health
+            label: retry Watch
+        activities:
+          health:
+            title: Accept a new observer
+            items:
+              - Replay the current status
+          channel:
+            title: Remain current
+            items:
+              - Carry the replacement stream
+          agent:
+            title: Await fresh evidence
+            items:
+              - Stay unavailable until the first valid response
+        context:
+          kind: Retry boundary
+          value: Backoff is Agent policy, not a Health message field
+
+      - id: replay-after-retry
+        title: Restore availability from fresh evidence
+        detail: The replacement Watch replays SERVING, allowing the Agent to revalidate prerequisites and restore availability.
+        phase: Watch recovered
+        active: [health, agent]
+        fields: [SERVING, AVAILABLE]
+        transitions:
+          - source: health
+            target: agent
+            label: SERVING
+            tone: success
+        activities:
+          health:
+            title: Replay current readiness
+            items:
+              - Keep the replacement Watch open
+          agent:
+            title: Reopen the admission gate
+            items:
+              - Accept only the current Watch binding
+        context:
+          kind: Result
+          value: Fresh Watch evidence restores availability
+
+  watch-unsupported:
+    label: Watch is unsupported
+    prefix:
+      scenario: success
+      through: open-watch
+    steps:
+      - id: reject-watch
+        title: Receive UNIMPLEMENTED
+        detail: The endpoint does not implement Health.Watch, so the Agent cannot establish authoritative ongoing health.
+        phase: Watch unsupported
+        active: [health, agent]
+        fields: [UNIMPLEMENTED, WATCH_UNSUPPORTED]
+        transitions:
+          - source: health
+            target: agent
+            label: UNIMPLEMENTED
+            tone: failure
+        activities:
+          health:
+            title: Reject the method
+            items:
+              - Supply no Watch stream
+          agent:
+            title: Remain unavailable
+            items:
+              - Do not fall back to polling Check
+              - Do not retry on the unchanged endpoint generation
+        context:
+          kind: Result
+          value: Watch support is required for operational eligibility
+
+  stale-session:
+    label: Stale Watch event arrives
+    prefix:
+      scenario: success
+      through: open-watch
+    steps:
+      - id: replace-session
+        title: Replace the active session
+        detail: Reconnection creates a new session, making the original Watch binding stale.
+        phase: Session replacement
+        active: [channel, agent]
+        fields: [new session_id, old Watch stale]
+        transitions:
+          - source: channel
+            target: agent
+            label: new session
+        activities:
+          channel:
+            title: Carry the replacement session
+            items:
+              - Supersede the old Watch binding
+          agent:
+            title: Start unavailable
+            items:
+              - Require a new accepted manifest and Watch
+        context:
+          kind: Fence
+          value: Cancelling the old stream does not erase queued callbacks
+
+      - id: discard-stale-serving
+        title: Discard the late SERVING event
+        detail: A queued response from the old Watch says SERVING, but its session binding is no longer current.
+        phase: Stale event rejected
+        active: [health, channel, agent]
+        fields: [SERVING, accepted_events=0]
+        transitions:
+          - source: health
+            target: channel
+            label: late SERVING
+            tone: warning
+          - source: channel
+            target: agent
+            label: discarded
+            tone: failure
+        activities:
+          health:
+            title: Emit an already queued status
+            items:
+              - Carry no StateForge session field
+          channel:
+            title: Deliver the stale callback
+            items:
+              - Retain its old local binding
+          agent:
+            title: Preserve the fence
+            items:
+              - Accept no event from the superseded session
+        context:
+          kind: Result
+          value: A stale SERVING event cannot restore availability
+
+  slow-observer:
+    label: Watch observer falls behind
+    prefix:
+      scenario: success
+      through: replay-current-status
+    steps:
+      - id: exhaust-observer
+        title: Exceed the delivery bound
+        detail: The observer cannot consume ordered status changes within the Provider's finite queue or delivery deadline.
+        phase: Backpressure
+        active: [health, channel, agent]
+        fields: [RESOURCE_EXHAUSTED, no dropped transitions]
+        transitions:
+          - source: health
+            target: channel
+            label: RESOURCE_EXHAUSTED
+            tone: failure
+          - source: channel
+            target: agent
+            label: Watch ended
+            tone: failure
+        activities:
+          health:
+            title: Terminate the slow observer
+            items:
+              - Drop no ordered transition to keep it alive
+              - Block neither publisher nor shutdown indefinitely
+          channel:
+            title: Close this Watch
+            items:
+              - Preserve other shared SFP traffic
+          agent:
+            title: Become unavailable
+            items:
+              - Retry Watch with bounded backoff
+        context:
+          kind: Result
+          value: Backpressure fails closed without reordering state
+
+  unknown-name:
+    label: Unknown diagnostic service
+    steps:
+      - id: check-unknown-name
+        title: Check an unknown service
+        detail: A diagnostic Check for an unregistered or wildcard-like name fails with NOT_FOUND.
+        phase: Diagnostic lookup
+        active: [agent, health]
+        fields: [unknown service, NOT_FOUND]
+        transitions:
+          - source: agent
+            target: health
+            label: Check
+          - source: health
+            target: agent
+            label: NOT_FOUND
+            tone: failure
+        activities:
+          health:
+            title: Preserve standard lookup behavior
+            items:
+              - Interpret no wildcard service names
+          agent:
+            title: Treat Check as diagnostic
+            items:
+              - Change no availability state
+        context:
+          kind: Check result
+          value: Unknown names fail with NOT_FOUND
+
+      - id: watch-unknown-name
+        title: Watch an unknown service
+        detail: Watch immediately returns SERVICE_UNKNOWN and stays open in case that exact name is later registered.
+        phase: Diagnostic observation
+        active: [health, channel, agent]
+        fields: [SERVICE_UNKNOWN, stream remains open]
+        transitions:
+          - source: health
+            target: channel
+            label: SERVICE_UNKNOWN
+            tone: warning
+          - source: channel
+            target: agent
+            label: diagnostic status
+            tone: warning
+        activities:
+          health:
+            title: Keep the stream open
+            items:
+              - Publish a later status if the name is registered
+          channel:
+            title: Carry the diagnostic Watch
+            items:
+              - Preserve ordered changes
+          agent:
+            title: Fail closed if this is the authority
+            items:
+              - Never treat SERVICE_UNKNOWN as readiness
+        context:
+          kind: Watch result
+          value: SERVICE_UNKNOWN is a stream value, not a Check response
+
+  serving-with-invalid-manifest:
+    label: SERVING but manifest rejected
+    prefix:
+      scenario: success
+      through: replay-current-status
+    steps:
+      - id: reject-manifest-prerequisite
+        title: Reject the manifest prerequisite
+        detail: The Health Watch reports SERVING, but the Agent does not have a compatible accepted manifest for the current session.
+        phase: Eligibility denied
+        active: [health, agent]
+        fields: [SERVING, manifestAccepted=false, eligible=false]
+        transitions:
+          - source: health
+            target: agent
+            label: SERVING
+            tone: success
+        activities:
+          health:
+            title: Report process readiness
+            items:
+              - Make no claim about manifest acceptance
+          agent:
+            title: Keep admission blocked
+            items:
+              - Require every current prerequisite
+              - Let Health override no contract rejection
+        context:
+          kind: Result
+          value: SERVING alone never makes a Provider eligible
+
+  graceful-shutdown:
+    label: Provider shuts down
+    prefix:
+      scenario: success
+      through: derive-availability
+    steps:
+      - id: withdraw-readiness
+        title: Withdraw readiness before teardown
+        detail: The Provider sets the empty key to NOT_SERVING before it stops accepting work or releases runtime resources.
+        phase: Shutdown
+        active: [provider, health, agent]
+        fields: [NOT_SERVING, before teardown]
+        transitions:
+          - source: provider
+            target: health
+            label: NOT_SERVING
+            tone: warning
+          - source: health
+            target: agent
+            label: ordered update
+            tone: warning
+        activities:
+          provider:
+            title: Begin bounded shutdown
+            items:
+              - Stop new admission before resource teardown
+          health:
+            title: Publish the final readiness change
+            items:
+              - Give current observers a bounded delivery opportunity
+          agent:
+            title: Close the admission gate
+            items:
+              - Preserve existing operation truth
+        context:
+          kind: Shutdown order
+          value: NOT_SERVING is published before Watch and transport close
+
+      - id: close-health
+        title: Close transport after the transition
+        detail: After the bounded observation opportunity, the Provider closes Watch streams, stops gRPC, and withdraws the endpoint.
+        phase: Transport teardown
+        active: [provider, health, channel, agent]
+        fields: [bounded wait, endpoint withdrawn]
+        transitions:
+          - source: provider
+            target: health
+            label: close
+          - source: health
+            target: channel
+            label: Watch ended
+            tone: failure
+        activities:
+          provider:
+            title: Release runtime resources
+            items:
+              - Let no observer hold shutdown indefinitely
+          health:
+            title: End remaining observers
+            items:
+              - Accept no later SERVING update
+          channel:
+            title: Stop carrying SFP traffic
+            items:
+              - Close after readiness withdrawal
+          agent:
+            title: Remain unavailable
+            items:
+              - Recover only through a new current endpoint and session
+        context:
+          kind: Result
+          value: Shutdown cannot leave a Provider eligible
+
+  admitted-work:
+    label: Health loss after admission
+    prefix:
+      scenario: success
+      through: derive-availability
+    steps:
+      - id: admit-operation
+        title: Admit an operation
+        detail: The Agent admits work while the Provider is available, creating a durable operation record owned by the lifecycle contract.
+        phase: Operation admitted
+        active: [agent, provider]
+        fields: [operation_id, accepted record]
+        transitions:
+          - source: agent
+            target: provider
+            label: admitted operation
+            tone: success
+        activities:
+          provider:
+            title: Execute admitted work
+            items:
+              - Report progress through Operation Lifecycle
+          agent:
+            title: Retain the admission record
+            items:
+              - Observe the operation independently of Health
+        context:
+          kind: Ownership
+          value: Health is not business-operation truth
+
+      - id: lose-health-after-admission
+        title: Block only new admission
+        detail: The Provider becomes NOT_SERVING after admission; the Agent closes the new-admission gate without changing the existing operation.
+        phase: Health lost
+        active: [provider, health, agent]
+        fields: [NOT_SERVING, existing record unchanged]
+        transitions:
+          - source: provider
+            target: health
+            label: NOT_SERVING
+            tone: warning
+          - source: health
+            target: agent
+            label: ordered update
+            tone: warning
+        activities:
+          provider:
+            title: Report loss of readiness
+            items:
+              - Make no claim about the operation outcome
+          health:
+            title: Publish process state only
+            items:
+              - Rewrite no operation lifecycle state
+          agent:
+            title: Preserve admitted work
+            items:
+              - Do not fail, cancel, redispatch, or replace its result
+              - Block only later admission
+        context:
+          kind: Result
+          value: Health loss never invents an operation outcome

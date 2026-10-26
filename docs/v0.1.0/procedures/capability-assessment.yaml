@@ -1,0 +1,635 @@
+schema: stateforge.docs/procedure/v1
+procedure: capability-assessment
+title: Capability assessment
+summary: From one current Agent request to operation-specific runtime evidence.
+default_scenario: success
+
+entities:
+  - id: agent
+    label: StateForge Agent
+    kind: process
+    role: Builds fenced requests and retains only current validated evidence
+  - id: service
+    label: Capability Service
+    kind: service
+    role: Validates the request and normalizes one finding per operation
+  - id: checks
+    label: Requirement Checks
+    kind: process
+    role: Runs Provider-authored read-only prerequisite checks
+  - id: runtime
+    label: Runtime Context
+    kind: resource
+    role: Supplies point-in-time filesystem, permission, tooling, or vendor evidence
+scenarios:
+  success:
+    label: Operations assessed
+    steps:
+      - id: capture-scope
+        title: Capture the current assessment scope
+        detail: The Agent snapshots the available Provider session, accepted manifest revision, availability generation, requested operations, and non-secret execution context.
+        phase: Scope
+        active: [agent]
+        fields: [session_id, manifest_revision, availability_generation, operation_identifiers]
+        transitions: []
+        activities:
+          agent:
+            title: Freeze current prerequisites
+            items:
+              - Require an available Provider session
+              - Require every operation in the accepted manifest
+              - Hash the deterministic execution context for evidence reuse
+        context:
+          kind: Boundary
+          value: Assessment starts from Agent-owned currentness fences
+
+      - id: send-request
+        title: Request point-in-time evidence
+        detail: The Agent sends one bounded AssessCapabilitiesRequest on the active SFP channel with a fresh request identity and every current fence.
+        phase: Request
+        active: [agent, service]
+        fields: [assessment_request_id, expected_provider_instance_id, expected_endpoint_generation, expected_session_id, expected_manifest_revision]
+        transitions:
+          - source: agent
+            target: service
+            label: AssessCapabilities
+        activities:
+          agent:
+            title: Build one semantic request
+            items:
+              - Keep operation order deterministic
+              - Include only bounded non-secret context
+          service:
+            title: Receive a read-only RPC
+            items:
+              - Execute no operation
+              - Reserve no capacity
+        context:
+          kind: RPC
+          value: CapabilityAssessmentService.AssessCapabilities
+
+      - id: validate-request
+        title: Validate structure and live fences
+        detail: The Provider checks the byte limit and canonical request semantics before confirming the exact session, manifest revision, declarations, and current readiness.
+        phase: Validation
+        active: [service]
+        fields: [canonical request, active session, accepted manifest, Provider SERVING]
+        transitions: []
+        activities:
+          service:
+            title: Fail closed before inspection
+            items:
+              - Apply the Protocol request validator
+              - Match instance, generation, session, and manifest revision
+              - Confirm every operation is declared
+              - Confirm Provider Health is still SERVING
+        context:
+          kind: Validation order
+          value: Malformed input is rejected before runtime checks execute
+
+      - id: resolve-checks
+        title: Resolve declared requirements
+        detail: The service maps each requested operation to the requirement-check identifiers attached to its Provider declaration and deduplicates shared checks.
+        phase: Requirement plan
+        active: [service, checks]
+        fields: [operation requires, stable requirement IDs, one check per ID]
+        transitions:
+          - source: service
+            target: checks
+            label: resolve checks
+        activities:
+          service:
+            title: Build a deterministic check plan
+            items:
+              - Preserve first-reference order
+              - Run a shared requirement only once
+          checks:
+            title: Bind author declarations
+            items:
+              - Use validated async methods
+              - Expose no protobuf types to Provider authors
+        context:
+          kind: Declaration
+          value: Operations name checks through their requires tuple
+
+      - id: inspect-runtime
+        title: Inspect the runtime without mutation
+        detail: Provider-authored checks read the current environment and return typed outcomes without executing the operation or modifying the inspected resource.
+        phase: Inspection
+        active: [checks, runtime]
+        fields: [SATISFIED, read-only evidence]
+        transitions:
+          - source: checks
+            target: runtime
+            label: inspect
+          - source: runtime
+            target: checks
+            label: evidence
+            tone: success
+        activities:
+          checks:
+            title: Evaluate each prerequisite once
+            items:
+              - Inspect permissions, tooling, filesystem, or vendor state
+              - Return RequirementCheckResult
+          runtime:
+            title: Remain unchanged
+            items:
+              - Supply only point-in-time evidence
+              - Receive no operation dispatch
+        context:
+          kind: Result
+          value: Current evidence satisfies the requested operation requirements
+
+      - id: normalize-response
+        title: Normalize one finding per operation
+        detail: The Provider maps typed check outcomes into bounded CapabilityFinding messages, mints an assessment identity, and preserves request operation order.
+        phase: Response
+        active: [checks, service, agent]
+        fields: [SUPPORTED, assessment_id, assessment_timestamp, findings]
+        transitions:
+          - source: checks
+            target: service
+            label: typed outcomes
+          - source: service
+            target: agent
+            label: AssessCapabilitiesResponse
+            tone: success
+        activities:
+          checks:
+            title: Return author-facing outcomes
+            items:
+              - Keep explanations sanitized and bounded
+          service:
+            title: Build canonical findings
+            items:
+              - Return exactly one finding per requested operation
+              - Recheck session and Health before responding
+          agent:
+            title: Receive a bounded response
+            items:
+              - Decode below the response limit
+        context:
+          kind: Finding
+          value: SUPPORTED is evidence, never authorization
+
+      - id: accept-evidence
+        title: Validate and retain current evidence
+        detail: The Agent validates the complete exchange, confirms the lease is still current, normalizes the response, and stores it under the exact assessment scope.
+        phase: Evidence accepted
+        active: [agent]
+        fields: [validated exchange, exact scope key, bounded cache]
+        transitions: []
+        activities:
+          agent:
+            title: Accept and cache only correlated evidence
+            items:
+              - Match every request and response fence
+              - Confirm availability generation did not change
+              - Key by session, manifest, availability, operations, and context
+              - Evict by entry and byte bounds
+        context:
+          kind: Result
+          value: Later admission must still perform its own current validation
+
+  requirements-pending:
+    label: Requirement is not satisfied
+    prefix:
+      scenario: success
+      through: resolve-checks
+    steps:
+      - id: requirement-unsatisfied
+        title: Detect an unmet prerequisite
+        detail: A read-only check proves that a required runtime condition is not currently satisfied.
+        phase: Inspection
+        active: [checks, runtime]
+        fields: [UNSATISFIED, requirement_unmet]
+        transitions:
+          - source: checks
+            target: runtime
+            label: inspect
+          - source: runtime
+            target: checks
+            label: unmet
+            tone: warning
+        activities:
+          checks:
+            title: Return actionable evidence
+            items:
+              - Use RequirementCheckResult.unsatisfied
+              - Keep the explanation safe for remote display
+          runtime:
+            title: Preserve the observed state
+            items:
+              - Perform no remediation automatically
+        context:
+          kind: Evidence
+          value: The operation may become usable after the prerequisite changes
+
+      - id: return-supported-with-requirements
+        title: Report support with requirements
+        detail: The Provider returns SUPPORTED_WITH_REQUIREMENTS with the unmet requirement and canonical requirement_unmet reason.
+        phase: Response
+        active: [service, agent]
+        fields: [SUPPORTED_WITH_REQUIREMENTS, REQUIREMENT_STATE_UNSATISFIED]
+        transitions:
+          - source: service
+            target: agent
+            label: finding
+            tone: warning
+        activities:
+          service:
+            title: Normalize the author result
+            items:
+              - Preserve the declared requirement ID and description
+          agent:
+            title: Retain the explicit blocker
+            items:
+              - Do not reinterpret it as authorization or failure
+        context:
+          kind: Result
+          value: Requirement evidence can be reassessed after the environment changes
+
+  incompatible:
+    label: Runtime is incompatible
+    prefix:
+      scenario: success
+      through: resolve-checks
+    steps:
+      - id: requirement-incompatible
+        title: Prove runtime incompatibility
+        detail: A requirement check determines that the current environment cannot support the operation, rather than merely lacking a remediable prerequisite.
+        phase: Inspection
+        active: [checks, runtime]
+        fields: [INCOMPATIBLE, requirement_unmet]
+        transitions:
+          - source: checks
+            target: runtime
+            label: inspect
+          - source: runtime
+            target: checks
+            label: incompatible
+            tone: failure
+        activities:
+          checks:
+            title: Return incompatibility
+            items:
+              - Use RequirementCheckResult.incompatible
+          runtime:
+            title: Remain unchanged
+            items:
+              - Supply decisive negative evidence
+        context:
+          kind: Distinction
+          value: Incompatible is stronger than currently unsatisfied
+
+      - id: return-unsupported
+        title: Report unsupported
+        detail: The Provider normalizes incompatibility into UNSUPPORTED with an explicit machine-readable reason.
+        phase: Response
+        active: [service, agent]
+        fields: [UNSUPPORTED, requirement_unmet]
+        transitions:
+          - source: service
+            target: agent
+            label: finding
+            tone: failure
+        activities:
+          service:
+            title: Preserve decisive evidence
+            items:
+              - Include at least one reason
+          agent:
+            title: Normalize without policy inference
+            items:
+              - Keep the Provider's support state intact
+        context:
+          kind: Result
+          value: Current evidence proves the operation is unsupported
+
+  indeterminate:
+    label: Evidence is inconclusive
+    prefix:
+      scenario: success
+      through: resolve-checks
+    steps:
+      - id: requirement-unknown
+        title: Fail to establish the prerequisite
+        detail: The Provider cannot determine whether a required permission, tool, filesystem state, or vendor capability is present.
+        phase: Inspection
+        active: [checks, runtime]
+        fields: [UNKNOWN, insufficient_evidence]
+        transitions:
+          - source: checks
+            target: runtime
+            label: inspect
+          - source: runtime
+            target: checks
+            label: inconclusive
+            tone: warning
+        activities:
+          checks:
+            title: Preserve uncertainty
+            items:
+              - Use RequirementCheckResult.unknown
+              - Never treat missing evidence as satisfaction
+          runtime:
+            title: Supply incomplete evidence
+            items:
+              - Remain unmodified
+        context:
+          kind: Rule
+          value: Unknown is not unsupported and is never satisfied
+
+      - id: return-indeterminate
+        title: Report indeterminate
+        detail: The Provider returns INDETERMINATE with an insufficient_evidence reason instead of failing the whole RPC.
+        phase: Response
+        active: [service, agent]
+        fields: [INDETERMINATE, REQUIREMENT_STATE_UNKNOWN]
+        transitions:
+          - source: service
+            target: agent
+            label: finding
+            tone: warning
+        activities:
+          service:
+            title: Return a successful domain result
+            items:
+              - Include at least one reason
+          agent:
+            title: Preserve uncertainty
+            items:
+              - Apply no authorization policy here
+        context:
+          kind: Result
+          value: Inspection uncertainty is data, not an RPC failure
+
+  temporary-unavailable:
+    label: Provider is temporarily unavailable
+    prefix:
+      scenario: success
+      through: send-request
+    steps:
+      - id: receive-unavailable
+        title: Receive a retryable failure
+        detail: The Provider cannot assess while it is not ready, so the attempt returns UNAVAILABLE without a partial result.
+        phase: Temporary failure
+        active: [service, agent]
+        fields: [UNAVAILABLE, no partial response]
+        transitions:
+          - source: service
+            target: agent
+            label: UNAVAILABLE
+            tone: warning
+        activities:
+          service:
+            title: Fail the complete attempt
+            items:
+              - Return no partial findings
+          agent:
+            title: Keep the semantic request unchanged
+            items:
+              - Revalidate the assessment lease before retrying
+        context:
+          kind: Retry rule
+          value: Only temporary unavailability is retried automatically
+
+      - id: retry-request
+        title: Retry with bounded backoff
+        detail: After a finite delay, the Agent confirms the same session and availability generation remain current and retries the same semantic request.
+        phase: Retry
+        active: [agent, service]
+        fields: [bounded backoff, same assessment_request_id]
+        transitions:
+          - source: agent
+            target: service
+            label: retry
+        activities:
+          agent:
+            title: Bound retry work
+            items:
+              - Stop after the configured attempt limit
+              - Preserve the request ID only for unchanged content
+          service:
+            title: Reassess current evidence
+            items:
+              - Mint a new assessment ID for the new result
+        context:
+          kind: Correlation
+          value: A retry may legitimately observe newer runtime state
+
+      - id: retry-succeeds
+        title: Accept fresh evidence
+        detail: The recovered Provider returns a valid response and the Agent accepts it only after another currentness check.
+        phase: Recovered
+        active: [service, agent]
+        fields: [new assessment_id, current lease]
+        transitions:
+          - source: service
+            target: agent
+            label: response
+            tone: success
+        activities:
+          service:
+            title: Return one complete snapshot
+            items:
+              - Re-evaluate current requirements
+          agent:
+            title: Validate and retain the recovered result
+            items:
+              - Reject evidence if the lease changed during retry
+              - Retain no failed attempt
+        context:
+          kind: Result
+          value: Recovery produces fresh point-in-time evidence
+
+  stale-fence:
+    label: Session or manifest is stale
+    prefix:
+      scenario: success
+      through: send-request
+    steps:
+      - id: reject-stale-fence
+        title: Reject stale negotiated context
+        detail: The supplied session, endpoint generation, Provider identity, manifest revision, or operation declaration no longer matches the Provider's active state.
+        phase: Preconditions rejected
+        active: [service, agent]
+        fields: [FAILED_PRECONDITION, no checks executed]
+        transitions:
+          - source: service
+            target: agent
+            label: FAILED_PRECONDITION
+            tone: failure
+        activities:
+          service:
+            title: Stop before inspection
+            items:
+              - Run no requirement checks
+              - Return no findings
+          agent:
+            title: Refresh negotiated state
+            items:
+              - Reconnect or retrieve the current manifest
+              - Build a new request from current fences
+        context:
+          kind: Result
+          value: Stale evidence cannot cross a session or manifest boundary
+
+  invalid-request:
+    label: Request is malformed
+    prefix:
+      scenario: success
+      through: send-request
+    steps:
+      - id: reject-invalid-request
+        title: Reject malformed request data
+        detail: Canonical Protocol validation finds an invalid identity, duplicate operation, malformed identifier, excessive nesting, or another context-independent violation.
+        phase: Request rejected
+        active: [service, agent]
+        fields: [INVALID_ARGUMENT, no checks executed]
+        transitions:
+          - source: service
+            target: agent
+            label: INVALID_ARGUMENT
+            tone: failure
+        activities:
+          service:
+            title: Apply canonical validation
+            items:
+              - Reveal none of the rejected values
+              - Perform no live inspection
+          agent:
+            title: Correct local construction
+            items:
+              - Do not retry unchanged invalid input
+        context:
+          kind: Result
+          value: Structural failure is distinct from runtime support evidence
+
+  message-limit:
+    label: Message exceeds its byte limit
+    prefix:
+      scenario: success
+      through: send-request
+    steps:
+      - id: reject-oversized-message
+        title: Enforce the serialized boundary
+        detail: The request or response exceeds its procedure-specific protobuf byte limit even though individual fields may otherwise look valid.
+        phase: Resource limit
+        active: [service, agent]
+        fields: [RESOURCE_EXHAUSTED, serialized byte limit]
+        transitions:
+          - source: service
+            target: agent
+            label: RESOURCE_EXHAUSTED
+            tone: failure
+        activities:
+          service:
+            title: Reject before expensive handling
+            items:
+              - Enforce the request limit at the RPC boundary
+          agent:
+            title: Bound decoded evidence
+            items:
+              - Reject an oversized response before semantic use
+        context:
+          kind: Result
+          value: Field-count limits do not replace serialized byte limits
+
+  check-failure:
+    label: Requirement check crashes
+    prefix:
+      scenario: success
+      through: resolve-checks
+    steps:
+      - id: author-check-fails
+        title: Contain an author hook failure
+        detail: A Provider-authored requirement check raises or returns the wrong type, so the framework cancels peer checks and exposes no implementation details remotely.
+        phase: Provider failure
+        active: [checks, service]
+        fields: [INTERNAL, sanitized error]
+        transitions:
+          - source: checks
+            target: service
+            label: hook failure
+            tone: failure
+          - source: service
+            target: agent
+            label: INTERNAL
+            tone: failure
+        activities:
+          checks:
+            title: Contain the failed hook
+            items:
+              - Cancel still-running peer checks
+              - Log local diagnostic context
+          service:
+            title: Sanitize the boundary
+            items:
+              - Return no partial findings
+              - Expose no stack trace or secret
+        context:
+          kind: Result
+          value: An implementation failure is not an indeterminate finding
+
+  availability-changed:
+    label: Availability changes during assessment
+    prefix:
+      scenario: success
+      through: inspect-runtime
+    steps:
+      - id: health-changes
+        title: Detect lost Provider readiness
+        detail: Provider Health changes while checks are running, invalidating the availability generation captured by the Agent and the readiness prerequisite held by the Provider.
+        phase: Currentness lost
+        active: [runtime, service, agent]
+        fields: [NOT_SERVING, new availability_generation]
+        transitions:
+          - source: runtime
+            target: service
+            label: readiness lost
+            tone: warning
+          - source: service
+            target: agent
+            label: UNAVAILABLE
+            tone: warning
+        activities:
+          service:
+            title: Recheck readiness
+            items:
+              - Return no assessment from stale prerequisites
+          agent:
+            title: Reject stale evidence and clear the cache
+            items:
+              - Advance the availability generation
+              - Discard retained evidence for the Provider
+              - Never reuse evidence across availability transitions
+        context:
+          kind: Result
+          value: Environment changes require a fresh assessment under fresh availability
+
+  cache-reuse:
+    label: Exact-scope evidence is reused
+    prefix:
+      scenario: success
+      through: accept-evidence
+    steps:
+      - id: reuse-current-evidence
+        title: Reuse only an exact current match
+        detail: A later lookup matches the same Provider, generation, session, manifest, availability generation, ordered operations, and deterministic execution-context hash.
+        phase: Evidence reuse
+        active: [agent]
+        fields: [exact scope match, immutable snapshot]
+        transitions: []
+        activities:
+          agent:
+            title: Recheck currentness and reuse the cache entry
+            items:
+              - Treat the result as evidence only
+              - Let later admission validate again
+              - Refresh retention order
+              - Never broaden the stored scope
+        context:
+          kind: Result
+          value: Cache reuse avoids inspection but grants no execution permission

@@ -7,9 +7,12 @@ from uuid import UUID
 
 import jsonschema
 import pytest
+import yaml
+from tests.documentation import annotated_json_example
 
 from stateforge_protocol.sfp.endpoint_discovery.v1 import contract
 
+_ROOT = Path(__file__).resolve().parents[1]
 _PROVIDER_INSTANCE_ID = UUID("7f7db7d8-68b4-4f71-9769-065b5c4f941c")
 _SOCKET_PATH = (
     "/run/stateforge-agent/providers/"
@@ -187,3 +190,61 @@ def test_descriptor_naming_rejects_invalid_identity_and_generation() -> None:
         contract.provider_instance_id_from_descriptor_filename(
             f"{str(_PROVIDER_INSTANCE_ID).upper()}.sfp.json"
         )
+
+
+def test_endpoint_discovery_walkthrough_covers_every_documented_scenario() -> (
+    None
+):
+    declaration = yaml.safe_load(
+        (
+            _ROOT
+            / "docs"
+            / "v0.1.0"
+            / "procedures"
+            / "endpoint-discovery.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    expected_markers = {
+        "success": "provisional channel",
+        "invalid-descriptor": "EndpointDescriptorContractError",
+        "unsafe-boundary": "Valid JSON is not sufficient",
+        "replacement": "fresh Bootstrap session",
+        "stale-generation": "never move backward",
+    }
+
+    assert set(declaration["scenarios"]) == set(expected_markers)
+    for scenario_id, marker in expected_markers.items():
+        serialized = json.dumps(declaration["scenarios"][scenario_id])
+        assert marker in serialized
+
+
+def test_endpoint_discovery_documentation_identifies_contract_sources() -> (
+    None
+):
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "endpoint-discovery.md"
+    ).read_text(encoding="utf-8")
+
+    assert "endpoint_discovery/v1/contract.py" in documentation
+    assert "endpoint_descriptor.schema.json" in documentation
+    assert "has no separate `validation.py`" in documentation
+
+
+def test_documented_endpoint_descriptor_matches_the_contract() -> None:
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "endpoint-discovery.md"
+    ).read_text(encoding="utf-8")
+    example = annotated_json_example(
+        documentation,
+        title="Endpoint descriptor",
+    )
+    schema = json.loads(
+        Path(contract.__file__)
+        .with_name("endpoint_descriptor.schema.json")
+        .read_text(encoding="utf-8")
+    )
+
+    jsonschema.validate(example, schema)
+    assert contract.parse_descriptor(json.dumps(example).encode()) == (
+        _descriptor()
+    )

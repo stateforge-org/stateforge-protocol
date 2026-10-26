@@ -1,13 +1,116 @@
 # Provider manifest exchange
 
-After a successful handshake, the Agent retrieves the Provider's effective
-manifest over the negotiated SFP service. The exchange confirms identity,
-manifest schema compatibility, operations, contracts, triggers,
-runtime requirements, and configuration schema without transferring secrets.
+After Bootstrap establishes a session, the Agent asks what the Provider
+declares. The response is one complete, revisioned snapshot of the Provider's
+operations, triggers, schemas, runtime requirements, and supported platforms.
+It describes capability shape without transferring configured values, secrets,
+or runtime evidence.
 
-[![Provider Manifest Exchange sequence diagram](../assets/diagrams/provider-manifest-exchange.png)](../assets/diagrams/provider-manifest-exchange.png)
+Manifest Exchange is a read-only, idempotent RPC. A successful gRPC response is
+not enough: the Agent must validate the session envelope, declaration, embedded
+schemas, and deterministic revision before the manifest becomes usable.
 
-_Select the diagram to open the full-resolution version._
+## Interactive walkthrough
+
+```stateforge-procedure
+source: provider-manifest.yaml
+scenario: success
+```
+
+??? info "Provider Manifest sequence"
+
+    ```mermaid
+    sequenceDiagram
+        participant Agent as StateForge Agent
+        participant Provider as Manifest Service
+        participant Declaration as Provider Declaration
+        participant Cache as Manifest Cache
+
+        Note over Agent,Provider: Bootstrap session is active
+        Agent->>Provider: GetManifestRequest<br/>instance + generation + session + schema offer
+        Provider->>Provider: Validate request syntax and byte limit
+        Provider->>Provider: Resolve exact active session
+
+        alt No common manifest schema
+            Provider-->>Agent: UNIMPLEMENTED
+        else Session is stale or mismatched
+            Provider-->>Agent: FAILED_PRECONDITION
+        else Request and session are valid
+            Provider->>Declaration: Capture one immutable snapshot
+            Provider->>Declaration: Validate schemas and compute revision
+            Declaration-->>Provider: Canonical declaration + revision
+            Provider-->>Agent: Complete GetManifestResponse
+            Agent->>Agent: Validate response fences before cache lookup
+            alt Validated cache key exists
+                Agent->>Cache: Reuse exact accepted declaration
+                Cache-->>Agent: Canonical manifest bytes
+            else New or changed revision
+                Agent->>Declaration: Validate full manifest and revision
+                Agent->>Cache: Store accepted canonical bytes
+            end
+            Note over Agent,Provider: Manifest accepted<br/>Continue to Health and Capability Assessment
+        end
+    ```
+
+## Who implements Manifest Exchange
+
+Provider authors using
+[StateForge Provider Python](https://github.com/stateforge-org/stateforge-provider-python)
+do not construct this protobuf response or calculate its revision manually.
+The framework converts their typed declarations into a validated immutable
+snapshot, binds each response to the requesting session, and registers the
+Manifest service on the shared endpoint.
+
+The StateForge Agent builds the request from its active Bootstrap session,
+validates every response fence, and caches only accepted canonical declaration
+bytes. Use `stateforge-protocol` directly when building another runtime, an
+Agent implementation, or conformance tooling.
+
+## Using the Python contract
+
+Install the generated contracts and gRPC runtime:
+
+```console
+python -m pip install stateforge-protocol grpcio
+```
+
+### Contract sources
+
+| Source | Responsibility |
+| --- | --- |
+| [`manifest.proto`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/proto/stateforge_protocol/sfp/manifest/v1/manifest.proto) | Owns messages, field numbers, and the unary `ManifestService.GetManifest` RPC. |
+| [`contract.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/contract.py) | Owns the canonical service identity and request, response, declaration, schema, and revision resource limits. |
+| [`validation.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/validation.py) | Owns packaged-schema validation, embedded-schema inspection, bounded canonicalization, revision calculation and verification, and cache-key validation. |
+| [`manifest.schema.json`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/manifest.schema.json) | Defines the request and response ProtoJSON projections and manifest schema-1 structure. |
+
+### Python API surface
+
+| Purpose | Python API |
+| --- | --- |
+| Request, response, and declaration messages | `manifest_pb2` |
+| Asynchronous client stub | `manifest_pb2_grpc.ManifestServiceStub` constructed with a `grpc.aio.Channel` |
+| Server interface and registration | `manifest_pb2_grpc.ManifestServiceServicer` and `add_ManifestServiceServicer_to_server` |
+| Service identity and resource limits | `stateforge_protocol.sfp.manifest.v1.contract` |
+| Complete response validation | `validation.validate_manifest_response` |
+| Declaration and embedded-schema validation | `validation.validate_manifest_document` and `validation.validate_schema` |
+| Deterministic revision | `validation.compute_manifest_revision` |
+| Cache-key validation | `validation.validate_manifest_key` |
+
+Import the complete public surface from the versioned package:
+
+```python
+from stateforge_protocol.sfp.manifest.v1 import (
+    contract,
+    manifest_pb2,
+    manifest_pb2_grpc,
+    validation,
+)
+```
+
+Generated protobuf classes enforce wire types, not the complete StateForge
+contract. Receivers must enforce the byte limits from `contract.py` and call
+the public validators explicitly. Provider and Agent runtimes still own live
+session lookup, request/response correlation, retry policy, and cache storage.
 
 ## Wire contract
 
@@ -18,27 +121,123 @@ gRPC channel as bootstrap. The authoritative source is
 reverse RPC, operation admission, or persistent registry is involved.
 
 The Agent may call this read-only, idempotent RPC only after a successful
-handshake. It supplies `expected_provider_instance_id`,
-`expected_endpoint_generation`, `expected_session_id`, and
-`supported_manifest_schema_versions`. The session identifier is copied unchanged
-from `HandshakeResponse.session_id`; all three identity values must match the
-active negotiated session. Missing identities, zero generations, and empty
-session identifiers are invalid; they never mean "any Provider or session".
-The schema offer contains 1-32 unique positive uint32 values. Offer order has
-no meaning. Select the highest version supported by both peers; this change
-defines only manifest schema **1**. Software, SFP, and manifest schema versions
-are independent. Supporting SFP 1.0 does not imply supporting every future
-manifest schema.
+handshake. The request identifies that exact session and offers the manifest
+schema versions the Agent understands. The response returns one complete,
+revisioned declaration snapshot.
 
-Every successful response contains the confirmed instance and generation,
-selected `manifest_schema_version`, `manifest_revision`, a complete
-`ProviderManifest`, and `session_id` echoing the validated request's
-`expected_session_id`. There is no empty success or implicit not-modified reply.
-The declaration, identity, generation, and revision come from one consistent
-snapshot; `session_id` belongs to this call's validated session, not the
-immutable declaration. Concurrent callers can receive the same declaration
-and revision with different session headers. Never reuse another call's header
-or substitute a global "latest session" identifier.
+=== "Field reference"
+
+    | Message | Field | Meaning |
+    | --- | --- | --- |
+    | Request | `expected_provider_instance_id` | Provider installation copied from the active Bootstrap session. |
+    | Request | `expected_endpoint_generation` | Endpoint generation copied from the active Bootstrap session. |
+    | Request | `expected_session_id` | Exact session identifier issued by Bootstrap. |
+    | Request | `supported_manifest_schema_versions` | One to 32 unique positive schema versions. Offer order carries no preference. |
+    | Response | `provider_instance_id`, `endpoint_generation`, `session_id` | Echoed session fences that must match the request and remain current. |
+    | Response | `manifest_schema_version` | Highest manifest schema version supported by both peers. |
+    | Response | `manifest` | Complete Provider declaration for the selected schema. |
+    | Response | `manifest_revision` | Deterministic SHA-256 revision of the accepted declaration snapshot. |
+
+=== "Example request"
+
+    ``` { .json .annotate title="GetManifestRequest" }
+    {
+      "expectedProviderInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c (1)",
+      "expectedEndpointGeneration": "4",
+      "supportedManifestSchemaVersions": [
+        2,
+        1
+      ],
+      "expectedSessionId": "manifest-session-A (2)"
+    }
+    ```
+
+    1.  Begins the endpoint fence copied from the active Bootstrap session;
+        `expectedEndpointGeneration` completes it.
+    2.  Selects one exact negotiated session on that endpoint.
+
+=== "Example response"
+
+    ``` { .json .annotate title="GetManifestResponse" }
+    {
+      "providerInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c (1)",
+      "endpointGeneration": "4",
+      "manifestSchemaVersion": 1,
+      "manifest": {
+        "providerIdentity": "stateforge.git (2)",
+        "implementationVersion": "1.0.0",
+        "displayName": "Git Provider",
+        "operations": {
+          "stateforge.git/reference.resolve@1": {
+            "inputSchema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            },
+            "resultSchema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            },
+            "implements": []
+          }
+        },
+        "runtimeRequirements": {
+          "executable.git": {
+            "description": "Git executable available to the Provider",
+            "versionConstraint": ">=2.40"
+          }
+        },
+        "platforms": [
+          {
+            "operatingSystem": "linux",
+            "architecture": "x86_64"
+          }
+        ],
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string"
+            },
+            "token": {
+              "type": "string",
+              "writeOnly": true
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "repository"
+          ]
+        },
+        "triggers": {}
+      },
+      "manifestRevision": "sha256:6bfdf3aedc2d4e45d77d4787cc0e744a488208b2510d81788291f51d24a623e8 (3)",
+      "sessionId": "manifest-session-A (4)"
+    }
+    ```
+
+    1.  Echoes the Provider installation fence; `endpointGeneration` must
+        match the request as well.
+    2.  Begins the complete author declaration, including operations,
+        requirements, supported platforms, configuration, and triggers.
+    3.  Identifies this declaration snapshot independently of the active
+        session.
+    4.  Correlates the snapshot with the exact session that requested it.
+
+Missing identities, generation zero, or an empty session identifier are
+invalid; they never mean "any Provider or session". Offer order has no meaning,
+and the Provider selects the highest schema version supported by both peers.
+Software, SFP, and manifest schema versions are independent.
+
+There is no empty success or implicit not-modified reply. The declaration,
+identity, generation, and revision come from one consistent snapshot. The
+`session_id` belongs to this call's validated session rather than the immutable
+declaration, so concurrent sessions may receive the same revision with
+different response fences.
 
 ### Session binding
 
@@ -85,62 +284,205 @@ authors do not construct protobuf messages or calculate revisions themselves.
 | `configuration_schema` | JSON Schema Draft 2020-12 object schema describing configuration shape. |
 | `triggers` | Map from declared trigger identifier to a payload schema. No streaming or acknowledgement behavior is defined here. |
 
-Operation and trigger identifiers use
-`namespace/name@major`, for example `stateforge.git/reference.resolve@1`.
-The namespace contains at least two dotted lowercase segments. Name segments
-are lowercase and may be dotted; segments start with a letter and may contain
-digits or underscores. The major is positive with no leading zero. Identifiers
-are case-sensitive and at most 255 characters. They must never be coerced into
-a closed operation enum.
+### Operation and trigger identifiers
 
-Empty operation or trigger maps declare no such support. Empty requirements
-declare no additional prerequisite. An empty version constraint means no
-declared version restriction; its nonempty syntax is owned by the requirement
-identifier, not interpreted by the protocol package. An unfamiliar requirement
-is not evidence that the Agent satisfies it; assessment/admission policy is
-owned by their later contracts.
+Every operation and trigger uses the same three-part identifier:
 
-An operation's `implements` list contains zero or more extensible **profile
-claims**, such as `example.vendor.profile.v1.read_only`. SFP validates their
-identifier shape and transports them without assigning application-specific
-meaning. Another specification may define a profile's schemas and semantics;
-that meaning is not part of Manifest Exchange. An operation name never implies
-a profile claim, and an empty `implements` list claims none.
+```text
+stateforge.git / reference.resolve @ 1
+──────────────   ─────────────────   ─
+namespace        name                major
+```
 
-Every operation declaration contains exactly `input_schema`, `result_schema`,
-and `implements`. The operation's `result_schema` is the only manifest-level
-declaration of terminal result shape. All operations use the same structure.
-Construction and structural validation must not infer additional result modes
-from names, roles, or schema payloads. Names inside embedded schemas remain
-ordinary schema data and do not create manifest fields or claims.
+_Spaces are shown only to make the parts visible. The actual identifier is
+`stateforge.git/reference.resolve@1`._
+
+| **1 · Namespace** | **2 · Name** | **3 · Major version** |
+| --- | --- | --- |
+| `stateforge.git` | `reference.resolve` | `1` |
+| At least two dot-separated lowercase segments. | One or more dot-separated lowercase segments. Every segment starts with a letter and may also contain digits or underscores. | A positive integer with no leading zero. |
+
+The complete identifier is case-sensitive and may contain at most 255
+characters.
+
+| Identifier | Result | Reason |
+| --- | --- | --- |
+| `stateforge.git/reference.resolve@1` | ✓ Valid | Two-part namespace, lowercase dotted name, and positive major version. |
+| `com.example.backup/snapshot.create@2` | ✓ Valid | Additional namespace and name segments are allowed. |
+| `git/reference.resolve@1` | ✕ Invalid | The namespace has only one segment. |
+| `stateforge.git/Reference.Resolve@1` | ✕ Invalid | Name segments must be lowercase. |
+| `stateforge.git/reference.resolve@01` | ✕ Invalid | The major version has a leading zero. |
+
+!!! important "Identifiers are extension points"
+
+    Preserve each valid identifier exactly as declared. Never coerce operation
+    or trigger identifiers into a closed enum: new identifiers can appear
+    without changing the SFP wire contract.
+
+### Empty values have explicit meanings
+
+| Empty value | Meaning |
+| --- | --- |
+| `operations: {}` | The Provider declares no operation support. |
+| `triggers: {}` | The Provider declares no trigger support. |
+| `runtime_requirements: {}` | The Provider declares no additional runtime prerequisites. |
+| `version_constraint: ""` | The requirement has no declared version restriction. |
+
+A nonempty version constraint is interpreted by the requirement that owns it,
+not by `stateforge-protocol`.
+
+!!! warning "Unknown does not mean satisfied"
+
+    If the Agent does not recognize a runtime requirement, it has no evidence
+    that the requirement is satisfied. Capability Assessment and Operation
+    Admission own that later runtime decision.
+
+### Profiles express interoperability
+
+A **profile** is a separately named and versioned contract for a reusable
+operation role. It can define common semantics, schemas, and behavior outside
+the generic SFP operation model. This lets consumers recognize operations that
+implement the same role even when their Provider-specific operation identifiers
+are different.
+
+A **profile claim** is the Provider's explicit assertion that one operation
+conforms to that profile:
+
+```text
+stateforge.git/reference.resolve@1
+    └── implements → example.vendor.profile.v1.read_only
+```
+
+| Concept | What it identifies |
+| --- | --- |
+| Operation identifier | The concrete operation exposed by this Provider. |
+| Profile identifier | The reusable external contract. |
+| Entry in `implements` | The operation's explicit claim that it conforms to that profile. |
+
+| SFP does | SFP does not |
+| --- | --- |
+| Validate each claim's identifier shape. | Assign application-specific meaning to a claim. |
+| Transport declared claims unchanged. | Infer a claim from an operation's name or schemas. |
+| Treat `implements: []` as no claims. | Treat an empty list as implicit support. |
+
+Another specification may define a profile's schemas and semantics. Manifest
+Exchange only carries the explicit claim.
+
+!!! note "Declaration, not runtime evidence"
+
+    A profile claim describes what the operation implements. It does not prove
+    that the operation can run in the current environment; Capability
+    Assessment decides that later.
+
+### Every operation has the same shape
+
+```yaml
+"stateforge.git/reference.resolve@1":
+  input_schema:
+    $schema: https://json-schema.org/draft/2020-12/schema
+    type: object
+  result_schema:
+    $schema: https://json-schema.org/draft/2020-12/schema
+    type: object
+  implements: []
+```
+
+| Field | Meaning |
+| --- | --- |
+| `input_schema` | The operation's accepted input shape. |
+| `result_schema` | The operation's terminal result shape. This is its only manifest-level result declaration. |
+| `implements` | The operation's explicit profile claims; an empty list claims none. |
+
+!!! important "Do not infer another contract"
+
+    Construction and validation must not invent result modes or profile claims
+    from operation names, roles, or schema payloads. Names inside embedded
+    schemas remain ordinary schema data; they do not create manifest fields or
+    claims.
 
 ## Structural and semantic validation
 
-The package ships `stateforge_protocol/sfp/manifest/v1/manifest.schema.json`.
-It validates the **ProtoJSON projection** of a complete response. The
-`getManifestRequest` definition validates requests. Use lowerCamelCase names
-and emit every scalar, repeated-field, and map default that has no presence.
-Present message fields remain present; absent required messages are invalid.
-For Python, use `MessageToDict(message,
-always_print_fields_with_no_presence=True)`. Do not use a serializer's
-default field-omission behavior for validation or revision calculation.
+Manifest acceptance is a pipeline. Passing one layer never skips the layers
+that follow it.
 
-The protobuf definition owns field names, numbers, types and service shape.
-The JSON Schema adds required-field, identifier, uniqueness, count, and nested
-JSON Schema constraints. Protobuf deserialization alone is not validation.
-The Python package exposes
-`stateforge_protocol.sfp.manifest.v1.validation` for structural validation,
-embedded-schema validation, bounded RFC 8785 canonicalization, revision
-calculation, and revision verification. Calling those functions is explicit;
-generated bindings do not invoke them automatically. The package does not run
-a server, negotiate schemas, validate a live session, construct Provider
-author declarations, or maintain Agent caches.
+```mermaid
+flowchart TB
+    Bytes["Protobuf bytes"] --> Limit{"Within the procedure<br/>message limit?"}
+    Limit -->|No| Reject["Reject before decoding"]
+    Limit -->|Yes| Decode["Decode protobuf and<br/>build complete ProtoJSON"]
+    Decode --> Document["Validate the packaged<br/>document schema"]
+    Document --> Embedded["Validate embedded<br/>Draft 2020-12 schemas"]
+    Embedded --> Semantic["Validate session fences,<br/>declaration semantics, and revision"]
+    Semantic --> Accept["Manifest accepted"]
+```
 
-The schema enforces canonical lowercase UUIDv4 identities, positive decimal
-generation strings, SemVer, required messages, unique lists, identifier syntax,
-known schema version, and a `sha256:` revision with 64 lowercase hex digits.
-Protobuf also enforces the uint64 bound on generations. Implementations must
-enforce the following limits before accepting a snapshot:
+| Stage | Question answered |
+| --- | --- |
+| Message limits | Is the serialized request or response within its procedure bound? |
+| Protobuf decoding | Do the fields have the declared wire types? |
+| Packaged document schema | Is the complete request or response structurally valid? |
+| Embedded-schema validation | Are operation, result, configuration, and trigger schemas safe Draft 2020-12 documents? |
+| Semantic validation | Do identities, session fences, declaration rules, and the deterministic revision agree? |
+
+!!! important "Decoding is not validation"
+
+    A message can deserialize successfully and still violate the StateForge
+    contract. Generated protobuf bindings do not call the public validators
+    automatically.
+
+### Build the ProtoJSON projection
+
+The packaged
+`stateforge_protocol/sfp/manifest/v1/manifest.schema.json` validates ProtoJSON,
+not protobuf bytes.
+
+| Message | Packaged definition |
+| --- | --- |
+| `GetManifestRequest` | `$defs.getManifestRequest` |
+| `GetManifestResponse` | `$defs.getManifestResponse` |
+
+Use lowerCamelCase field names and emit every scalar, repeated-field, and map
+default that has no presence:
+
+```python
+projection = MessageToDict(
+    message,
+    always_print_fields_with_no_presence=True,
+)
+```
+
+Present message fields remain present, and absent required messages are
+invalid. Do not use a serializer's default field-omission behavior for either
+validation or revision calculation.
+
+### Validation ownership
+
+| Layer | Owns |
+| --- | --- |
+| `manifest.proto` | Field names, numbers, wire types, messages, and service shape. |
+| `manifest.schema.json` | Required fields, identifier syntax, uniqueness, counts, and nested structural constraints. |
+| `validation.py` | Embedded-schema inspection, bounded canonicalization, revision calculation, and revision verification. |
+| Provider and Agent runtimes | Live-session lookup, declaration construction, request correlation, cache storage, and admission decisions. |
+
+The protocol package exposes validation functions; callers invoke them
+explicitly. It does not run a server, negotiate schemas, construct author
+declarations, or maintain Agent caches.
+
+### Declaration rules
+
+| Value | Required form |
+| --- | --- |
+| Provider instance identity | Canonical lowercase UUIDv4. |
+| Endpoint generation | Positive decimal value within protobuf's `uint64` range. |
+| Implementation version | SemVer 2.0.0. |
+| Operation, trigger, requirement, and profile identifiers | Their respective canonical identifier syntax. |
+| Manifest schema version | A known supported version. |
+| Manifest revision | `sha256:` followed by 64 lowercase hexadecimal characters. |
+| Repeated declarations | Unique where the contract defines set-like semantics. |
+
+### Bounded validation
+
+Implementations enforce these limits before accepting a snapshot:
 
 | Limit | Maximum |
 | --- | ---: |
@@ -151,55 +493,61 @@ enforce the following limits before accepting a snapshot:
 | Schema nodes processed per embedded document | 25,000 |
 | Each operations, triggers, or requirements map | 1,024 entries |
 | Platform pairs | 256 unique pairs |
-| Compliance roles per operation | 64 unique roles |
+| Profile claims per operation | 64 unique claims |
 | Embedded JSON nesting | 64 containers |
 
-Configure transport message limits before decoding and check the canonical
-preimage size and nesting before expensive schema processing. Implementations
-may impose stricter local resource limits and report them safely.
+!!! warning "Reject expensive input early"
 
-All input, result, configuration, and trigger schemas are Draft 2020-12 object
-schemas represented using `google.protobuf.Struct`. Each root explicitly
-declares `$schema` and `type: object`. Boolean subschemas are allowed. Only
-local fragment references are allowed; `$id` is prohibited so a nested schema
-cannot change a reference's base. Consumers must check that every reference
-resolves inside its own schema document and must not retrieve remote schemas.
-No non-JSON values, duplicate JSON object keys, NaN, infinity, invalid Unicode,
-or values outside RFC 8785's interoperable numeric domain are allowed.
+    Configure transport limits before decoding. Check nesting and canonical
+    preimage size before expensive schema processing. Implementations may apply
+    stricter local resource limits and report them safely.
 
-Schemas describe types, constraints, and safe static metadata. They never carry
-actual configured values, credentials, customer data, or component bindings.
-Mark every secret-bearing input with `writeOnly: true`; a write-only schema
-cannot contain `default`, `examples`, `const`, or `enum` values. References and
-composed schemas must not introduce those values for a secret-bearing input
-indirectly. The structural schema catches direct and recursively nested
-write-only violations. It cannot recognize arbitrary secrets in descriptions
-or prove a business-specific declaration truthful. Those semantic checks
-remain mandatory in the Provider runtime and Agent. Never echo rejected
-values or whole schemas in errors.
+### Embedded JSON Schema safety
+
+Input, result, configuration, and trigger schemas are Draft 2020-12 documents
+carried in `google.protobuf.Struct`.
+
+| Area | Rule |
+| --- | --- |
+| Root | Explicitly declare `$schema` and `type: object`. Boolean subschemas are allowed below the root. |
+| References | Use only local fragment references that resolve inside the same document. Never retrieve a remote schema. |
+| Base URI | `$id` is prohibited, so nested content cannot change the reference base. |
+| JSON values | Reject duplicate object keys, NaN, infinity, invalid Unicode, non-JSON values, and numbers outside RFC 8785's interoperable domain. |
+| Content | Carry types, constraints, and safe static metadata—not configured values, credentials, customer data, or component bindings. |
+| Secrets | Mark secret-bearing inputs with `writeOnly: true`. They cannot expose `default`, `examples`, `const`, or `enum` values, directly or through references and composed schemas. |
+
+### What validation cannot prove
+
+Structural validation catches direct and recursively nested write-only
+violations. It cannot identify arbitrary secrets hidden in descriptions or
+prove that a business-specific declaration is truthful.
+
+!!! danger "Runtime checks remain mandatory"
+
+    The Provider runtime and Agent must enforce the remaining semantic checks.
+    Rejection diagnostics must never echo submitted values or whole schemas.
 
 ## Deterministic revision
 
-For a validated `GetManifestResponse` named `response`, construct the preimage
-as follows (this Python example uses the development dependency `rfc8785`):
+For a validated `GetManifestResponse` named `response`, calculate the revision
+through the public validator:
 
 ```python
-import hashlib
-
-import rfc8785
 from google.protobuf.json_format import MessageToDict
+from stateforge_protocol.sfp.manifest.v1 import validation
 
-preimage = {
-    "manifest": MessageToDict(
-        response.manifest, always_print_fields_with_no_presence=True
-    ),
-    "manifestSchemaVersion": response.manifest_schema_version,
-    "providerInstanceId": response.provider_instance_id,
-}
-revision = "sha256:" + hashlib.sha256(rfc8785.dumps(preimage)).hexdigest()
+manifest = MessageToDict(
+    response.manifest,
+    always_print_fields_with_no_presence=True,
+)
+revision = validation.compute_manifest_revision(
+    manifest,
+    response.manifest_schema_version,
+    response.provider_instance_id,
+)
 ```
 
-Canonicalize the object using
+`compute_manifest_revision` canonicalizes the object using
 [RFC 8785 JSON Canonicalization Scheme](https://www.rfc-editor.org/rfc/rfc8785.html),
 encode it as UTF-8, and set the revision to `sha256:` followed by the lowercase
 SHA-256 digest. Include all schema-1 declaration fields, including display
@@ -223,7 +571,7 @@ Do not hash protobuf bytes, even with deterministic serialization enabled:
 [protobuf serialization is not canonical](https://protobuf.dev/programming-guides/serialization-not-canonical/).
 The checked-in `tests/fixtures/manifest/response.json` and
 `revision-preimage.json` form a cross-language conformance vector. Its revision
-is `sha256:34f54f69855f1fbebef4d3d6bb74c0238785e0f8ef43f9efb1a12e6b4353183d`.
+is `sha256:6bfdf3aedc2d4e45d77d4787cc0e744a488208b2510d81788291f51d24a623e8`.
 
 ## Agent acceptance and caching
 
@@ -256,6 +604,7 @@ protocol package does not implement the cache or inventory.
 | Outcome | Required behavior |
 | --- | --- |
 | Malformed request, duplicate/empty version offer, invalid identity/generation, or missing/empty/oversized session ID | Provider returns `INVALID_ARGUMENT`. |
+| Serialized request or response exceeds its procedure limit | Receiver returns or records `RESOURCE_EXHAUSTED`; do not retry unchanged oversized content. |
 | Session unknown/inactive, handshake missing, or instance/generation does not match the requested active session | Provider returns `FAILED_PRECONDITION`; Agent re-establishes a session (rediscovering if needed) before a new attempt. |
 | No common manifest schema version | Provider returns `UNIMPLEMENTED`; Agent marks the endpoint incompatible instead of indefinitely retrying unchanged capabilities. |
 | Provider cannot produce a valid snapshot | Fail startup before ready publication where possible; otherwise return `INTERNAL` with sanitized diagnostics, never partial success. |

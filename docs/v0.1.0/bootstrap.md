@@ -95,6 +95,18 @@ from stateforge_protocol.sfp.bootstrap.v1 import (
 )
 ```
 
+### Contract sources
+
+| Source | Responsibility |
+| --- | --- |
+| [`contract.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/bootstrap/v1/contract.py) | Owns the canonical service identity, serialized request and response limits, and session-ID length limit. |
+| [`validation.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/bootstrap/v1/validation.py) | Validates complete Handshake requests, responses, and wire versions, then returns canonical typed values for runtime comparisons. |
+
+Consumers should import these public modules through
+`stateforge_protocol.sfp.bootstrap.v1`. The repository-wide private validation
+helpers are implementation details; they are not an API for Agent or Provider
+runtimes.
+
 Generated protobuf classes do not enforce the StateForge semantic contract by
 themselves. Call the public validators explicitly, and enforce serialized byte
 limits at each RPC boundary.
@@ -221,18 +233,63 @@ Provider availability, capability support, or authorization to run operations.
 
 ## Request and response
 
-| Message | Field | Meaning |
-| --- | --- | --- |
-| Request | `agent_runtime.runtime_id` | Canonical lowercase UUIDv4 for the current Agent process. It is not a durable Control Plane Agent identity. |
-| Request | `agent_runtime.software_version` | Nonempty version of the running Agent software. |
-| Request | `expected_provider_instance_id` | Canonical lowercase UUIDv4 copied from the validated endpoint descriptor. It identifies the Provider installation. |
-| Request | `expected_endpoint_generation` | Positive generation copied from the descriptor. It fences endpoint replacement. |
-| Request | `supported_sfp_versions` | Nonempty, duplicate-free list of supported `major.minor` wire versions. Offer order conveys no preference. |
-| Response | `provider_instance_id` | Confirmation of the requested Provider installation. |
-| Response | `endpoint_generation` | Confirmation of the requested endpoint generation. |
-| Response | `selected_sfp_version` | Highest version supported by both peers. It must be one the Agent offered. |
-| Response | `provider_runtime_id` | Canonical lowercase UUIDv4 for the current Provider process. |
-| Response | `session_id` | Opaque identifier issued for this successful handshake and copied unchanged into session-bound procedures. |
+=== "Field reference"
+
+    | Message | Field | Meaning |
+    | --- | --- | --- |
+    | Request | `agent_runtime.runtime_id` | Canonical lowercase UUIDv4 for the current Agent process. It is not a durable Control Plane Agent identity. |
+    | Request | `agent_runtime.software_version` | Nonempty version of the running Agent software. |
+    | Request | `expected_provider_instance_id` | Canonical lowercase UUIDv4 copied from the validated endpoint descriptor. It identifies the Provider installation. |
+    | Request | `expected_endpoint_generation` | Positive generation copied from the descriptor. It fences endpoint replacement. |
+    | Request | `supported_sfp_versions` | Nonempty, duplicate-free list of supported `major.minor` wire versions. Offer order conveys no preference. |
+    | Response | `provider_instance_id` | Confirmation of the requested Provider installation. |
+    | Response | `endpoint_generation` | Confirmation of the requested endpoint generation. |
+    | Response | `selected_sfp_version` | Highest version supported by both peers. It must be one the Agent offered. |
+    | Response | `provider_runtime_id` | Canonical lowercase UUIDv4 for the current Provider process. |
+    | Response | `session_id` | Opaque identifier issued for this successful handshake and copied unchanged into session-bound procedures. |
+
+=== "Example request"
+
+    ``` { .json .annotate title="HandshakeRequest" }
+    {
+      "agentRuntime": {
+        "runtimeId": "d81855f6-79ac-4b49-9f1a-c9f0985e7c58 (1)",
+        "softwareVersion": "0.1.0"
+      },
+      "expectedProviderInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c (2)",
+      "expectedEndpointGeneration": "4",
+      "supportedSfpVersions": [
+        {
+          "major": 1,
+          "minor": 0
+        }
+      ]
+    }
+    ```
+
+    1.  Identifies this Agent process, not a durable Control Plane identity.
+    2.  Carries the installation fence observed during endpoint discovery;
+        `expectedEndpointGeneration` completes that fence.
+
+=== "Example response"
+
+    ``` { .json .annotate title="HandshakeResponse" }
+    {
+      "providerInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c (1)",
+      "endpointGeneration": "4",
+      "selectedSfpVersion": {
+        "major": 1,
+        "minor": 0
+      },
+      "providerRuntimeId": "68d818de-3671-471d-a0ba-044cf60e2c8e (2)",
+      "sessionId": "session-A (3)"
+    }
+    ```
+
+    1.  Echoes the installation fence the Agent requested; the endpoint
+        generation must also match.
+    2.  Identifies the currently running Provider process.
+    3.  Fences every later session-bound procedure on this connection.
 
 SFP wire versions contain only unsigned-integer `major` and `minor` components.
 The major version is positive and the minor version may be zero. Patch versions
