@@ -1,0 +1,165 @@
+schema: stateforge.docs/entity-flow/v1
+flow: operation-admission
+title: From one immutable request to one Provider dispatch
+summary: A systemd Provider admits an Nginx restart operation before dispatching it exactly once.
+autoplay: true
+entities:
+  - id: agent
+    label: StateForge Agent
+    kind: StateForge Agent
+    brand: stateforge
+    accent: agent
+    description: Creates the operation identity and submits the immutable invocation.
+    state:
+      label: Admission
+      value: Not submitted
+  - id: provider
+    label: systemd Provider
+    kind: StateForge Provider
+    brand: stateforge
+    accent: provider
+    description: Validates admission and implements the declared restart operation.
+    state:
+      label: Admission record
+      value: Absent
+  - id: systemd
+    label: systemd
+    kind: Service manager
+    brand: none
+    accent: systemd
+    description: Receives the Provider's request to restart the local unit.
+    state:
+      label: Requested action
+      value: None
+  - id: nginx
+    label: nginx.service
+    kind: Managed service
+    brand: service
+    accent: service
+    description: The local unit selected by the operation payload.
+    state:
+      label: Unit state
+      value: active
+      tone: success
+steps:
+  - id: prepare-invocation
+    phase: Immutable invocation
+    title: The Agent prepares the restart
+    detail: The Agent assigns an operation ID and builds a payload selecting nginx.service under the accepted manifest declaration.
+    active: [agent]
+    states:
+      agent:
+        label: Invocation
+        value: restart nginx.service
+        tone: warning
+    transitions: []
+    responsibility:
+      entities: [agent]
+      label: The Agent owns the immutable operation identity and content used by every retry.
+  - id: submit-admission
+    phase: Admission request
+    title: Submit the operation
+    detail: The Agent sends StartOperation with the current session binding and ADMIT_OR_RESOLVE mode.
+    active: [agent, provider]
+    states:
+      provider:
+        label: Admission
+        value: Validating request
+        tone: warning
+    transitions:
+      - source: agent
+        target: provider
+        label: StartOperation
+    responsibility:
+      entities: [provider]
+      label: The Provider validates the live session, manifest declaration, payload, and current prerequisites.
+  - id: fingerprint-and-lookup
+    phase: Idempotency lookup
+    title: Identify this exact invocation
+    detail: The Provider fingerprints the immutable invocation and looks up its operation ID before checking new-admission capacity.
+    active: [provider]
+    states:
+      provider:
+        label: Operation record
+        value: No matching record
+        tone: warning
+    transitions: []
+    responsibility:
+      entities: [provider]
+      label: Existing retained state would resolve or reject the request without another dispatch.
+  - id: retain-admission
+    phase: Atomic admission
+    title: Create the record first
+    detail: The registry atomically binds the operation ID to its fingerprint before Provider-specific behavior can run.
+    active: [provider]
+    states:
+      provider:
+        label: Operation record
+        value: Retained
+        tone: success
+    transitions: []
+    responsibility:
+      entities: [provider]
+      label: The retained record is now the authority for every retry of this operation identity.
+  - id: dispatch-provider
+    phase: Provider dispatch
+    title: Dispatch the restart once
+    detail: Only the admission that created the record invokes the Provider implementation.
+    active: [provider, systemd]
+    states:
+      provider:
+        label: Admission + dispatch
+        value: Retained · dispatched once
+        tone: success
+      systemd:
+        label: Requested action
+        value: restart nginx.service
+        tone: warning
+    transitions:
+      - source: provider
+        target: systemd
+        label: restart unit
+        tone: success
+    responsibility:
+      entities: [provider]
+      label: Equivalent retries resolve the retained record and never reach the implementation again.
+  - id: restart-requested
+    phase: Local operation started
+    title: systemd receives the request
+    detail: systemd begins the requested restart. Completion and any terminal result are reported through the operation lifecycle procedure.
+    active: [systemd, nginx]
+    states:
+      nginx:
+        label: Unit state
+        value: restarting
+        tone: warning
+    transitions:
+      - source: systemd
+        target: nginx
+        label: restart requested
+        tone: warning
+    responsibility:
+      entities: [provider]
+      label: Admission guarantees one dispatch; it does not claim that the restart has completed.
+  - id: return-accepted
+    phase: Admission confirmed
+    title: Return the retained admission
+    detail: The Provider returns ACCEPTED_NEW and the immutable record. The Agent follows subsequent progress through the lifecycle procedure.
+    active: [provider, agent]
+    states:
+      agent:
+        label: Admission
+        value: ACCEPTED_NEW
+        tone: success
+      provider:
+        label: Admission + dispatch
+        value: Retained · dispatched once
+        tone: success
+    transitions:
+      - source: provider
+        target: agent
+        label: ACCEPTED_NEW
+        tone: success
+    responsibility:
+      entities: [agent, provider]
+      label: Both peers correlate later lifecycle messages with the same admitted operation identity.

@@ -1,62 +1,209 @@
 # Operation admission and idempotency
 
-Operation admission turns one immutable, manifest-declared invocation into at
+Operation Admission turns one immutable, manifest-declared invocation into at
 most one Provider dispatch. The Agent assigns the operation identity before
-contact. The Provider validates the request, records a successful admission
-atomically, and only then calls Provider-specific behavior.
+contact. The Provider records a successful admission before it calls the
+Provider implementation, so identical retries converge on the same record
+instead of executing the operation twice.
 
-```mermaid
-sequenceDiagram
-    participant Agent
-    participant RPC as Provider RPC library
-    participant Registry as Admission registry
-    participant Provider as Provider implementation
-    Agent->>RPC: StartOperation(id, operation identifier, payload)
-    Note over Agent,RPC: Resource selection, if needed, is inside the typed payload
-    RPC->>RPC: Validate session, declaration, roles, and input schema
-    RPC->>Registry: Compare operation ID and canonical fingerprint
-    alt Matching retained record
-        Registry-->>RPC: Existing admission record
-        RPC-->>Agent: RESOLVED_EXISTING (no dispatch)
-    else Same ID, different fingerprint
-        Registry-->>RPC: Conflict
-        RPC-->>Agent: ALREADY_EXISTS (no dispatch)
-    else No record and new admission allowed
-        RPC->>RPC: Check deadline, prerequisites, and capacity
-        RPC->>Registry: Atomically create admission record
-        RPC->>Provider: Dispatch once after record creation
-        RPC-->>Agent: ACCEPTED_NEW
-    end
+Admission answers one question: **may this operation identity be dispatched?**
+Progress, results, errors, and cancellation belong to the separate operation
+lifecycle procedure.
+
+## Operation admission at a glance
+
+This example follows an Nginx restart from the Agent's immutable request to a
+single systemd Provider dispatch. It deliberately stops at admission: the
+operation lifecycle reports whether the restart later succeeds or fails.
+
+```stateforge-entity-flow
+source: operation-admission-overview.yaml
 ```
+
+## Interactive walkthrough
+
+Choose a scenario to see the components, retained state, and dispatch boundary
+change step by step.
+
+```stateforge-procedure
+source: operation-admission.yaml
+scenario: first-admission
+```
+
+??? info "Operation admission sequence"
+
+    ```mermaid
+    sequenceDiagram
+        participant Agent as StateForge Agent
+        participant Service as Admission Service
+        participant Registry as Admission Registry
+        participant Provider as Provider Implementation
+
+        Agent->>Service: StartOperation(request)
+        Service->>Service: Validate structure and live fences
+        Service->>Service: Validate declaration, roles, and payload
+        Service->>Service: Fingerprint immutable invocation
+        Service->>Registry: Look up operation_id
+
+        alt Matching retained fingerprint
+            Registry-->>Service: Existing admission record
+            Service-->>Agent: RESOLVED_EXISTING
+        else Same ID, different fingerprint
+            Registry-->>Service: Fingerprint conflict
+            Service-->>Agent: ALREADY_EXISTS + IDEMPOTENCY_CONFLICT
+        else Record expired
+            Registry-->>Service: Expiry tombstone
+            Service-->>Agent: OPERATION_RECORD_EXPIRED
+        else Record absent and RESOLVE_ONLY
+            Registry-->>Service: No verifiable record
+            Service-->>Agent: OPERATION_RECORD_UNAVAILABLE
+        else Record absent and admission allowed
+            Service->>Service: Check deadline, prerequisites, and capacity
+            Service->>Registry: Atomically create admission record
+            Registry-->>Service: Record created
+            Service->>Provider: Dispatch exactly once
+            Service-->>Agent: ACCEPTED_NEW
+        end
+    ```
+
+## Who implements Operation Admission
+
+The StateForge Agent is the gRPC client. It creates the immutable operation
+identity and invocation, binds the call to the current session, validates the
+response, and preserves uncertainty when a transport attempt has no confirmed
+outcome.
+
+The Provider runtime is the gRPC server. It validates the request against the
+active session and accepted manifest, computes the canonical fingerprint,
+owns the admission registry, creates a record atomically, and dispatches newly
+admitted work. A Provider integration implements the declared operation; it
+should not reimplement admission or retry correlation.
+
+The `stateforge-protocol` package supplies the wire types, canonical service
+identity, limits, fingerprint algorithm, and context-independent validators.
+It does not store operation records, authorize work, evaluate live readiness,
+or dispatch Provider behavior.
+
+## Using the Python contract
+
+Install the generated contracts and gRPC runtime:
+
+```console
+python -m pip install stateforge-protocol grpcio
+```
+
+### Contract sources
+
+| Source | Responsibility |
+| --- | --- |
+| [`operation_admission.proto`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/proto/stateforge_protocol/sfp/operation_admission/v1/operation_admission.proto) | Defines `StartOperation`, request and response messages, admission modes, dispositions, records, and structured errors. |
+| [`contract.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/operation_admission/v1/contract.py) | Owns the canonical service identity, message limits, identifier bounds, JSON limits, and stable error mappings. |
+| [`validation.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/operation_admission/v1/validation.py) | Validates requests, responses, errors, and exchanges, and computes canonical invocation content and fingerprints. |
+| [`operation_admission.schema.json`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/operation_admission/v1/operation_admission.schema.json) | Defines the complete lowerCamelCase ProtoJSON projection used for structural validation and conformance tooling. |
+
+### Python API surface
+
+| Purpose | Python API |
+| --- | --- |
+| Messages and enums | `operation_admission_pb2` |
+| Asynchronous client stub | `operation_admission_pb2_grpc.OperationAdmissionServiceStub` constructed with a `grpc.aio.Channel` |
+| Server interface | `operation_admission_pb2_grpc.OperationAdmissionServiceServicer` |
+| Server registration | `operation_admission_pb2_grpc.add_OperationAdmissionServiceServicer_to_server` |
+| Service identity, bounds, and error mappings | `stateforge_protocol.sfp.operation_admission.v1.contract` |
+| Validation and canonical fingerprints | `stateforge_protocol.sfp.operation_admission.v1.validation` |
+
+Import the public contract through its versioned package:
+
+```python
+from stateforge_protocol.sfp.operation_admission.v1 import (
+    operation_admission_pb2,
+    operation_admission_pb2_grpc,
+    validation,
+)
+
+validation.validate_start_operation_request(request)
+
+stub = operation_admission_pb2_grpc.OperationAdmissionServiceStub(channel)
+response = await stub.StartOperation(request, timeout=5.0)
+
+validation.validate_admission_exchange(request, response)
+```
+
+Generated protobuf classes enforce wire types, not the complete StateForge
+contract. Both peers must enforce the byte limits from `contract.py`, call the
+public validators, and then apply the live session, manifest, schema,
+readiness, persistence, and authorization checks owned by their runtime.
 
 ## Wire contract
 
-SFP exposes the unary method
-`/stateforge.sfp.operation_admission.v1.OperationAdmissionService/StartOperation`
-on the existing local channel. The authoritative source is
-`proto/stateforge_protocol/sfp/operation_admission/v1/operation_admission.proto`.
+SFP exposes one unary method on the active local channel:
 
-This service admits any operation declared by the accepted P1 manifest. It
-does not define a closed operation list, shell-command API, scheduler, policy
-engine, or backup-specific transport method. Backup and disaster recovery are
-later opt-in profiles over the same generic operation model.
+```text
+/stateforge.sfp.operation_admission.v1.OperationAdmissionService/StartOperation
+```
 
-`StartOperation` owns admission only. P5 defines progress, terminal outcomes,
-results, observation, and cancellation. Resolving an operation whose lifecycle
-is already terminal returns the same retained admission record and never
-dispatches again; the P5 lifecycle surface returns the retained terminal
-outcome and result.
+The service admits any operation declared by the accepted Provider manifest.
+It does not define a closed operation list. `StartOperation` owns admission
+only; an existing terminal operation still resolves to the same admission
+record, while its retained terminal outcome is read through the operation
+lifecycle procedure.
 
 ## Request model
 
 `StartOperationRequest` deliberately separates the immutable semantic
 invocation from fields needed to validate the current call.
 
-| Field | Meaning |
-| --- | --- |
-| `session_binding` | Current Provider installation, endpoint generation, and negotiated session expected for this call. These fields fence the transport call and are excluded from the invocation fingerprint. |
-| `invocation` | Complete immutable operation attempt. Reusing its `operation_id` with different semantic content is an idempotency conflict. |
-| `admission_mode` | Whether an absent record may be created or may only be resolved. This recovery control is excluded from the fingerprint. |
+=== "Field reference"
+
+    | Field | Meaning |
+    | --- | --- |
+    | `session_binding` | Current Provider installation, endpoint generation, and negotiated session expected for this call. These fields fence the transport call and are excluded from the invocation fingerprint. |
+    | `invocation` | Complete immutable operation attempt. Reusing its `operation_id` with different semantic content is an idempotency conflict. |
+    | `admission_mode` | Whether an absent record may be created or may only be resolved. This recovery control is excluded from the fingerprint. |
+
+=== "Example request"
+
+    ``` { .json .annotate title="StartOperationRequest" }
+    {
+      "sessionBinding": {
+        "expectedProviderInstanceId": "11111111-1111-4111-8111-111111111111 (1)",
+        "expectedEndpointGeneration": "42",
+        "expectedSessionId": "session-admission-42"
+      },
+      "invocation": {
+        "operationId": "22222222-2222-4222-8222-222222222222 (2)",
+        "operationIdentifier": "example.database/maintenance.compact@1 (3)",
+        "payload": {
+          "resource": {
+            "cluster": "primary",
+            "region": "eu-west-1"
+          },
+          "maxDurationSeconds": 300,
+          "mode": "online"
+        },
+        "executionDeadline": "2026-09-20T12:00:00Z",
+        "contract": {
+          "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (4)",
+          "requiredImplementationRoles": [
+            "stateforge.operation.v1.safe",
+            "stateforge.operation.v1.audited"
+          ]
+        },
+        "executionContext": {
+          "authority": "policy-run-123",
+          "requestedBy": "control-plane"
+        }
+      },
+      "admissionMode": "ADMISSION_MODE_ADMIT_OR_RESOLVE (5)"
+    }
+    ```
+
+    1.  Fences this call to one active Provider session.
+    2.  Remains unchanged across every retry of this logical operation.
+    3.  Selects the accepted manifest declaration and its input schema.
+    4.  Pins the exact declaration snapshot used to validate the invocation.
+    5.  Allows creation or resolution; recovery can instead use
+        `ADMISSION_MODE_RESOLVE_ONLY`.
 
 ### Session binding
 
@@ -79,36 +226,46 @@ fingerprint.
 | Field | Ownership and validation |
 | --- | --- |
 | `operation_id` | Agent-assigned canonical lowercase UUIDv4 allocated before first contact. A new authorized attempt gets a new ID. A terminal ID is never repurposed. |
-| `operation_identifier` | Exact P1 manifest key in `namespace/name@major` form. It remains an extensible string, not an enum. |
-| `payload` | Required JSON object validated against the selected operation's P1 `input_schema` before admission. An operation that acts on a resource identifies it here, using its own schema; an operation with no resource needs no placeholder. Provider-level `configuration_schema` does not validate operation input. JSON Schema defaults are annotations and are not silently inserted. |
+| `operation_identifier` | Exact accepted-manifest key in `namespace/name@major` form. It remains an extensible string, not an enum. |
+| `payload` | Required JSON object validated against the selected operation's manifest `input_schema` before admission. An operation that acts on a resource identifies it here, using its own schema; an operation with no resource needs no placeholder. Provider-level `configuration_schema` does not validate operation input. JSON Schema defaults are annotations and are not silently inserted. |
 | `execution_deadline` | Absolute Agent-selected deadline for the business attempt. It is distinct from the gRPC call deadline and is immutable. |
-| `contract.manifest_revision` | Exact accepted P1 manifest revision. It pins the operation declaration and its input/result schemas. |
-| `contract.required_implementation_roles` | Zero or more distinct profile claims from the selected operation's P1 `implements` list that this invocation relies on. This may be a subset of all declared claims. Empty means this invocation requires no profile claim. These are not Control Plane contract identifiers or permissions. |
+| `contract.manifest_revision` | Exact accepted manifest revision. It pins the operation declaration and its input/result schemas. |
+| `contract.required_implementation_roles` | Zero or more distinct profile claims from the selected operation's manifest `implements` list that this invocation relies on. This may be a subset of all declared claims. Empty means this invocation requires no profile claim. These are not permissions. |
 | `execution_context` | Required bounded JSON object containing already-approved, non-secret execution metadata. SFP transports context; it does not make the policy or authorization decision. |
 
-The Agent and Provider must treat `payload` and `execution_context`
-as exact JSON values. Reordering object members is not a semantic change;
-changing a value, adding or removing a member, or relying on an unmaterialized
-schema default is a semantic change. `required_implementation_roles` is a set:
-order is not semantic, duplicates are invalid.
+### Comparison and safety rules
 
-A role names a versioned semantic/compliance profile, not a particular Control
-Plane contract. An operation can claim multiple profiles in its P1 manifest;
-the Agent validates any recognized profile it relies on, and admission checks
-that each role requested here appears in that operation's declaration. This
-membership check is not authorization or proof that the Provider's behavior
-complies with the profile. A future Control Plane contract may require a
-profile, but its contract identity is not sent as a role through SFP.
+| Concern | Rule |
+| --- | --- |
+| JSON values | Object-member order is irrelevant. Adding, removing, or changing a value changes the invocation. Schema defaults are not inserted automatically. |
+| Required roles | Roles form an unordered, duplicate-free set. Every requested role must appear in the operation declaration; membership is not authorization or proof of compliance. |
+| Secrets | Values declared `writeOnly` must not appear in responses, errors, diagnostics, fixtures, or logs. |
 
-Configuration or payload fields declared `writeOnly` may contain secrets. The
-Provider must not copy them into responses, error details, diagnostics,
-fixtures, or logs. The request fingerprint is a correlation mechanism, not
-authentication, and must not be exposed outside the trusted local SFP boundary
-as a substitute for the request.
+The request fingerprint correlates retries. It is not authentication and must
+not be exposed as a substitute for the request.
 
 ## Canonical request fingerprint
 
-The Provider computes one fingerprint before looking up `operation_id`:
+The fingerprint answers whether a retry carries the **same immutable
+invocation**. It is not a hash of the complete RPC request.
+
+```mermaid
+flowchart LR
+    A[OperationInvocation] --> B[ProtoJSON projection]
+    B --> C[Sort required roles only]
+    C --> D[RFC 8785 canonical JSON]
+    D --> E[SHA-256]
+    E --> F[sha256: lowercase hex]
+```
+
+| Included | Excluded |
+| --- | --- |
+| Operation ID and operation identifier | Current Provider, generation, and session binding |
+| Complete payload and execution context | Admission mode |
+| Execution deadline | gRPC call deadline |
+| Manifest revision and required roles | Transport metadata |
+
+The Provider computes the fingerprint before looking up `operation_id`:
 
 1. Parse and structurally validate `StartOperationRequest`.
 2. Project only `OperationInvocation` to ProtoJSON using lowerCamelCase field
@@ -119,12 +276,9 @@ The Provider computes one fingerprint before looking up `operation_id`:
 5. Compute SHA-256 over the canonical UTF-8 bytes.
 6. Encode the fingerprint as `sha256:` plus 64 lowercase hexadecimal digits.
 
-The fingerprint includes `operation_id`, operation identifier, the complete
-payload, execution deadline, pinned manifest/profile context, and execution
-context. It excludes `session_binding` and `admission_mode`. A same-generation
-reconnect or switch to resolve-only therefore preserves the fingerprint, while
-changing any immutable operation field produces an idempotency conflict under
-the same operation ID.
+A reconnect or switch to resolve-only therefore preserves the fingerprint.
+Changing any immutable operation field while retaining the same operation ID
+produces an idempotency conflict.
 
 The checked-in vector at
 `tests/fixtures/operation_admission/fingerprint-vector.json` is normative for
@@ -150,6 +304,23 @@ does not.
 
 Implementations perform these checks in order so retries and deadlines cannot
 silently redispatch work:
+
+```mermaid
+flowchart TD
+    A[Bound and decode request] --> B[Validate structure and active session]
+    B --> C[Validate manifest, operation, roles, and payload]
+    C --> D[Compute invocation fingerprint]
+    D --> E{Retained state for operation ID?}
+    E -->|Matching record| F[RESOLVED_EXISTING]
+    E -->|Different fingerprint| G[IDEMPOTENCY_CONFLICT]
+    E -->|Expiry tombstone| H[OPERATION_RECORD_EXPIRED]
+    E -->|Absent| I{Admission mode?}
+    I -->|RESOLVE_ONLY| J[OPERATION_RECORD_UNAVAILABLE]
+    I -->|ADMIT_OR_RESOLVE| K[Check deadline, readiness, and capacity]
+    K --> L[Atomically create record]
+    L --> M[Dispatch once]
+    M --> N[ACCEPTED_NEW]
+```
 
 1. Enforce the serialized request limit before decoding.
 2. Validate message presence, identifier syntax, JSON bounds, and
@@ -180,17 +351,67 @@ not a new admission attempt.
 
 Capability assessment is point-in-time evidence, not authorization. Admission
 revalidates the current session, manifest, declaration, roles, schemas,
-readiness, and any current prerequisites instead of trusting an old P2 result.
+readiness, and any current prerequisites instead of trusting an earlier
+Capability Assessment result.
 
 ## Successful responses
 
 Successful responses have exactly two dispositions. Zero/`UNSPECIFIED` is
 invalid.
 
-| Disposition | Meaning |
-| --- | --- |
-| `ACCEPTED_NEW` | One admission record was created atomically and the operation was dispatched once. |
-| `RESOLVED_EXISTING` | A retained record with the same operation ID and fingerprint was returned. No second dispatch occurred. |
+=== "Disposition reference"
+
+    | Disposition | Meaning |
+    | --- | --- |
+    | `ACCEPTED_NEW` | One admission record was created atomically and the operation was dispatched once. |
+    | `RESOLVED_EXISTING` | A retained record with the same operation ID and fingerprint was returned. No second dispatch occurred. |
+
+=== "Accepted response"
+
+    ``` { .json .annotate title="StartOperationResponse · accepted" }
+    {
+      "providerInstanceId": "11111111-1111-4111-8111-111111111111",
+      "endpointGeneration": "42",
+      "sessionId": "session-admission-42",
+      "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "disposition": "ADMISSION_DISPOSITION_ACCEPTED_NEW (1)",
+      "record": {
+        "operationId": "22222222-2222-4222-8222-222222222222",
+        "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df (2)",
+        "admittedAt": "2026-09-19T12:00:00Z",
+        "recordExpiresAt": "2026-09-20T12:00:00Z",
+        "admittedEndpointGeneration": "42"
+      }
+    }
+    ```
+
+    1.  Confirms that this call created the admission record.
+    2.  Identifies the exact immutable invocation retained under the operation
+        ID.
+
+=== "Resolved response"
+
+    ``` { .json .annotate title="StartOperationResponse · resolved" }
+    {
+      "providerInstanceId": "11111111-1111-4111-8111-111111111111",
+      "endpointGeneration": "42",
+      "sessionId": "session-reconnected-42 (1)",
+      "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "disposition": "ADMISSION_DISPOSITION_RESOLVED_EXISTING (2)",
+      "record": {
+        "operationId": "22222222-2222-4222-8222-222222222222",
+        "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+        "admittedAt": "2026-09-19T12:00:00Z",
+        "recordExpiresAt": "2026-09-20T12:00:00Z",
+        "admittedEndpointGeneration": "42 (3)"
+      }
+    }
+    ```
+
+    1.  The retry may use a new session binding without changing the
+        invocation fingerprint.
+    2.  Confirms that no new record or dispatch was created.
+    3.  Preserves the generation that originally admitted the operation.
 
 Every response echoes the current Provider installation, generation, session,
 and pinned manifest revision. The Agent validates these fields against its
@@ -228,6 +449,23 @@ delay, and sanitized explanation.
 | Execution deadline elapsed before new admission | `DEADLINE_EXCEEDED` | `OPERATION_DEADLINE_EXPIRED` | Do not mutate the expired invocation. A genuinely new authorized attempt needs a new ID and deadline. |
 | Resolve-only request has no verifiably retained record | `FAILED_PRECONDITION` | `OPERATION_RECORD_UNAVAILABLE` | Outcome is unresolved. Do not automatically dispatch or manufacture failure/success. |
 | A retained tombstone proves the record expired | `FAILED_PRECONDITION` | `OPERATION_RECORD_EXPIRED` | Outcome is unresolved. Escalate to a later decision-maker; expiry is not retry authorization. |
+
+??? example "Example structured rejection"
+
+    ``` { .json .annotate title="OperationAdmissionErrorDetail" }
+    {
+      "operationId": "22222222-2222-4222-8222-222222222222 (1)",
+      "reason": "ADMISSION_ERROR_REASON_IDEMPOTENCY_CONFLICT (2)",
+      "retryable": false,
+      "explanation": "The operation ID is already bound to different immutable content. (3)"
+    }
+    ```
+
+    1.  Correlates the rejection when the submitted operation ID was valid.
+    2.  Supplies the stable machine-readable reason paired with
+        `ALREADY_EXISTS`.
+    3.  Adds bounded, sanitized context; software must branch on `reason`, not
+        this explanation.
 
 `retry_after` may appear only when `retryable` is true. Retryable means the
 same immutable request may be attempted according to the table; it does not
@@ -310,15 +548,10 @@ its tombstone, the Provider returns `OPERATION_RECORD_UNAVAILABLE` to a
 resolve-only request. It must not invent a lifecycle outcome or dispatch new
 work.
 
-## Compatibility and delivery boundary
+## Responsibility boundary
 
-This procedure preserves bootstrap v1 and P1 manifest schema 1. It adds no P1
-execution field and leaves versioned operation identifiers, schemas, and
-explicit `implements` roles unchanged. New incompatible admission semantics
-require a new package version; fields and enum values must not be reused.
-
-This repository supplies the protocol source, generated bindings, structural
-schema, golden fingerprint vector, error matrix, and conformance scenarios. It
-does not implement an operation registry, Provider scheduler, Agent dispatcher,
-vendor action, arbitrary command runner, SF-AOP transport, Control Plane API,
-or policy engine.
+This repository owns the operation-admission wire contract, generated
+bindings, structural schema, fingerprint vector, error matrix, and conformance
+scenarios. Provider runtimes own record persistence, atomic insertion,
+capacity, and dispatch. Agent runtimes own request construction, retry mode,
+response validation, and unresolved-outcome handling.

@@ -9,6 +9,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+import yaml
 from google.protobuf.json_format import ParseDict
 
 from stateforge_protocol.sfp import recovery
@@ -34,6 +35,7 @@ from stateforge_protocol.sfp.trigger_publication.v1 import (
     validation as trigger_validation,
 )
 
+_ROOT = Path(__file__).resolve().parents[1]
 _FIXTURES = Path(__file__).parent / "fixtures"
 _RECOVERY = _FIXTURES / "disconnection_recovery" / "scenarios.json"
 _PREVIOUS_IDENTITY = recovery.EndpointSessionIdentity(
@@ -412,3 +414,64 @@ def test_availability_requires_fresh_session_manifest_and_health() -> None:
         "healthWatchCurrent",
         "healthServing",
     ]
+
+
+def test_documented_recovery_walkthrough_covers_material_scenarios() -> None:
+    path = _ROOT / "docs/v0.1.0/procedures/disconnection-recovery.yaml"
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    assert document["schema"] == "stateforge.docs/procedure/v1"
+    assert document["default_scenario"] == "same-process-reconnect"
+    assert set(document["scenarios"]) == {
+        "same-process-reconnect",
+        "endpoint-replaced",
+        "process-restarted-retained",
+        "process-restarted-state-lost",
+        "installation-replaced",
+        "invalid-identity",
+        "lost-admission-reply",
+        "watch-cursor-gap",
+        "trigger-replay",
+        "lost-cancel-reply",
+        "stale-session-message",
+    }
+    assert all(
+        scenario["steps"] for scenario in document["scenarios"].values()
+    )
+
+
+def test_documented_recovery_overview_rebuilds_trust_before_state() -> None:
+    path = (
+        _ROOT / "docs/v0.1.0/procedures/disconnection-recovery-overview.yaml"
+    )
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    assert document["schema"] == "stateforge.docs/entity-flow/v1"
+    assert [entity["id"] for entity in document["entities"]] == [
+        "provider",
+        "descriptor",
+        "agent",
+        "retained",
+    ]
+    assert [step["id"] for step in document["steps"]] == [
+        "channel-lost",
+        "rediscover",
+        "handshake",
+        "requalify",
+        "reconcile",
+    ]
+
+
+def test_recovery_documentation_points_to_composed_contracts() -> None:
+    page = (
+        _ROOT / "docs/v0.1.0/procedures/disconnection-recovery.md"
+    ).read_text(encoding="utf-8")
+
+    assert "src/stateforge_protocol/sfp/recovery.py" in page
+    assert "endpoint_discovery/v1/contract.py" in page
+    assert "bootstrap/v1/contract.py" in page
+    assert "operation_admission/v1/validation.py" in page
+    assert "operation_lifecycle/v1/validation.py" in page
+    assert "trigger_publication/v1/validation.py" in page
+    assert "There is no `disconnection_recovery.proto`" in page
+    assert "from stateforge_protocol.sfp.recovery import" in page

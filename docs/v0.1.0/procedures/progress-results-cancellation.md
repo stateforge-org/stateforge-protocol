@@ -1,373 +1,510 @@
 # Progress, results, and cancellation
 
-Operation Lifecycle defines observation and cooperative cancellation of an
-operation already admitted through
-[Operation Admission](operation-admission.md). It adds the versioned
-`stateforge.sfp.operation_lifecycle.v1.OperationLifecycleService` on the same
-negotiated local SFP channel:
+Operation Lifecycle observes and cooperatively cancels work already admitted
+through [Operation Admission](operation-admission.md). It streams complete
+current-state snapshots, retains one immutable terminal outcome, and keeps
+observer failures separate from business execution.
 
-- `WatchOperation`: unary request, server-streaming snapshots.
-- `CancelOperation`: unary request and response.
+Neither lifecycle RPC creates, restarts, or redispatches an operation. An
+unknown operation identity remains unknown.
 
-Neither RPC admits, restarts, or dispatches an operation. An unknown operation
-ID never creates work. This contract contains no scheduler, operation registry,
-Provider callback implementation, or Agent runtime.
+## Operation lifecycle at a glance
 
-[![Progress, Results, and Cancellation sequence diagram](../assets/diagrams/progress-results-and-cancellation.png)](../assets/diagrams/progress-results-and-cancellation.png)
+This example follows a database-maintenance operation from its first retained
+snapshot to a validated terminal result.
 
-The source `.proto`, packaged `operation_lifecycle.schema.json`, and this
-procedure page define the current contract. The original
-[SFP lifecycle specification](https://docs.google.com/document/d/1AEGKq15po5g_UYrv4qx1LzmNj1dKqA9J0eIIzTZVrlE/edit)
-provides historical procedure context. Provider Manifest Exchange and
-Operation Admission define the referenced declarations and records. Generic
-target and source-mode fields are not part of the current contracts.
+```stateforge-entity-flow
+source: operation-lifecycle-overview.yaml
+```
 
-## Request and response correlation
+## Interactive walkthrough
 
-Both requests reuse Operation Admission's `OperationSessionBinding`
-unchanged. All three binding fields must match a known active negotiated
-session. Session IDs are opaque
-1–255-code-point strings, never inferred from installation or generation.
-Each request supplies the existing `operation_id` and its exact
-`expected_request_fingerprint` from the admitted request. Empty/default
-identifiers are invalid. A lost admission reply is resolved through Operation
-Admission; Watch and Cancel cannot substitute for admission or authorize
-another attempt.
+Choose a scenario to examine successful execution, late attachment, reconnect
+gaps, failure, cancellation races, transport loss, and bounded backpressure.
 
-Watch additionally supplies `after_sequence`. Zero explicitly means a new
-attachment. A positive value is the last validated sequence from this exact
-operation record. Updating session binding after re-handshake does not change
-the operation ID, fingerprint, or cursor.
+```stateforge-procedure
+source: operation-lifecycle.yaml
+scenario: success
+```
 
-Every reply echoes the current instance, generation, and session. Every
-snapshot repeats the immutable Operation Admission record, versioned operation
-identifier, and the manifest revision pinned by the original invocation.
-The latter is **not necessarily the current manifest revision** after recovery.
-Consumers validate results against the original accepted operation's result
-schema and relied-on profiles. Providers retaining an operation must retain
-that validation context; losing it is state loss, not permission to substitute
-a newer schema or dispatch again.
+??? info "Operation lifecycle sequence"
 
-Before accepting any message, the Agent checks its current session against
-both the request and response, matches the operation ID and fingerprint, and
-compares the immutable admission record and declaration pin with its Operation
-Admission context. A recovered record may have an older
-`admitted_endpoint_generation`
-than the current envelope. A changed Provider installation is not recovery.
-An invalid/mismatched response is a local protocol failure, not a business
-outcome. Do not advance its cursor or issue another StartOperation.
+    ```mermaid
+    sequenceDiagram
+        participant Agent as StateForge Agent
+        participant Service as Lifecycle Service
+        participant Record as Operation Record
+        participant Runtime as Provider Implementation
 
-## States, transitions, and presence
+        Agent->>Service: WatchOperation(operation ID, fingerprint, cursor)
+        Service->>Record: Capture current snapshot + subscribe
+        Record-->>Service: Current complete snapshot
+        Service-->>Agent: Snapshot replay
 
-`OPERATION_STATE_UNSPECIFIED` is invalid. The shortened names below denote the
-wire enum values with the `OPERATION_STATE_` prefix.
+        Runtime->>Record: Commit RUNNING
+        Record-->>Agent: RUNNING snapshot
+        Runtime->>Record: Commit normalized progress
+        Record-->>Agent: RUNNING + progress
 
-| Current state | Permitted next states | Meaning |
-| --- | --- | --- |
-| Initial admission | ACCEPTED | Record exists atomically before author work. Sequence is 1. |
-| ACCEPTED | RUNNING, CANCELLATION_REQUESTED, FAILED | Execution starts, cancellation is requested, or execution cannot start. |
-| RUNNING | CANCELLATION_REQUESTED, SUCCEEDED, FAILED | Work is active until a request or terminal commit. |
-| CANCELLATION_REQUESTED | SUCCEEDED, FAILED, CANCELLED | Cancellation is pending; normal completion may still win. |
-| SUCCEEDED, FAILED, CANCELLED | None | Terminal snapshot is immutable. |
+        alt Execution succeeds
+            Runtime->>Service: Candidate result
+            Service->>Service: Validate pinned result schema
+            Service->>Record: Commit SUCCEEDED
+            Record-->>Agent: SUCCEEDED + result
+        else Execution fails
+            Runtime->>Service: Normalized failure
+            Service->>Record: Commit FAILED + effects
+            Record-->>Agent: FAILED + effects
+        else Agent requests cancellation
+            Agent->>Service: CancelOperation
+            Service->>Record: Commit CANCELLATION_REQUESTED
+            Service-->>Agent: REQUESTED + current snapshot
+            Service->>Runtime: Cooperative interruption
+            alt Stop confirmed
+                Runtime->>Record: Commit CANCELLED + effects
+                Record-->>Agent: CANCELLED + effects
+            else Completion wins
+                Runtime->>Record: Commit SUCCEEDED or FAILED
+                Record-->>Agent: Actual terminal outcome
+            end
+        end
 
-RUNNING and CANCELLATION_REQUESTED may commit progress without changing state.
-Replaying a snapshot or repeating Cancel is not a transition and allocates no
-sequence. ACCEPTED has no progress updates. A Watch can skip intermediate
-states through coalescing; the underlying committed transitions must still be
-legal. For example, an observer may see ACCEPTED followed by SUCCEEDED only
-with a sequence gap accounting for the intervening RUNNING transition.
+        Service-->>Agent: Close Watch with gRPC OK
+    ```
 
-| Snapshot state | Outcome presence | Progress presence |
-| --- | --- | --- |
-| ACCEPTED | All outcome arms absent; sequence 1, `updated_at = admitted_at` | Absent |
-| RUNNING, CANCELLATION_REQUESTED | All outcome arms absent | Optional last progress |
-| SUCCEEDED | Only `success`, containing required `result` object | Optional frozen last progress |
-| FAILED | Only `failure`, containing code, explanation, and effects | Optional frozen last progress |
-| CANCELLED | Only `cancellation`, containing effects | Optional frozen last progress |
+## Who implements Operation Lifecycle
 
-Non-ACCEPTED states have sequence at least 2; SUCCEEDED and CANCELLED need at
-least 3 because they require an intervening state. `oneof outcome` prevents
-multiple protobuf arms; the JSON schema additionally binds each arm to its
-state. An absent result differs from a present empty object. Even `{}` must
-satisfy the pinned result schema.
+The StateForge Agent opens `WatchOperation`, validates each snapshot against
+the current session and original admission context, advances its cursor only
+after validation, and calls `CancelOperation` when a higher layer requests
+cooperative cancellation.
 
-## Snapshot sequences and replay
+The Provider runtime owns the lifecycle service, operation record, sequence,
+observer limits, atomic cancellation decision, result validation, and terminal
+retention. A Provider integration reports progress and returns a result or
+normalized failure; it does not frame Watch responses or decide retry
+correlation.
 
-The Provider assigns a positive uint64 sequence to every committed state or
-normalized progress change for each operation. ACCEPTED starts at 1, each
-change increments exactly once, and each sequence denotes exactly one complete
-snapshot. Sequences do not reset on reconnect, session change, or verifiable
-persistent recovery. They are not global ordering across operations.
+The `stateforge-protocol` package supplies the messages, service identity,
+limits, structural schema, state-transition validators, exchange validators,
+and terminal-replay checks. It does not execute operations, retain runtime
+state, or force cancellation.
 
-`updated_at` records commit time, not delivery time. Sequence establishes
-order even if the wall clock moves backwards. A progress message records its
-own commit sequence and timestamp, plus a sanitized message and/or an optional
-finite percentage in [0, 100]. Absent percentage means unknown; zero means
-zero. Percentages may reset between phases; 100 is not a terminal outcome.
-Progress starts no earlier than sequence 3 (after entering RUNNING or
-CANCELLATION_REQUESTED), and cannot exceed the enclosing snapshot sequence. If equal,
-its timestamp equals the snapshot timestamp. In a terminal snapshot progress
-must have an earlier sequence, because terminal commit is a separate change.
-A state transition retains the latest progress unchanged.
+## Using the Python contract
 
-At attachment, atomically capture current state and subscribe to subsequent
-changes without a race window. Emit the captured **complete current snapshot
-immediately**, even if the cursor already equals it. Do not wait for another
-progress callback or replace this initial replay while delivering it. Only
-subsequent pending snapshots may be coalesced. When already terminal, emit that
-snapshot and close OK.
-This is a state-snapshot stream, not a historical event log: a cursor does not
-request all earlier progress events.
+Install the generated contracts and gRPC runtime:
 
-| Cursor / delivery | Required behavior |
+```console
+python -m pip install stateforge-protocol grpcio
+```
+
+### Contract sources
+
+| Source | Responsibility |
 | --- | --- |
-| Initial `after_sequence = 0` | Replay current snapshot; `updates_skipped = false`. No earlier history was requested. |
-| Positive cursor equals current | Replay that identical snapshot; flag false. |
-| Positive cursor below current | Replay current; flag true exactly when `current > cursor + 1`. |
-| Cursor greater than current | Reject with `OUT_OF_RANGE` / `CURSOR_AHEAD`; never silently reset it. |
-| Subsequent response | Sequence must strictly increase; flag true exactly when it exceeds the last delivered sequence by more than one. |
+| [`operation_lifecycle.proto`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/proto/stateforge_protocol/sfp/operation_lifecycle/v1/operation_lifecycle.proto) | Defines Watch, cancellation, snapshots, progress, terminal outcomes, effects, and structured errors. |
+| [`contract.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/operation_lifecycle/v1/contract.py) | Owns the canonical service identity and every lifecycle message, result, observer, and diagnostic limit. |
+| [`validation.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/operation_lifecycle/v1/validation.py) | Validates requests, responses, snapshots, exchanges, adjacent transitions, cancellation decisions, and terminal replay. |
+| [`operation_lifecycle.schema.json`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/operation_lifecycle/v1/operation_lifecycle.schema.json) | Defines complete lowerCamelCase ProtoJSON structures and state-dependent presence rules. |
 
-A gap explicitly means intermediate updates are unavailable. The snapshot
-remains sufficient for current state and outcome; the Agent replaces its view
-and advances its cursor after full validation. It must not invent missing
-progress or infer that no side effects occurred. Equal-sequence replays must
-have identical snapshot content, apart from envelope/session/gap fields.
-A later Cancel response can contain an older valid snapshot than a concurrent
-Watch has delivered; do not regress the cached sequence. Conflicting content
-at the same sequence or any mutation after terminal is a protocol violation.
+### Python API surface
 
-Never wrap uint64. At `2^64 - 3`, stop committing further progress to reserve
-the remaining two sequence values for cancellation-request and terminal state.
-Replays and repeated cancellation decisions never consume those values.
+| Purpose | Python API |
+| --- | --- |
+| Messages and enums | `operation_lifecycle_pb2` |
+| Asynchronous client stub | `operation_lifecycle_pb2_grpc.OperationLifecycleServiceStub` |
+| Server interface | `operation_lifecycle_pb2_grpc.OperationLifecycleServiceServicer` |
+| Server registration | `operation_lifecycle_pb2_grpc.add_OperationLifecycleServiceServicer_to_server` |
+| Service identity and limits | `stateforge_protocol.sfp.operation_lifecycle.v1.contract` |
+| Context-independent validation | `stateforge_protocol.sfp.operation_lifecycle.v1.validation` |
+
+Import the public contract through its versioned package:
+
+```python
+from stateforge_protocol.sfp.operation_lifecycle.v1 import (
+    operation_lifecycle_pb2,
+    operation_lifecycle_pb2_grpc,
+    validation,
+)
+
+validation.validate_watch_operation_request(request)
+stub = operation_lifecycle_pb2_grpc.OperationLifecycleServiceStub(channel)
+
+previous_sequence = None
+async for response in stub.WatchOperation(request, timeout=30.0):
+    validation.validate_watch_exchange(
+        request,
+        response,
+        previous_sequence=previous_sequence,
+    )
+    previous_sequence = response.snapshot.sequence
+```
+
+Generated protobuf classes enforce wire types, not the complete StateForge
+contract. Both peers must enforce `contract.py` byte limits and apply the live
+session, retained-record, pinned-schema, persistence, and cancellation checks
+owned by their runtime.
+
+## Wire contract
+
+Operation Lifecycle exposes two methods on the active SFP channel:
+
+| Method | Shape | Purpose |
+| --- | --- | --- |
+| `/stateforge.sfp.operation_lifecycle.v1.OperationLifecycleService/WatchOperation` | Unary request, server stream | Immediately replay current state, then deliver newer snapshots until a terminal outcome or stream failure. |
+| `/stateforge.sfp.operation_lifecycle.v1.OperationLifecycleService/CancelOperation` | Unary request and response | Make one idempotent, cooperative cancellation decision against current operation state. |
+
+Cancelling a Watch call only detaches that observer. Cancelling the business
+operation requires `CancelOperation`.
+
+## Identifying the admitted operation
+
+Both requests carry the current session binding, the existing operation ID,
+and the exact request fingerprint returned by Operation Admission. Watch also
+carries the last validated sequence.
+
+=== "Field reference"
+
+    | Field | Meaning |
+    | --- | --- |
+    | `session_binding` | Current Provider installation, endpoint generation, and negotiated session. It may change after reconnection. |
+    | `operation_id` | Immutable Agent-assigned identity of the admitted operation. |
+    | `expected_request_fingerprint` | Exact fingerprint of the admitted invocation. It prevents an operation ID from being paired with different content. |
+    | `after_sequence` | Watch cursor. Zero means first attachment; a positive value is the last fully validated snapshot sequence. |
+
+=== "Watch request"
+
+    ``` { .json .annotate title="WatchOperationRequest" }
+    {
+      "sessionBinding": {
+        "expectedProviderInstanceId": "11111111-1111-4111-8111-111111111111 (1)",
+        "expectedEndpointGeneration": "42",
+        "expectedSessionId": "session-admission-42"
+      },
+      "operationId": "22222222-2222-4222-8222-222222222222 (2)",
+      "expectedRequestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df (3)",
+      "afterSequence": "0 (4)"
+    }
+    ```
+
+    1.  Selects one active Provider session.
+    2.  Selects the retained operation record.
+    3.  Proves which immutable invocation the Agent expects.
+    4.  Requests an initial current-state replay.
+
+=== "Cancel request"
+
+    ``` { .json .annotate title="CancelOperationRequest" }
+    {
+      "sessionBinding": {
+        "expectedProviderInstanceId": "11111111-1111-4111-8111-111111111111",
+        "expectedEndpointGeneration": "42",
+        "expectedSessionId": "session-admission-42"
+      },
+      "operationId": "22222222-2222-4222-8222-222222222222",
+      "expectedRequestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df"
+    }
+    ```
+
+A new session binding never changes the operation identity, fingerprint,
+snapshot sequence, or declaration revision. A changed Provider installation
+is not recovery.
+
+## Snapshot state machine
+
+Every Watch response contains a complete `OperationSnapshot`. Sequence starts
+at one and advances once for each committed state or progress change.
+
+```mermaid
+flowchart LR
+    START(( )) --> ACCEPTED[ACCEPTED]
+    ACCEPTED -->|execution starts| RUNNING[RUNNING]
+    ACCEPTED -->|cancellation accepted| CANCELLING[CANCELLATION_REQUESTED]
+    RUNNING -->|cancellation accepted| CANCELLING
+
+    ACCEPTED -->|startup fails| OUTCOME{terminal commit}
+    RUNNING -->|execution ends| OUTCOME
+    CANCELLING -->|execution ends| OUTCOME
+
+    OUTCOME -->|valid result| SUCCEEDED[SUCCEEDED]
+    OUTCOME -->|failure| FAILED[FAILED]
+    OUTCOME -->|stop confirmed| CANCELLED[CANCELLED]
+
+    classDef active fill:#172038,stroke:#5680ff,color:#f5f7ff
+    classDef decision fill:#222832,stroke:#9aa4b2,color:#f5f7ff
+    classDef terminal fill:#112b24,stroke:#38b984,color:#f5f7ff
+    class ACCEPTED,RUNNING,CANCELLING active
+    class OUTCOME decision
+    class SUCCEEDED,FAILED,CANCELLED terminal
+```
+
+Progress does not add another state. A progress commit keeps `RUNNING` or
+`CANCELLATION_REQUESTED` and advances the snapshot sequence.
+
+| State | Outcome | Progress |
+| --- | --- | --- |
+| `ACCEPTED` | Absent | Absent |
+| `RUNNING` | Absent | Optional latest progress |
+| `CANCELLATION_REQUESTED` | Absent | Optional latest progress |
+| `SUCCEEDED` | Required validated `success.result` | Optional frozen latest progress |
+| `FAILED` | Required `failure` with code, explanation, and effects | Optional frozen latest progress |
+| `CANCELLED` | Required `cancellation.effects` | Optional frozen latest progress |
+
+Terminal snapshots never change. Replaying a snapshot or repeating a
+cancellation request consumes no sequence.
+
+## Watching current state
+
+At attachment, the Provider atomically captures current state and subscribes
+the observer before sending the first response. This closes the gap between
+reading state and listening for changes.
+
+| Cursor and delivery | Required behavior |
+| --- | --- |
+| `after_sequence = 0` | Replay current state with `updates_skipped = false`; no history was requested. |
+| Positive cursor equals current | Replay the identical current snapshot with the flag false. |
+| Positive cursor below current | Replay current state; set the flag exactly when more than one sequence was skipped. |
+| Cursor greater than current | Reject with `OUT_OF_RANGE` / `CURSOR_AHEAD`. |
+| Later response | Sequence strictly increases; the flag reflects a gap from the last delivered sequence. |
+
+`WatchOperation` is a current-state stream, not an event log. A gap means
+intermediate updates are unavailable, but the complete snapshot still defines
+current state and any terminal outcome.
+
+=== "Response fields"
+
+    | Field | Meaning |
+    | --- | --- |
+    | `provider_instance_id`, `endpoint_generation`, `session_id` | Current response fences validated against the active call. |
+    | `snapshot.admission_record` | Immutable record returned by Operation Admission. |
+    | `snapshot.operation_identifier` | Exact operation declaration selected by the original invocation. |
+    | `snapshot.manifest_revision` | Original pinned manifest revision, not necessarily the Provider's current revision. |
+    | `snapshot.sequence` | Per-operation committed ordering. It never resets on reconnect. |
+    | `snapshot.updated_at` | Commit time. Sequence, not wall-clock time, determines order. |
+    | `updates_skipped` | Whether this delivery crossed unavailable intermediate sequences after a positive cursor. |
+
+=== "Terminal response"
+
+    ``` { .json .annotate title="WatchOperationResponse · terminal" }
+    {
+      "providerInstanceId": "11111111-1111-4111-8111-111111111111",
+      "endpointGeneration": "42",
+      "sessionId": "session-admission-42",
+      "snapshot": {
+        "admissionRecord": {
+          "operationId": "22222222-2222-4222-8222-222222222222",
+          "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+          "admittedAt": "2026-09-19T12:00:00Z",
+          "recordExpiresAt": "2026-09-20T12:00:00Z",
+          "admittedEndpointGeneration": "42"
+        },
+        "operationIdentifier": "example.database/maintenance.compact@1",
+        "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (1)",
+        "sequence": "5",
+        "state": "OPERATION_STATE_SUCCEEDED",
+        "updatedAt": "2026-09-19T12:00:04Z",
+        "success": {
+          "result": {
+            "reclaimedBytes": 4096
+          }
+        },
+        "progress": {
+          "sequence": "4",
+          "updatedAt": "2026-09-19T12:00:03Z",
+          "message": "Finishing maintenance.",
+          "percentage": 100
+        }
+      },
+      "updatesSkipped": true (2)
+    }
+    ```
+
+    1.  Pins result validation to the original manifest declaration.
+    2.  Reports that this response crossed unavailable intermediate sequences.
+
+Once a valid terminal snapshot is delivered, the Provider closes that Watch
+stream with gRPC `OK`. End-of-stream `OK` without terminal evidence is a
+protocol violation.
+
+### Progress
+
+| Rule | Meaning |
+| --- | --- |
+| Complete snapshot | Progress is retained inside the operation snapshot, never sent as an uncorrelated delta. |
+| Optional percentage | Absence means unknown; zero means zero; 100 does not mean `SUCCEEDED`. |
+| Phase changes | Percentage need not remain monotonic across different operation phases. |
+| Terminal snapshot | May retain earlier progress, but terminal commit uses a newer sequence. |
+| Safe diagnostics | Messages are bounded and sanitized; they are not machine-readable state. |
+
+## Results, failures, and effects
+
+Before committing `SUCCEEDED`, the Provider validates the complete result
+against the accepted operation's pinned `result_schema`. Invalid or oversized
+author output becomes a sanitized `FAILED` snapshot with code
+`stateforge.operation.invalid_result`; invalid data is never returned.
+
+| Terminal state | Required evidence |
+| --- | --- |
+| `SUCCEEDED` | A present result object satisfying the pinned schema. Even `{}` must be valid for that schema. |
+| `FAILED` | Stable dotted code, sanitized explanation, and explicit side-effect and cleanup states. |
+| `CANCELLED` | Positive confirmation that execution stopped, plus explicit side-effect and cleanup states. |
+
+Effects distinguish what remains from what was cleaned up:
+
+| Field | Values |
+| --- | --- |
+| `side_effects` | `NONE`, `PRESENT`, or `UNKNOWN` |
+| `cleanup` | `NOT_REQUIRED`, `COMPLETED`, `INCOMPLETE`, or `UNKNOWN` |
+| `explanation` | Bounded safe context about relevant resources or uncertainty |
+
+Failure and cancellation never imply rollback. When facts are unavailable,
+the Provider reports `UNKNOWN` rather than using an empty/default value to
+suggest successful cleanup.
+
+## Cooperative cancellation
+
+`CancelOperation` makes one atomic decision against current operation state.
+All four dispositions are successful gRPC responses.
+
+| Current condition | Disposition | State change and signal |
+| --- | --- | --- |
+| Already terminal | `ALREADY_TERMINAL` | Return the immutable terminal snapshot; no signal. |
+| Cancellation already requested | `ALREADY_REQUESTED` | Return current state; no new sequence or signal. |
+| Interruption unsupported | `UNSUPPORTED` | Keep current state; no signal. |
+| Active and interruption supported | `REQUESTED` | Commit `CANCELLATION_REQUESTED`, then arrange one cooperative signal. |
+
+=== "Disposition reference"
+
+    `REQUESTED` means the Provider accepted a cancellation request. It does
+    **not** mean execution stopped. `CANCELLED` is committed only after positive
+    confirmation that execution stopped or was prevented from starting.
+
+=== "Requested response"
+
+    ``` { .json .annotate title="CancelOperationResponse · requested" }
+    {
+      "providerInstanceId": "11111111-1111-4111-8111-111111111111",
+      "endpointGeneration": "42",
+      "sessionId": "session-admission-42",
+      "disposition": "CANCELLATION_DISPOSITION_REQUESTED (1)",
+      "snapshot": {
+        "admissionRecord": {
+          "operationId": "22222222-2222-4222-8222-222222222222",
+          "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+          "admittedAt": "2026-09-19T12:00:00Z",
+          "recordExpiresAt": "2026-09-20T12:00:00Z",
+          "admittedEndpointGeneration": "42"
+        },
+        "operationIdentifier": "example.database/maintenance.compact@1",
+        "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sequence": "5",
+        "state": "OPERATION_STATE_CANCELLATION_REQUESTED (2)",
+        "updatedAt": "2026-09-19T12:00:04Z",
+        "progress": {
+          "sequence": "4",
+          "updatedAt": "2026-09-19T12:00:03Z",
+          "message": "Finishing maintenance.",
+          "percentage": 100
+        }
+      }
+    }
+    ```
+
+    1.  Confirms the atomic cancellation decision.
+    2.  Shows that cancellation is pending, not terminal.
+
+Cancellation is operation-scoped. It never kills the shared Provider process,
+closes unrelated streams, or cancels unrelated operations. The first terminal
+commit wins: success or failure may still beat cooperative interruption after
+the request is accepted.
 
 ## Retention and backpressure
 
-Retain the current state, latest progress, and immutable terminal snapshot
-with the Operation Admission record. No full progress history is required. A
-terminal result must never be discarded while its admission record is retained.
-Admission identity, fingerprint, admission/expiry times, and admitted generation
-stay byte-for-byte unchanged in their canonical ProtoJSON projection.
+The Provider retains current state, latest progress, and an immutable terminal
+snapshot with the admission record. Full progress history is not required.
 
-The Operation Admission `record_expires_at` boundary must not be shortened.
-Active operations retain their records while they can still execute, even past
-that boundary; Operation Admission's expiry is not an instruction to discard
-live work. After terminal commit and expiry, the Provider may evict the record
-according to its documented
-bounded retention policy. This does not extend or rewrite the immutable
-Operation Admission expiry field. Already-attached observers retain their
-pending terminal snapshot
-until delivery or bounded stream failure; a later reconnect may find expiry.
-An implementation must bound admissions when retaining active records would
-exceed capacity, rather than deleting live records to admit more work.
+For each observer, the Provider permits one response in flight and one pending
+snapshot. A newer snapshot may replace pending intermediate state; a terminal
+snapshot cannot be replaced. This lets operation execution continue even when
+an observer is slow.
 
-For each observer, retain at most one pending snapshot in addition to one
-in-flight response. A newer snapshot may replace pending intermediate state
-or progress. A terminal snapshot replaces pending nonterminal data and cannot
-be replaced by later progress. Send exactly one terminal snapshot per stream,
-then close with gRPC OK. Reattachment can replay that same terminal snapshot.
-
-Allow at most 16 observers per operation and impose a finite Provider-wide
-observer limit. Implementations may use lower documented limits. When a
-response cannot make delivery progress for 30 seconds (or a shorter documented
-local bound), terminate that observer with `RESOURCE_EXHAUSTED` /
-`SLOW_OBSERVER`. Bounded backpressure must not block operation completion or
-unrelated streams. Framework/transport buffers must also be bounded; an
-application queue limit alone is insufficient. A slow observer may fail to
-receive a result, but cannot cause the retained terminal result to be dropped.
-
-## Terminal results and failures
-
-Before atomically recording SUCCEEDED, validate the complete typed result
-against the **pinned Provider Manifest result schema**, its JSON/resource
-bounds, and any
-relied-on profile requirements. Do not insert schema defaults or infer backup
-variants from a name. Invalid author results become FAILED with code
-`stateforge.operation.invalid_result`; never send the invalid payload, schema
-validation values, raw exception, or traceback. A result too large for the
-contract is also an invalid result. Keep a small valid failure fallback so
-invalid result serialization cannot prevent terminal reporting.
-
-Failure codes are stable dotted identifiers. Generic runtime codes are:
-
-| Code | Meaning |
+| Boundary | Required behavior |
 | --- | --- |
-| `stateforge.operation.provider_error` | An author/vendor failure was normalized and sanitized. |
-| `stateforge.operation.invalid_result` | Author output failed the pinned contract or result limits. |
-| `stateforge.operation.execution_deadline_exceeded` | The immutable business deadline expired and execution has ended. |
+| Observer count | At most 16 per operation; lower finite local limits are allowed. |
+| Stalled delivery | After at most 30 seconds, terminate that observer with `RESOURCE_EXHAUSTED` / `SLOW_OBSERVER`. |
+| Active operation | Retain its record while it can still create effects, even beyond the advertised admission expiry. |
+| Terminal operation | Retain the terminal result while its admission record remains retained. |
 
-Providers may use namespaced domain codes for known failures; clients must
-preserve unknown codes as failures without guessing recovery actions. Failure
-explanations are sanitized and bounded. `OperationEffects` requires explicit
-remaining-side-effect and cleanup states plus a safe explanation of relevant
-partial changes/resources. Use UNKNOWN when facts are unavailable. Never use
-false/empty defaults to imply successful cleanup. This metadata is evidence,
-not an instruction to delete a resource or a guarantee that retry is safe.
+A failed observer never deletes the terminal result or cancels execution.
 
-Failure/cleanup reports, progress, and results must exclude credentials and
-unnecessary customer data. Runtime sanitization is mandatory; protobuf and
-JSON Schema cannot prove that a string is safe. Cleanup may be incomplete or
-unknown after execution has ended. External side effects may remain even when
-local execution failed; report uncertainty rather than promising rollback.
+## Transport failures and recovery
 
-The business deadline remains the original Operation Admission execution
-deadline. On expiry,
-prevent not-yet-started work or request cooperative interruption where
-supported. Do not label still-running work terminal just because time passed.
-Once execution has ended, record the appropriate terminal outcome atomically;
-a deadline failure uses the code above. No forced process kill, new dispatch,
-or automatic business retry is implied. If an external action's state cannot
-be established, report uncertainty; cancellation completion needs positive
-confirmation that the affected execution stopped.
+Non-OK gRPC status describes the lifecycle call or stream, not the business
+outcome. A broken Watch, client deadline, or channel loss does not cancel the
+operation.
 
-## Cancellation and races
-
-Cancel is independent of Watch. After structural/session/record/fingerprint
-checks, decide against the current operation state atomically:
-
-| Condition | Disposition | Snapshot and effect |
-| --- | --- | --- |
-| Already terminal | ALREADY_TERMINAL | Return the same immutable terminal snapshot; no signal. |
-| Already CANCELLATION_REQUESTED | ALREADY_REQUESTED | Return current snapshot; do not signal or increment again. |
-| ACCEPTED/RUNNING, interruption unsupported | UNSUPPORTED | State unchanged, no signal, operation continues. |
-| ACCEPTED/RUNNING, cooperative interruption supported | REQUESTED | Commit CANCELLATION_REQUESTED and arrange cooperative interruption; retain the pending request until execution ends. |
-
-All four dispositions are gRPC OK. Cancellation support is an operation/runtime
-fact; Operation Lifecycle adds no execution or cancellation-capability fields
-to the Provider Manifest.
-A lost Cancel reply is safely retried with the same operation/fingerprint and
-a current session. No separate cancellation identity is needed because its
-only effect is a monotonic request on the existing operation record.
-
-Cancellation is scoped to the identified operation. It must not terminate the
-shared Provider process or channel, cancel unrelated operations, or close
-unrelated streams. Cancelling a Watch only detaches that observer. An operation
-which cannot be safely interrupted in isolation reports UNSUPPORTED; killing
-the Provider is not a cancellation fallback.
-
-CANCELLED is committed only after confirmation that execution stopped or was
-prevented from starting, with its cleanup report. For queued cancellation,
-ensure author work cannot subsequently begin before confirming cancellation.
-A failed attempt to interrupt does not imply CANCELLED; the operation remains
-CANCELLATION_REQUESTED until actual success, failure, or confirmed stop.
-
-The first terminal commit wins. If success or failure wins before Cancel's
-atomic decision, return ALREADY_TERMINAL. If Cancel commits its request first,
-normal success/failure may still commit before interruption completes. Later
-callbacks cannot overwrite any terminal snapshot, mutate its cleanup report,
-or publish more progress. Losing terminal proposals are discarded and any
-runtime cleanup obligations remain local. No terminal state is rewritten to
-make a cancellation request appear successful.
-
-## Wire failures, validation order, and recovery
-
-Check byte limits before decoding, then message structure and bounds, current
-session, retained record, fingerprint, and finally Watch cursor or cancellation
-support. This ordering does not inspect or execute business payloads. When the
-record has been evicted with a tombstone, report expiry; absent evidence cannot
-distinguish never-admitted from lost state. If admission evidence exists but
-lifecycle/schema context cannot be recovered, report state unavailable.
-
-Use non-OK gRPC statuses with `OperationLifecycleErrorDetail` when decoding and
-transport permit structured details. Pack it in a `google.protobuf.Any` with
-type URL
-`type.googleapis.com/stateforge.sfp.operation_lifecycle.v1.OperationLifecycleErrorDetail`
-inside `google.rpc.Status.details`, carried by the standard
-`grpc-status-details-bin` trailing metadata. Its numeric status code must match
-the RPC status. Consumers ignore unknown detail types and handle absent details
-as transport uncertainty, never as permission to dispatch. This specifies the
-new service's error transport without changing Operation Admission messages.
-Never put a
-business FAILED outcome in this error channel.
-
-| Condition | gRPC status | Lifecycle reason | Recovery |
+| Condition | gRPC status | Structured reason | Recovery |
 | --- | --- | --- | --- |
-| Malformed request/defaults/bounds | INVALID_ARGUMENT | INVALID_REQUEST | Correct structure; preserve operation identity/content. |
-| Inactive or mismatched session/endpoint | FAILED_PRECONDITION | SESSION_PRECONDITION_FAILED | Rediscover/re-handshake before retry. |
-| Unknown or lost admission record | FAILED_PRECONDITION | OPERATION_RECORD_UNAVAILABLE | Outcome indeterminate; never automatically redispatch. |
-| Expiry proven by retained tombstone | FAILED_PRECONDITION | OPERATION_RECORD_EXPIRED | Outcome indeterminate; expiry does not authorize retrying business work. |
-| Admission exists, lifecycle evidence unavailable | FAILED_PRECONDITION | OPERATION_STATE_UNAVAILABLE | Outcome indeterminate; do not fabricate a terminal state. |
-| Fingerprint disagrees with retained record | FAILED_PRECONDITION | FINGERPRINT_MISMATCH | Reject mismatched context; no state change. |
-| Cursor ahead of retained sequence | OUT_OF_RANGE | CURSOR_AHEAD | Verify saved identity/cursor and recovery integrity; never reset automatically. |
-| Too many observers | RESOURCE_EXHAUSTED | OBSERVER_CAPACITY_EXHAUSTED | Bounded retry after capacity recovers. |
-| Observer exceeds delivery bound | RESOURCE_EXHAUSTED | SLOW_OBSERVER | Reattach with last validated cursor. |
-| Provider temporarily unavailable | UNAVAILABLE | PROVIDER_UNAVAILABLE | Reconnect/revalidate, then bounded retry. |
-| Unexpected boundary failure | INTERNAL | Detail optional | Revalidate; no business conclusion. |
-| Client call deadline or stream cancellation | DEADLINE_EXCEEDED / CANCELLED | Detail optional | Operation continues unless explicitly cancelled separately. |
-| Transport/message byte limit | RESOURCE_EXHAUSTED | Detail optional | Respect message bounds; do not retry unchanged oversized content. |
-| Service/package unsupported by peer | UNIMPLEMENTED | Detail optional | Mark this feature incompatible; never fall back to StartOperation. |
+| Invalid shape or bounds | `INVALID_ARGUMENT` | `INVALID_REQUEST` | Correct the request without changing operation identity. |
+| Stale session or endpoint | `FAILED_PRECONDITION` | `SESSION_PRECONDITION_FAILED` | Rediscover and re-handshake. |
+| Record unavailable | `FAILED_PRECONDITION` | `OPERATION_RECORD_UNAVAILABLE` | Preserve an indeterminate outcome; never redispatch automatically. |
+| Record expiry proven | `FAILED_PRECONDITION` | `OPERATION_RECORD_EXPIRED` | Expiry does not authorize new business work. |
+| Lifecycle state unavailable | `FAILED_PRECONDITION` | `OPERATION_STATE_UNAVAILABLE` | Do not fabricate a terminal state. |
+| Fingerprint mismatch | `FAILED_PRECONDITION` | `FINGERPRINT_MISMATCH` | Reject the mismatched context. |
+| Cursor ahead | `OUT_OF_RANGE` | `CURSOR_AHEAD` | Verify retained cursor and recovery integrity. |
+| Observer capacity exhausted | `RESOURCE_EXHAUSTED` | `OBSERVER_CAPACITY_EXHAUSTED` | Retry after capacity recovers. |
+| Observer stalled | `RESOURCE_EXHAUSTED` | `SLOW_OBSERVER` | Reattach with the last validated cursor. |
+| Provider unavailable | `UNAVAILABLE` | `PROVIDER_UNAVAILABLE` | Reconnect, revalidate, then retry with bounded backoff. |
 
-A Watch closes OK only after sending its terminal snapshot. End-of-stream OK
-without terminal is a protocol violation. A broken stream, expired RPC, Agent
-restart, or lost channel does not cancel business execution. A terminal
-snapshot received and validated before a transport failure remains evidence;
-a transport error cannot rewrite it. With no terminal evidence, reconnect
-using a finite deadline, bounded backoff, new session binding, and last
-validated cursor. Do not treat a transport status as rollback or success.
+??? example "Example structured lifecycle error"
 
-The baseline registry may be in memory. Recovery in a new Provider generation
-requires verifiably retained admission, schema context, sequence, state, and
-terminal result. Losing those is indeterminate even with the same stable
-installation UUID. Providers may opt into persistence; Operation Lifecycle
-does not mandate it.
+    ``` { .json .annotate title="OperationLifecycleErrorDetail" }
+    {
+      "operationId": "22222222-2222-4222-8222-222222222222 (1)",
+      "reason": "LIFECYCLE_ERROR_REASON_CURSOR_AHEAD (2)",
+      "explanation": "The requested cursor is newer than the retained snapshot. (3)"
+    }
+    ```
 
-## Structural limits and compatibility
+    1.  Correlates the failed lifecycle request.
+    2.  Supplies the stable machine-readable reason paired with `OUT_OF_RANGE`.
+    3.  Adds bounded, sanitized context only.
 
-| Item | Maximum |
+Structured details travel in `google.rpc.Status.details` as a
+`google.protobuf.Any`. Business `FAILED` outcomes remain inside operation
+snapshots and never use this error channel.
+
+After a stream failure, the Agent reconnects with a finite deadline, bounded
+backoff, current session binding, and the last fully validated cursor. It never
+uses `StartOperation` as a Watch fallback.
+
+## Structural limits
+
+| Limit | Maximum |
 | --- | ---: |
-| Serialized Watch/Cancel request | 8 KiB |
-| Serialized Watch/Cancel response | 8 MiB |
+| Serialized Watch or Cancel request | 8 KiB |
+| Serialized Watch or Cancel response | 8 MiB |
 | Serialized complete snapshot | 7 MiB |
 | Serialized structured error detail | 4 KiB |
-| Progress/failure/effects explanation | 1,024 Unicode code points each |
 | Result JSON nesting | 64 containers |
-| Entries per result object/array | 256 |
-| Result property name / string | 128 / 65,536 Unicode code points |
-| Pending snapshots / observer | 1, plus 1 in flight |
-| Observers / operation | 16 (lower finite local limits allowed) |
-| Stalled delivery | 30 seconds (shorter local bounds allowed) |
+| Entries per result object or array | 256 |
+| Result property name | 128 Unicode code points |
+| Result string | 65,536 Unicode code points |
+| Progress, failure, or effects explanation | 1,024 Unicode code points |
+| Pending snapshots per observer | 1, plus 1 response in flight |
+| Observers per operation | 16 |
+| Stalled delivery | 30 seconds |
 
-Use complete lowerCamelCase ProtoJSON with all non-presence defaults emitted.
-Optional `percentage` and outcome/message fields retain true presence. Unknown
-properties, enum values, wrong outcome arms, and UNSPECIFIED values are invalid.
-The packaged schema is self-contained for offline validation; its embedded
-Operation Admission definitions are tested against the authoritative Operation
-Admission schema. JSON Schema checks
-structure, not serialized sizes, recursive depth, finite interoperable JSON,
-uint64 upper bounds, valid calendar timestamps, sessions, transitions, cursor
-comparisons, result-schema conformance, or semantic truth. Consumers must check
-all of these. Protobuf parsing itself does not validate the contract.
+Consumers enforce serialized byte size, recursive depth, finite JSON values,
+timestamp validity, live-session membership, cursor relationships, pinned
+result-schema conformance, and semantic truth in addition to the packaged JSON
+Schema.
 
-The Operation Lifecycle package and its two methods are additive to the
-existing services. Provider Manifest shape, schema version, profile semantics,
-and revision vectors and Operation Admission invocation fingerprints and
-admission records remain unchanged. Supporting an SFP
-wire version alone does not mean an older peer implements this service; handle
-UNIMPLEMENTED explicitly. Future incompatible lifecycle changes need a new
-versioned package. Field numbers are scoped to these messages; none are
-repurposed from an existing message.
+## Responsibility boundary
 
-Fixtures cover legal and illegal transitions, immediate/late Watch, coalesced
-gaps, reconnect, terminal replay, invalid results, partial cleanup, cancellation
-races, unsupported cancellation, unknown records, and stream termination.
-They define consumer obligations without implementing a runtime task manager,
-full event log, process-kill cancellation, or Control Plane response policy.
-
-## Design rationale
-
-Complete snapshots cost more bytes per update than deltas, but let a late or
-slow observer recover without unlimited history or reconstructing missed events.
-The gap flag exposes this loss explicitly. Keeping progress separate from its
-enclosing snapshot sequence distinguishes an old retained progress report from
-a new state transition.
-
-One pending update per observer, the 16-observer ceiling, and the 30-second
-stall bound are conservative finite limits for this contract. Lower local
-limits remain possible; these limits do not prescribe storage or scheduling.
-The result JSON limits reuse Operation Admission's bounded JSON model. The
-smaller snapshot limit leaves room inside the response envelope and permits a
-small failure fallback when author output is oversized.
-
-The Operation Admission record expiry remains immutable. Retaining active
-records past expiry avoids forgetting work that can still cause effects, at the
-cost of admission capacity.
-Persistence is optional; state loss remains explicit uncertainty.
+This repository owns the lifecycle wire contract, generated bindings,
+structural schema, state transitions, error reasons, resource limits, and
+conformance vectors. Provider runtimes own operation records, execution,
+observer delivery, result validation, cancellation support, and terminal
+retention. Agent runtimes own request construction, cursor persistence,
+snapshot validation, and recovery after transport loss.

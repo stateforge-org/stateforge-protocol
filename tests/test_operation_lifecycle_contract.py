@@ -8,9 +8,11 @@ from pathlib import Path
 
 import grpc
 import pytest
+import yaml
 from google.protobuf import json_format
 from google.protobuf.any_pb2 import Any
 from jsonschema import Draft202012Validator
+from tests.documentation import annotated_json_example
 
 from stateforge_protocol.sfp.operation_admission.v1 import (
     operation_admission_pb2 as admission_pb,
@@ -41,6 +43,7 @@ from stateforge_protocol.sfp.operation_lifecycle.v1.contract import (
     SERVICE_NAME,
 )
 
+_ROOT = Path(__file__).resolve().parents[1]
 _FIXTURES = Path(__file__).parent / "fixtures" / "operation_lifecycle"
 _SCHEMA = json.loads(
     files("stateforge_protocol.sfp.operation_lifecycle.v1")
@@ -901,3 +904,151 @@ def test_oversized_result_requires_aggregate_serialized_size_check() -> None:
         _SNAPSHOTS["invalid-result"], pb.OperationSnapshot()
     )
     assert fallback.ByteSize() < MAX_SNAPSHOT_BYTES
+
+
+def test_operation_lifecycle_walkthrough_covers_documented_scenarios() -> None:
+    declaration = yaml.safe_load(
+        (
+            _ROOT
+            / "docs"
+            / "v0.1.0"
+            / "procedures"
+            / "operation-lifecycle.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    expected_markers = {
+        "success": "SUCCEEDED",
+        "late-attachment": "zero cursor never reports a historical gap",
+        "reconnect-gap": "updates_skipped true",
+        "operation-failed": "FAILED",
+        "invalid-result": "stateforge.operation.invalid_result",
+        "cancellation-stops": "CANCELLED",
+        "cancellation-unsupported": "UNSUPPORTED",
+        "cancellation-race": "First terminal commit wins",
+        "repeated-cancellation": "ALREADY_REQUESTED",
+        "transport-disconnect": "Transport status is not a business outcome",
+        "slow-observer": "SLOW_OBSERVER",
+    }
+
+    assert set(declaration["scenarios"]) == set(expected_markers)
+    for scenario_id, marker in expected_markers.items():
+        serialized = json.dumps(declaration["scenarios"][scenario_id])
+        assert marker in serialized
+
+
+def test_operation_lifecycle_overview_tracks_terminal_evidence() -> None:
+    declaration = yaml.safe_load(
+        (
+            _ROOT
+            / "docs"
+            / "v0.1.0"
+            / "procedures"
+            / "operation-lifecycle-overview.yaml"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert declaration["schema"] == "stateforge.docs/entity-flow/v1"
+    assert [entity["id"] for entity in declaration["entities"]] == [
+        "agent",
+        "provider",
+        "record",
+        "database",
+    ]
+    assert [step["id"] for step in declaration["steps"]] == [
+        "watch-current-state",
+        "execution-starts",
+        "progress-committed",
+        "result-validated",
+        "terminal-delivered",
+    ]
+    assert declaration["steps"][3]["responsibility"]["entities"] == [
+        "provider",
+        "record",
+    ]
+    assert declaration["steps"][-1]["transitions"] == [
+        {
+            "source": "record",
+            "target": "agent",
+            "label": "SUCCEEDED · result",
+            "tone": "success",
+        }
+    ]
+
+
+def test_operation_lifecycle_documentation_identifies_contract_ownership() -> (
+    None
+):
+    documentation = (
+        _ROOT
+        / "docs"
+        / "v0.1.0"
+        / "procedures"
+        / "progress-results-cancellation.md"
+    ).read_text(encoding="utf-8")
+
+    assert "operation_lifecycle.proto" in documentation
+    assert "operation_lifecycle.schema.json" in documentation
+    assert "operation_lifecycle/v1/contract.py" in documentation
+    assert "operation_lifecycle/v1/validation.py" in documentation
+    assert "| Serialized Watch or Cancel request | 8 KiB |" in documentation
+    assert "| Serialized Watch or Cancel response | 8 MiB |" in documentation
+    assert "| Serialized complete snapshot | 7 MiB |" in documentation
+    assert "| Serialized structured error detail | 4 KiB |" in documentation
+
+
+def test_documented_operation_lifecycle_protojson_matches_contract() -> None:
+    documentation = (
+        _ROOT
+        / "docs"
+        / "v0.1.0"
+        / "procedures"
+        / "progress-results-cancellation.md"
+    ).read_text(encoding="utf-8")
+    watch_data = annotated_json_example(
+        documentation,
+        title="WatchOperationRequest",
+    )
+    cancel_data = annotated_json_example(
+        documentation,
+        title="CancelOperationRequest",
+    )
+    terminal_data = annotated_json_example(
+        documentation,
+        title="WatchOperationResponse · terminal",
+    )
+    requested_data = annotated_json_example(
+        documentation,
+        title="CancelOperationResponse · requested",
+    )
+    error_data = annotated_json_example(
+        documentation,
+        title="OperationLifecycleErrorDetail",
+    )
+
+    assert watch_data == _read("watch-request.json")
+    assert cancel_data == _read("cancel-request.json")
+    assert terminal_data == _read("watch-terminal.json")
+    assert requested_data == _read("cancel-requested.json")
+
+    watch = json_format.ParseDict(watch_data, pb.WatchOperationRequest())
+    cancel = json_format.ParseDict(cancel_data, pb.CancelOperationRequest())
+    terminal = json_format.ParseDict(
+        terminal_data,
+        pb.WatchOperationResponse(),
+    )
+    requested = json_format.ParseDict(
+        requested_data,
+        pb.CancelOperationResponse(),
+    )
+    error = json_format.ParseDict(
+        error_data,
+        pb.OperationLifecycleErrorDetail(),
+    )
+
+    lifecycle_validation.validate_watch_operation_request(watch)
+    lifecycle_validation.validate_watch_operation_response(terminal)
+    resumed_watch = copy.deepcopy(watch)
+    resumed_watch.after_sequence = 2
+    lifecycle_validation.validate_watch_exchange(resumed_watch, terminal)
+    lifecycle_validation.validate_cancel_exchange(cancel, requested)
+    lifecycle_validation.validate_lifecycle_error_detail(error)

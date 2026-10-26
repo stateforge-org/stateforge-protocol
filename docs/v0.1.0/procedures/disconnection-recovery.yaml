@@ -1,0 +1,523 @@
+schema: stateforge.docs/procedure/v1
+procedure: disconnection-recovery
+title: Disconnection and recovery
+summary: Establish a fresh trusted session and reconcile retained work without accepting stale messages or repeating business execution.
+default_scenario: same-process-reconnect
+
+entities:
+  - id: agent
+    label: StateForge Agent
+    kind: process
+    role: Reconnects, requalifies, and resumes from validated evidence
+  - id: channel
+    label: SFP Channel
+    kind: resource
+    role: Carries one current session and fences every older session
+  - id: runtime
+    label: Provider Runtime
+    kind: service
+    role: Proves current identity and serves retained protocol state
+  - id: state
+    label: Retained State
+    kind: storage
+    role: Holds operation records, snapshots, and pending trigger publications
+
+scenarios:
+  same-process-reconnect:
+    label: Same-process reconnect
+    steps:
+      - id: lose-channel
+        title: Lose the active channel
+        detail: The Agent marks the Provider UNKNOWN and stops new admission. Existing Provider work keeps running.
+        phase: Transport failure
+        active: [agent, channel, runtime]
+        fields: [availability UNKNOWN, work unchanged]
+        transitions:
+          - source: runtime
+            target: agent
+            label: channel closed
+            tone: failure
+        activities:
+          agent:
+            title: Fail closed
+            items: [Stop new admission, Preserve operation and trigger identities]
+        context:
+          kind: Boundary
+          value: Channel loss has no business meaning
+      - id: rediscover-endpoint
+        title: Revalidate the endpoint
+        detail: The Agent validates the current descriptor and reconnects to the same endpoint generation and runtime.
+        phase: Rediscovery
+        active: [agent, channel, runtime]
+        fields: [same instance, generation 42, same runtime]
+        transitions:
+          - source: agent
+            target: runtime
+            label: connect
+        activities:
+          agent:
+            title: Validate before dialing
+            items: [Use one complete descriptor observation]
+        context:
+          kind: Candidate
+          value: Same Provider process
+      - id: fresh-session
+        title: Negotiate a fresh session
+        detail: Bootstrap returns a new session ID while the installation, generation, and runtime remain unchanged.
+        phase: Bootstrap
+        active: [agent, channel, runtime]
+        fields: [same_process_reconnect, new session]
+        transitions:
+          - source: agent
+            target: runtime
+            label: Handshake
+          - source: runtime
+            target: agent
+            label: fresh session
+        activities:
+          channel:
+            title: Fence the old session
+            items: [Discard every late response from it]
+        context:
+          kind: Classification
+          value: SAME_PROCESS_RECONNECT
+      - id: requalify
+        title: Requalify the Provider
+        detail: The Agent accepts the manifest and observes SERVING on a new Health Watch before making the Provider available.
+        phase: Availability gate
+        active: [agent, runtime]
+        fields: [manifest accepted, Health SERVING]
+        transitions:
+          - source: runtime
+            target: agent
+            label: manifest + SERVING
+            tone: success
+        activities:
+          agent:
+            title: Rebuild availability
+            items: [Revalidate invalidated capability evidence]
+        context:
+          kind: Availability
+          value: AVAILABLE
+      - id: resume-state
+        title: Resume retained state
+        detail: The Agent resumes Watch with its last validated cursor and the Provider replays pending triggers with unchanged identity and content.
+        phase: Reconciliation
+        active: [agent, runtime, state]
+        fields: [last validated cursor, identical publication]
+        transitions:
+          - source: agent
+            target: runtime
+            label: WatchOperation
+          - source: state
+            target: agent
+            label: current snapshot
+          - source: runtime
+            target: agent
+            label: trigger replay
+        activities:
+          agent:
+            title: Deduplicate retained evidence
+            items: [Advance only after validation]
+        context:
+          kind: Outcome
+          value: No work is restarted
+
+  endpoint-replaced:
+    label: Endpoint replaced
+    steps:
+      - id: observe-new-generation
+        title: Discover a higher generation
+        detail: The same Provider runtime publishes a replacement endpoint with a greater generation.
+        phase: Endpoint replacement
+        active: [agent, runtime]
+        fields: [same instance, generation 43, same runtime]
+        transitions:
+          - source: runtime
+            target: agent
+            label: descriptor · 43
+        activities:
+          agent:
+            title: Fence generation 42
+            items: [Reject every older response]
+        context:
+          kind: Classification
+          value: ENDPOINT_REPLACED
+      - id: qualify-replacement
+        title: Establish and qualify generation 43
+        detail: The Agent completes Bootstrap, Manifest, and Health against the new endpoint before restoring availability.
+        phase: Fresh qualification
+        active: [agent, channel, runtime]
+        fields: [new session, manifest accepted, SERVING]
+        transitions:
+          - source: agent
+            target: runtime
+            label: Handshake + qualify
+        activities:
+          agent:
+            title: Cross a generation boundary
+            items: [Use RESOLVE_ONLY for uncertain admission]
+        context:
+          kind: Admission mode
+          value: RESOLVE_ONLY
+      - id: reconcile-replacement
+        title: Reconcile retained evidence
+        detail: The Provider may prove retained records from its still-live process; absent work must not be created across the generation boundary.
+        phase: Reconciliation
+        active: [agent, runtime, state]
+        fields: [retained record, original admission generation]
+        transitions:
+          - source: state
+            target: agent
+            label: RESOLVED_EXISTING
+            tone: success
+        activities:
+          state:
+            title: Preserve original evidence
+            items: [Keep the admission generation unchanged]
+        context:
+          kind: Result
+          value: Existing work resolved without dispatch
+
+  process-restarted-retained:
+    label: Process restart with retained state
+    steps:
+      - id: classify-restart
+        title: Detect a new runtime
+        detail: The installation remains the same, but both endpoint generation and Provider runtime identity changed.
+        phase: Process restart
+        active: [agent, runtime]
+        fields: [same instance, greater generation, new runtime]
+        transitions:
+          - source: runtime
+            target: agent
+            label: new runtime
+        activities:
+          agent:
+            title: Classify continuity
+            items: [Require a fresh session]
+        context:
+          kind: Classification
+          value: PROCESS_RESTARTED
+      - id: restore-persisted-state
+        title: Prove persisted state
+        detail: The Provider restores the complete operation record or trigger publication without rewriting its identity or ordering.
+        phase: State restoration
+        active: [runtime, state]
+        fields: [original identity, original sequence]
+        transitions:
+          - source: state
+            target: runtime
+            label: restored evidence
+        activities:
+          runtime:
+            title: Preserve proof
+            items: [Do not synthesize missing fields]
+        context:
+          kind: Requirement
+          value: Complete trustworthy persistence
+      - id: resolve-restarted
+        title: Resolve without redispatch
+        detail: The Agent uses RESOLVE_ONLY and resumes Watch from its last validated sequence under the fresh session.
+        phase: Safe recovery
+        active: [agent, runtime, state]
+        fields: [RESOLVE_ONLY, current session, saved cursor]
+        transitions:
+          - source: agent
+            target: runtime
+            label: resolve + resume
+          - source: state
+            target: agent
+            label: retained evidence
+            tone: success
+        activities:
+          agent:
+            title: Accept proven continuity
+            items: [Never infer persistence from stable installation identity]
+        context:
+          kind: Outcome
+          value: Prior work remains attributable
+
+  process-restarted-state-lost:
+    label: Process restart with state lost
+    steps:
+      - id: qualify-restarted-runtime
+        title: Qualify the restarted Provider
+        detail: A fresh session can make the Provider available even when an earlier operation record was not persisted.
+        phase: Provider qualification
+        active: [agent, runtime]
+        fields: [new runtime, fresh session, SERVING]
+        transitions:
+          - source: runtime
+            target: agent
+            label: current Provider ready
+            tone: success
+        activities:
+          agent:
+            title: Separate availability from evidence
+            items: [Current readiness does not prove prior state]
+        context:
+          kind: Classification
+          value: PROCESS_RESTARTED
+      - id: resolve-only-miss
+        title: Keep the prior outcome indeterminate
+        detail: RESOLVE_ONLY finds no trustworthy retained record, so the Provider returns OPERATION_RECORD_UNAVAILABLE and dispatches nothing.
+        phase: Missing evidence
+        active: [agent, runtime, state]
+        fields: [RESOLVE_ONLY, OPERATION_RECORD_UNAVAILABLE]
+        transitions:
+          - source: agent
+            target: runtime
+            label: resolve only
+          - source: runtime
+            target: agent
+            label: unavailable
+            tone: failure
+        activities:
+          agent:
+            title: Preserve uncertainty
+            items: [Do not assign a new operation ID, Do not redispatch automatically]
+        context:
+          kind: Outcome
+          value: Indeterminate
+
+  installation-replaced:
+    label: Installation replaced
+    steps:
+      - id: detect-new-installation
+        title: Detect a different installation
+        detail: The newly discovered endpoint proves a different Provider instance identity.
+        phase: Installation replacement
+        active: [agent, runtime]
+        fields: [different provider_instance_id]
+        transitions:
+          - source: runtime
+            target: agent
+            label: replacement identity
+        activities:
+          agent:
+            title: End continuity
+            items: [Do not send old operation identities as recovery]
+        context:
+          kind: Classification
+          value: INSTALLATION_REPLACED
+      - id: isolate-old-state
+        title: Keep namespaces separate
+        detail: The replacement cannot claim operations or acknowledgements owned by the previous installation.
+        phase: Ownership boundary
+        active: [agent, state]
+        fields: [no prior-state reconciliation]
+        transitions: []
+        activities:
+          agent:
+            title: Preserve attribution
+            items: [Treat equal publication UUIDs as installation-scoped]
+        context:
+          kind: Outcome
+          value: New Provider, separate state
+
+  invalid-identity:
+    label: Invalid recovery identity
+    steps:
+      - id: compare-invalid-identity
+        title: Reject an impossible transition
+        detail: A reused session, backward generation, or changed runtime under the same generation cannot represent recovery.
+        phase: Identity validation
+        active: [agent, runtime]
+        fields: [reused session, stale generation, inconsistent runtime]
+        transitions:
+          - source: runtime
+            target: agent
+            label: invalid identity
+            tone: failure
+        activities:
+          agent:
+            title: Fail closed
+            items: [Do not reconcile state, Do not restore availability]
+        context:
+          kind: Error
+          value: RecoveryContractError
+
+  lost-admission-reply:
+    label: Lost admission reply
+    steps:
+      - id: admission-reply-lost
+        title: Preserve the original invocation
+        detail: StartOperation may have committed before its response disappeared, so the Agent keeps the same operation ID and fingerprint.
+        phase: Uncertain admission
+        active: [agent, channel, runtime, state]
+        fields: [same operation ID, same fingerprint]
+        transitions:
+          - source: runtime
+            target: agent
+            label: response lost
+            tone: failure
+        activities:
+          agent:
+            title: Avoid duplicate execution
+            items: [Never create a replacement operation identity]
+        context:
+          kind: Outcome
+          value: Unknown until resolved
+      - id: resolve-admission
+        title: Resolve the retained record
+        detail: On the same generation the Agent may retry ADMIT_OR_RESOLVE; after a generation boundary it must use RESOLVE_ONLY.
+        phase: Admission recovery
+        active: [agent, runtime, state]
+        fields: [ADMIT_OR_RESOLVE or RESOLVE_ONLY]
+        transitions:
+          - source: agent
+            target: runtime
+            label: original invocation
+          - source: state
+            target: agent
+            label: RESOLVED_EXISTING
+            tone: success
+        activities:
+          runtime:
+            title: Consult one atomic registry
+            items: [Return the matching record without redispatch]
+        context:
+          kind: Disposition
+          value: RESOLVED_EXISTING
+
+  watch-cursor-gap:
+    label: Watch resumes after a gap
+    steps:
+      - id: resume-watch
+        title: Send the last validated cursor
+        detail: The Agent reconnects under the current session with after_sequence equal to the last snapshot it fully validated.
+        phase: Watch recovery
+        active: [agent, runtime, state]
+        fields: [after_sequence 2, current sequence 5]
+        transitions:
+          - source: agent
+            target: runtime
+            label: WatchOperation · 2
+        activities:
+          agent:
+            title: Resume from evidence
+            items: [Never guess the missing sequences]
+        context:
+          kind: Cursor
+          value: Last validated = 2
+      - id: replay-current-with-gap
+        title: Replay the complete current snapshot
+        detail: The Provider returns sequence 5 with updates_skipped true; the complete snapshot remains authoritative current state.
+        phase: Current-state replay
+        active: [state, runtime, agent]
+        fields: [sequence 5, updates_skipped true]
+        transitions:
+          - source: state
+            target: agent
+            label: current · 5 · gap
+            tone: success
+        activities:
+          agent:
+            title: Replace current state
+            items: [Do not reconstruct sequences 3 and 4]
+        context:
+          kind: Outcome
+          value: Current evidence restored
+
+  trigger-replay:
+    label: Lost trigger acknowledgement
+    steps:
+      - id: retain-unacknowledged-publication
+        title: Keep the publication after disconnect
+        detail: The Provider retains an unacknowledged publication with its original identity and canonical content.
+        phase: Acknowledgement lost
+        active: [runtime, state]
+        fields: [same publication_id, same canonical content]
+        transitions:
+          - source: runtime
+            target: state
+            label: retain publication
+        activities:
+          runtime:
+            title: Preserve idempotency
+            items: [Do not mint a replacement publication]
+        context:
+          kind: Responsibility
+          value: Provider still owns retry
+      - id: replay-publication
+        title: Replay on the new ready stream
+        detail: After the current session and manifest are accepted, the Provider republishes the identical event.
+        phase: Trigger recovery
+        active: [runtime, channel, agent]
+        fields: [new stream, identical publication]
+        transitions:
+          - source: runtime
+            target: agent
+            label: trigger replay
+        activities:
+          agent:
+            title: Deduplicate durably
+            items: [Scope accepted identity to the Provider installation]
+        context:
+          kind: Disposition
+          value: ACCEPTED_DUPLICATE
+
+  lost-cancel-reply:
+    label: Lost cancellation reply
+    steps:
+      - id: cancellation-reply-lost
+        title: Keep the cancellation outcome unknown
+        detail: Transport loss after CancelOperation does not prove whether the Provider accepted or completed cancellation.
+        phase: Uncertain cancellation
+        active: [agent, channel, runtime, state]
+        fields: [same operation ID, same fingerprint]
+        transitions:
+          - source: runtime
+            target: agent
+            label: response lost
+            tone: failure
+        activities:
+          agent:
+            title: Preserve the request identity
+            items: [Do not infer CANCELLED]
+        context:
+          kind: Outcome
+          value: Unknown until retained state is read
+      - id: repeat-cancellation
+        title: Resolve the retained atomic decision
+        detail: Under the fresh session the Agent repeats CancelOperation with the same operation ID and fingerprint.
+        phase: Cancellation recovery
+        active: [agent, runtime, state]
+        fields: [current session, unchanged request identity]
+        transitions:
+          - source: agent
+            target: runtime
+            label: CancelOperation
+          - source: state
+            target: agent
+            label: retained decision
+        activities:
+          runtime:
+            title: Return one atomic decision
+            items: [Do not signal interruption twice]
+        context:
+          kind: Result
+          value: REQUESTED, ALREADY_REQUESTED, or terminal
+
+  stale-session-message:
+    label: Late old-session message
+    steps:
+      - id: receive-late-message
+        title: Discard stale session data
+        detail: A late Health event, trigger acknowledgement, or lifecycle response arrives from the superseded channel.
+        phase: Session fencing
+        active: [channel, agent]
+        fields: [old session_id]
+        transitions:
+          - source: channel
+            target: agent
+            label: stale message
+            tone: failure
+        activities:
+          agent:
+            title: Ignore the message
+            items: [Do not change availability, acknowledgement state, cursor, or operation state]
+        context:
+          kind: Outcome
+          value: No state change

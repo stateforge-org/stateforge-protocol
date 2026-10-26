@@ -1,0 +1,143 @@
+schema: stateforge.docs/entity-flow/v1
+flow: disconnection-recovery
+title: Recover trust before recovering work
+summary: A broken channel becomes usable only after the Agent establishes a fresh session, requalifies the Provider, and reconciles retained state.
+autoplay: true
+entities:
+  - id: provider
+    label: StateForge Provider
+    kind: Provider process
+    brand: stateforge
+    accent: provider
+    description: Keeps executing admitted work independently of any observer connection.
+    state:
+      label: Runtime
+      value: Running
+  - id: descriptor
+    label: Endpoint Descriptor
+    kind: Discovery state
+    brand: none
+    accent: neutral
+    description: Publishes the current endpoint generation and local socket.
+    state:
+      label: Generation
+      value: "42"
+  - id: agent
+    label: StateForge Agent
+    kind: StateForge Agent
+    brand: stateforge
+    accent: agent
+    description: Re-establishes trust and resumes protocol observation.
+    state:
+      label: Availability
+      value: AVAILABLE
+      tone: success
+  - id: retained
+    label: Retained State
+    kind: Provider state
+    brand: none
+    accent: neutral
+    description: Preserves operation snapshots and unacknowledged trigger publications.
+    state:
+      label: Evidence
+      value: Current
+steps:
+  - id: channel-lost
+    phase: Transport lost
+    title: Mark availability unknown
+    detail: The Agent loses the channel. Provider work and retained state continue unchanged.
+    active: [provider, agent, retained]
+    states:
+      agent:
+        label: Availability
+        value: UNKNOWN
+        tone: warning
+    transitions:
+      - source: provider
+        target: agent
+        label: channel closed
+        tone: failure
+    responsibility:
+      entities: [agent]
+      label: Transport loss stops new admission; it never invents a business outcome.
+  - id: rediscover
+    phase: Endpoint discovery
+    title: Validate the current descriptor
+    detail: The Agent reads one complete descriptor observation and connects to its declared socket.
+    active: [provider, descriptor, agent]
+    states:
+      descriptor:
+        label: Generation
+        value: "42 · validated"
+      agent:
+        label: Endpoint
+        value: Current
+    transitions:
+      - source: provider
+        target: descriptor
+        label: atomic publication
+      - source: descriptor
+        target: agent
+        label: current endpoint
+    responsibility:
+      entities: [agent]
+      label: A stale or malformed descriptor cannot become a recovery candidate.
+  - id: handshake
+    phase: Fresh session
+    title: Re-establish session identity
+    detail: Bootstrap confirms the endpoint identity and returns a session ID not previously used by this installation.
+    active: [provider, agent]
+    states:
+      agent:
+        label: Session
+        value: Fresh and fenced
+        tone: warning
+    transitions:
+      - source: agent
+        target: provider
+        label: Handshake
+      - source: provider
+        target: agent
+        label: new session
+    responsibility:
+      entities: [agent, provider]
+      label: Old-session responses and stream events are now stale.
+  - id: requalify
+    phase: Provider qualification
+    title: Accept manifest and Health again
+    detail: The Agent accepts the current manifest and observes SERVING on a new Health Watch before restoring availability.
+    active: [provider, agent]
+    states:
+      agent:
+        label: Availability
+        value: AVAILABLE
+        tone: success
+    transitions:
+      - source: provider
+        target: agent
+        label: manifest + SERVING
+        tone: success
+    responsibility:
+      entities: [agent]
+      label: Reconnecting transport alone never makes a Provider available.
+  - id: reconcile
+    phase: State reconciliation
+    title: Resume from retained evidence
+    detail: The Agent resolves uncertain admission, resumes Watch from its validated cursor, and accepts identical trigger replay without duplicating work.
+    active: [agent, provider, retained]
+    states:
+      retained:
+        label: Evidence
+        value: Reconciled
+        tone: success
+    transitions:
+      - source: agent
+        target: provider
+        label: resolve + resume
+      - source: retained
+        target: agent
+        label: current evidence
+        tone: success
+    responsibility:
+      entities: [provider, agent]
+      label: Unknown state remains indeterminate; recovery never authorizes automatic redispatch.
