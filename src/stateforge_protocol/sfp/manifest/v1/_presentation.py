@@ -83,6 +83,8 @@ _SAFE_SVG_ATTRIBUTES: Final = frozenset(
 _PNG_SIGNATURE: Final = b"\x89PNG\r\n\x1a\n"
 _PNG_CHUNK_OVERHEAD: Final = 12
 _PNG_IHDR_BYTES: Final = 13
+_PNG_DECODE_CHUNK_BYTES: Final = 64 * 1024
+_PNG_MAX_FILTER_TYPE: Final = 4
 _SAFE_PNG_CHUNKS: Final = frozenset(
     {b"IHDR", b"PLTE", b"IDAT", b"IEND", b"tRNS"}
 )
@@ -644,6 +646,10 @@ def _png_dimensions(
         _reject_png(error_type)
     offset = len(_PNG_SIGNATURE)
     dimensions: tuple[int, int] | None = None
+    bit_depth: int | None = None
+    color_type: int | None = None
+    interlace_method: int | None = None
+    image_data: list[bytes] = []
     saw_image_data = False
     while offset + _PNG_CHUNK_OVERHEAD <= len(content):
         length = struct.unpack(">I", content[offset : offset + 4])[0]
@@ -659,43 +665,184 @@ def _png_dimensions(
         if expected_crc != actual_crc & 0xFFFFFFFF:
             _reject_png(error_type)
         if dimensions is None:
-            if chunk_type != b"IHDR" or length != _PNG_IHDR_BYTES:
-                _reject_png(error_type)
-            width, height = struct.unpack(
-                ">II", content[data_start : data_start + 8]
+            (
+                dimensions,
+                bit_depth,
+                color_type,
+                interlace_method,
+            ) = _read_png_header(
+                chunk_type,
+                content[data_start:data_end],
+                error_type,
             )
-            bit_depth = content[data_start + 8]
-            color_type = content[data_start + 9]
-            valid_depths = {
-                0: {1, 2, 4, 8, 16},
-                2: {8, 16},
-                3: {1, 2, 4, 8},
-                4: {8, 16},
-                6: {8, 16},
-            }
-            if (
-                not width
-                or not height
-                or width > contract.MAX_PRESENTATION_ASSET_DIMENSION
-                or height > contract.MAX_PRESENTATION_ASSET_DIMENSION
-                or bit_depth not in valid_depths.get(color_type, set())
-                or content[data_start + 10 : data_start + 12] != b"\x00\x00"
-                or content[data_start + 12] not in {0, 1}
-            ):
-                _reject_png(error_type)
-            dimensions = (width, height)
         elif chunk_type == b"IHDR":
             _reject_png(error_type)
         if chunk_type == b"IDAT":
             saw_image_data = True
+            image_data.append(content[data_start:data_end])
+        elif saw_image_data and chunk_type != b"IEND":
+            _reject_png(error_type)
         if chunk_type == b"IEND":
             if length or not saw_image_data or chunk_end != len(content):
                 _reject_png(error_type)
-            if dimensions is None:
+            if (
+                dimensions is None
+                or bit_depth is None
+                or color_type is None
+                or interlace_method is None
+            ):
                 _reject_png(error_type)
+            _validate_png_image_data(
+                b"".join(image_data),
+                width=dimensions[0],
+                height=dimensions[1],
+                bit_depth=bit_depth,
+                color_type=color_type,
+                interlace_method=interlace_method,
+                error_type=error_type,
+            )
             return dimensions
         offset = chunk_end
     _reject_png(error_type)
+
+
+def _read_png_header(
+    chunk_type: bytes,
+    data: bytes,
+    error_type: type[ValueError],
+) -> tuple[tuple[int, int], int, int, int]:
+    if chunk_type != b"IHDR" or len(data) != _PNG_IHDR_BYTES:
+        _reject_png(error_type)
+    width, height = struct.unpack(">II", data[:8])
+    bit_depth = data[8]
+    color_type = data[9]
+    interlace_method = data[12]
+    valid_depths = {
+        0: {1, 2, 4, 8, 16},
+        2: {8, 16},
+        3: {1, 2, 4, 8},
+        4: {8, 16},
+        6: {8, 16},
+    }
+    if (
+        not width
+        or not height
+        or width > contract.MAX_PRESENTATION_ASSET_DIMENSION
+        or height > contract.MAX_PRESENTATION_ASSET_DIMENSION
+        or bit_depth not in valid_depths.get(color_type, set())
+        or data[10:12] != b"\x00\x00"
+        or interlace_method not in {0, 1}
+    ):
+        _reject_png(error_type)
+    return (width, height), bit_depth, color_type, interlace_method
+
+
+def _validate_png_image_data(
+    compressed: bytes,
+    *,
+    width: int,
+    height: int,
+    bit_depth: int,
+    color_type: int,
+    interlace_method: int,
+    error_type: type[ValueError],
+) -> None:
+    """Decode bounded IDAT data and validate its complete scanline framing."""
+    scanline_lengths = _png_scanline_lengths(
+        width,
+        height,
+        bit_depth,
+        color_type,
+        interlace_method,
+    )
+    decoded_bytes = sum(length + 1 for length in scanline_lengths)
+    if decoded_bytes > contract.MAX_PRESENTATION_PNG_DECODED_BYTES:
+        _reject_png(error_type)
+
+    decoder = zlib.decompressobj()
+    pending = compressed
+    row_index = 0
+    row_remaining = 0
+    try:
+        while True:
+            pending_bytes = len(pending)
+            decoded = decoder.decompress(pending, _PNG_DECODE_CHUNK_BYTES)
+            pending = decoder.unconsumed_tail
+            row_index, row_remaining = _consume_png_scanlines(
+                decoded,
+                scanline_lengths=scanline_lengths,
+                row_index=row_index,
+                row_remaining=row_remaining,
+                error_type=error_type,
+            )
+            if decoder.eof:
+                if pending or decoder.unused_data:
+                    _reject_png(error_type)
+                break
+            if (not pending and not decoded) or (
+                not decoded and len(pending) == pending_bytes
+            ):
+                _reject_png(error_type)
+    except zlib.error:
+        _reject_png(error_type)
+
+    if row_index != len(scanline_lengths) or row_remaining:
+        _reject_png(error_type)
+
+
+def _consume_png_scanlines(
+    decoded: bytes,
+    *,
+    scanline_lengths: tuple[int, ...],
+    row_index: int,
+    row_remaining: int,
+    error_type: type[ValueError],
+) -> tuple[int, int]:
+    for value in decoded:
+        if not row_remaining:
+            if (
+                row_index >= len(scanline_lengths)
+                or value > _PNG_MAX_FILTER_TYPE
+            ):
+                _reject_png(error_type)
+            row_remaining = scanline_lengths[row_index]
+            row_index += 1
+        else:
+            row_remaining -= 1
+    return row_index, row_remaining
+
+
+def _png_scanline_lengths(
+    width: int,
+    height: int,
+    bit_depth: int,
+    color_type: int,
+    interlace_method: int,
+) -> tuple[int, ...]:
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
+    bits_per_pixel = channels * bit_depth
+    if not interlace_method:
+        row_bytes = (width * bits_per_pixel + 7) // 8
+        return (row_bytes,) * height
+
+    passes = (
+        (0, 0, 8, 8),
+        (4, 0, 8, 8),
+        (0, 4, 4, 8),
+        (2, 0, 4, 4),
+        (0, 2, 2, 4),
+        (1, 0, 2, 2),
+        (0, 1, 1, 2),
+    )
+    rows: list[int] = []
+    for x_start, y_start, x_step, y_step in passes:
+        if width <= x_start or height <= y_start:
+            continue
+        pass_width = (width - x_start + x_step - 1) // x_step
+        pass_height = (height - y_start + y_step - 1) // y_step
+        row_bytes = (pass_width * bits_per_pixel + 7) // 8
+        rows.extend((row_bytes,) * pass_height)
+    return tuple(rows)
 
 
 def _reject_png(error_type: type[ValueError]) -> Never:

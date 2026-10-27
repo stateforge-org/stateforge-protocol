@@ -95,17 +95,39 @@ def _png_chunk(kind: bytes, content: bytes) -> bytes:
     )
 
 
-def _png(width: int = 1, height: int = 1) -> bytes:
-
+def _png_with_image_data(
+    image_data: bytes,
+    *,
+    width: int = 1,
+    height: int = 1,
+    interlace_method: int = 0,
+    split_at: int | None = None,
+) -> bytes:
     header = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
-    pixels = b"".join(
-        b"\x00" + (b"\x00\x00\x00\x00" * width) for _ in range(height)
-    )
+    header = header[:-1] + bytes([interlace_method])
+    if split_at is None:
+        data_chunks = (_png_chunk(b"IDAT", image_data),)
+    else:
+        data_chunks = (
+            _png_chunk(b"IDAT", image_data[:split_at]),
+            _png_chunk(b"IDAT", image_data[split_at:]),
+        )
     return (
         b"\x89PNG\r\n\x1a\n"
         + _png_chunk(b"IHDR", header)
-        + _png_chunk(b"IDAT", zlib.compress(pixels))
+        + b"".join(data_chunks)
         + _png_chunk(b"IEND", b"")
+    )
+
+
+def _png(width: int = 1, height: int = 1) -> bytes:
+    pixels = b"".join(
+        b"\x00" + (b"\x00\x00\x00\x00" * width) for _ in range(height)
+    )
+    return _png_with_image_data(
+        zlib.compress(pixels),
+        width=width,
+        height=height,
     )
 
 
@@ -922,6 +944,83 @@ def test_png_crc_and_chunk_allowlist_are_enforced() -> None:
         width=1,
         height=1,
     )
+    with pytest.raises(ManifestValidationError, match="invalid PNG"):
+        _validate_presentation(response)
+
+
+@pytest.mark.parametrize(
+    "image_data",
+    [
+        b"not a zlib stream",
+        zlib.compress(b"\x00\x00\x00\x00\x00")[:-1],
+        zlib.compress(b"\x00\x00\x00\x00\x00") + b"trailing",
+        zlib.compress(b"\x00\x00\x00\x00\x00\x00"),
+        zlib.compress(b"\x05\x00\x00\x00\x00"),
+    ],
+)
+def test_png_image_data_must_decode_to_exact_scanlines(
+    image_data: bytes,
+) -> None:
+    response = _presentation_response()
+    _replace_provider_icon(
+        response,
+        content=_png_with_image_data(image_data),
+        media_type="image/png",
+        width=1,
+        height=1,
+    )
+
+    with pytest.raises(ManifestValidationError, match="invalid PNG"):
+        _validate_presentation(response)
+
+
+def test_png_consecutive_idat_chunks_form_one_valid_stream() -> None:
+    response = _presentation_response()
+    image_data = zlib.compress(b"\x00\x00\x00\x00\x00")
+    _replace_provider_icon(
+        response,
+        content=_png_with_image_data(
+            image_data,
+            split_at=len(image_data) // 2,
+        ),
+        media_type="image/png",
+        width=1,
+        height=1,
+    )
+
+    _validate_presentation(response)
+
+
+def test_png_adam7_scanline_layout_is_accepted() -> None:
+    response = _presentation_response()
+    _replace_provider_icon(
+        response,
+        content=_png_with_image_data(
+            zlib.compress(b"\x00\x00\x00\x00\x00"),
+            interlace_method=1,
+        ),
+        media_type="image/png",
+        width=1,
+        height=1,
+    )
+
+    _validate_presentation(response)
+
+
+def test_png_decoded_size_is_bounded_before_decompression() -> None:
+    response = _presentation_response()
+    _replace_provider_icon(
+        response,
+        content=_png_with_image_data(
+            zlib.compress(b""),
+            width=contract.MAX_PRESENTATION_ASSET_DIMENSION,
+            height=contract.MAX_PRESENTATION_ASSET_DIMENSION,
+        ),
+        media_type="image/png",
+        width=contract.MAX_PRESENTATION_ASSET_DIMENSION,
+        height=contract.MAX_PRESENTATION_ASSET_DIMENSION,
+    )
+
     with pytest.raises(ManifestValidationError, match="invalid PNG"):
         _validate_presentation(response)
 

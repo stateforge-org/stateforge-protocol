@@ -281,7 +281,9 @@ limiting advanced Provider authors to the built-in catalog.
 `PresentationAsset` carries bounded, content-addressed PNG or sanitized SVG
 media. Nodes refer to assets through named `asset_bindings`. Every digest must
 match the exact bytes, every reference must resolve, and unreferenced assets
-are rejected.
+are rejected. PNG validation also verifies the complete compressed stream,
+decoded scanline layout and filter bytes under a decoded-size ceiling; valid
+chunk framing and CRCs alone are not sufficient.
 
 Assets provide Provider-owned icons and visuals. The active Control Plane skin
 still controls their framing, size, background, and placement.
