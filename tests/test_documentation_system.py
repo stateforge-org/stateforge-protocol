@@ -47,6 +47,60 @@ def test_protocol_uses_the_shared_documentation_presentation() -> None:
     assert configuration.extra["annotate"]["json"] == [".s2"]
 
 
+def test_provider_presentation_guide_maps_views_to_surfaces() -> None:
+    page = (
+        ROOT / "docs/v0.1.0/procedures/provider-presentation.md"
+    ).read_text(encoding="utf-8")
+    configuration = load_config(
+        config_file=str(ROOT / "mkdocs.yml"),
+        strict=True,
+    )
+    version_navigation = configuration.nav[0]["Protocol documentation"][1][
+        "v0.1.0"
+    ]
+    procedure_navigation = next(
+        item["SFP procedures"]
+        for item in version_navigation
+        if isinstance(item, dict) and "SFP procedures" in item
+    )
+
+    assert {
+        "Provider manifest exchange": [
+            {
+                "Contract and exchange": (
+                    "v0.1.0/procedures/provider-manifest.md"
+                )
+            },
+            {
+                "Provider presentation": (
+                    "v0.1.0/procedures/provider-presentation.md"
+                )
+            },
+        ]
+    } in procedure_navigation
+    for view in (
+        "`ProviderView`",
+        "`CapabilityGroup`",
+        "`OperationView`",
+        "`TriggerView`",
+        "`SchemaView`",
+        "`FieldGroup`",
+        "`FieldView`",
+        "`PresentationAsset`",
+    ):
+        assert view in page
+    for surface in (
+        "Provider page",
+        "Policy builder",
+        "Operation input",
+        "Results and events",
+    ):
+        assert surface in page
+    assert "schema-derived interface" in page
+    assert "active Control Plane skin" in page
+    assert "SF-AOP" in page
+
+
 def test_documentation_home_orients_readers_to_the_protocol() -> None:
     home = (ROOT / "docs/index.md").read_text(encoding="utf-8")
 

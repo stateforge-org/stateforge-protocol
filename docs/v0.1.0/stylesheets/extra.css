@@ -10,3 +10,156 @@
   margin-inline: auto;
   max-width: 100%;
 }
+
+.md-typeset .sf-presentation-preview {
+  background: color-mix(in srgb, var(--md-default-bg-color) 94%, var(--md-accent-fg-color));
+  border: 1px solid color-mix(in srgb, var(--md-default-fg-color) 22%, transparent);
+  border-radius: 0.55rem;
+  margin: 1.2rem 0;
+  overflow: hidden;
+  padding: 1rem;
+}
+
+.md-typeset .sf-presentation-preview__label,
+.md-typeset .sf-presentation-preview small {
+  color: var(--md-accent-fg-color);
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.5rem;
+}
+
+.md-typeset .sf-presentation-provider {
+  align-items: center;
+  display: flex;
+  gap: 0.8rem;
+  padding: 0.7rem 0;
+}
+
+.md-typeset .sf-presentation-provider p,
+.md-typeset .sf-presentation-section p,
+.md-typeset .sf-presentation-columns p {
+  margin: 0.2rem 0 0;
+}
+
+.md-typeset .sf-presentation-provider__icon {
+  align-items: center;
+  background: var(--md-accent-fg-color);
+  border-radius: 0.45rem;
+  color: var(--md-primary-bg-color);
+  display: flex;
+  flex: 0 0 2.6rem;
+  font-weight: 700;
+  height: 2.6rem;
+  justify-content: center;
+}
+
+.md-typeset .sf-presentation-section,
+.md-typeset .sf-presentation-columns > section {
+  background: color-mix(in srgb, var(--md-default-bg-color) 96%, var(--md-default-fg-color));
+  border: 1px solid color-mix(in srgb, var(--md-default-fg-color) 16%, transparent);
+  border-radius: 0.4rem;
+  padding: 0.8rem;
+}
+
+.md-typeset .sf-presentation-section > span,
+.md-typeset .sf-presentation-columns h3 {
+  font-weight: 700;
+}
+
+.md-typeset .sf-presentation-capabilities,
+.md-typeset .sf-presentation-columns {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 0.8rem;
+}
+
+.md-typeset .sf-presentation-capabilities {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.md-typeset .sf-presentation-capabilities > div {
+  border: 1px solid color-mix(in srgb, var(--md-default-fg-color) 14%, transparent);
+  border-radius: 0.35rem;
+  padding: 0.65rem;
+}
+
+.md-typeset .sf-presentation-capabilities strong,
+.md-typeset .sf-presentation-columns label {
+  display: block;
+}
+
+.md-typeset .sf-presentation-columns--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.md-typeset .sf-presentation-columns section > :first-child {
+  margin-top: 0;
+}
+
+.md-typeset .sf-presentation-columns section > :last-child {
+  margin-bottom: 0;
+}
+
+.md-typeset .sf-presentation-columns label {
+  font-size: 0.72rem;
+  margin-top: 0.65rem;
+}
+
+.md-typeset .sf-presentation-columns input,
+.md-typeset .sf-presentation-meter {
+  background: var(--md-code-bg-color);
+  border: 1px solid color-mix(in srgb, var(--md-default-fg-color) 20%, transparent);
+  border-radius: 0.3rem;
+  box-sizing: border-box;
+  color: var(--md-default-fg-color);
+  display: block;
+  font: inherit;
+  margin-top: 0.25rem;
+  padding: 0.35rem 0.45rem;
+  width: 100%;
+}
+
+.md-typeset .sf-presentation-subsection {
+  border-top: 1px solid color-mix(in srgb, var(--md-default-fg-color) 14%, transparent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-top: 0.8rem;
+  padding-top: 0.65rem;
+}
+
+.md-typeset .sf-presentation-columns dl,
+.md-typeset .sf-presentation-columns dl div {
+  margin: 0;
+}
+
+.md-typeset .sf-presentation-columns dl div {
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-default-fg-color) 12%, transparent);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.55rem 0;
+}
+
+.md-typeset .sf-presentation-columns dd {
+  margin: 0;
+}
+
+.md-typeset .sf-presentation-badge {
+  background: color-mix(in srgb, var(--md-accent-fg-color) 16%, transparent);
+  border-radius: 999px;
+  color: var(--md-accent-fg-color);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+}
+
+@media screen and (max-width: 52rem) {
+  .md-typeset .sf-presentation-columns,
+  .md-typeset .sf-presentation-columns--two,
+  .md-typeset .sf-presentation-capabilities {
+    grid-template-columns: 1fr;
+  }
+}

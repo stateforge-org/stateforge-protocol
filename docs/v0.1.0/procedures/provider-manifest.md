@@ -286,107 +286,15 @@ a correct default interface. Its JSON Schemas define fields, types, required
 values, validation, and secret-bearing inputs. The optional `presentation`
 snapshot improves that interface without changing any of those facts.
 
-```mermaid
-flowchart LR
-    Manifest["Operational manifest<br/>capabilities + JSON Schemas"] --> Default["Complete schema-derived UI"]
-    Manifest --> Merge["Validated overlay merge"]
-    Presentation["Presentation snapshot<br/>labels + layout + assets"] --> Merge
-    Merge --> Enhanced["Enhanced Provider UI"]
-    Presentation -. "absent, unsupported,<br/>or invalid" .-> Default
-```
+The presentation and its revision are present as a pair. The Agent validates
+the operational manifest first and can use it even when presentation is
+absent or rejected. A valid presentation is revised independently and bound
+to the accepted `manifest_revision`.
 
-<div class="sf-docs-card-grid sf-docs-card-grid--three">
-  <article class="sf-docs-card">
-    <span class="sf-docs-card__label">PROVIDER</span>
-    <h3>Describe the integration</h3>
-    <p>
-      A summary, longer description, embedded visuals, and optional visual
-      groups describe the Provider without creating capabilities.
-    </p>
-  </article>
-  <article class="sf-docs-card">
-    <span class="sf-docs-card__label">CAPABILITIES</span>
-    <h3>Present operations and triggers</h3>
-    <p>
-      Views add labels, explanations, grouping, field order, and compatible
-      render preferences to capabilities already declared by identifier.
-    </p>
-  </article>
-  <article class="sf-docs-card">
-    <span class="sf-docs-card__label">ASSETS</span>
-    <h3>Ship Provider-owned visuals</h3>
-    <p>
-      Bounded PNG and sanitized SVG assets travel inside the snapshot and are
-      addressed by the SHA-256 digest of their exact bytes.
-    </p>
-  </article>
-</div>
-
-### The schema remains authoritative
-
-Every schema view points into exactly one authoritative schema using JSON
-Pointer. Operation input hints resolve only against that operation's
-`input_schema`; result hints resolve against `result_schema`; trigger hints
-resolve against `payload_schema`.
-
-| Presentation can suggest | Presentation cannot change |
-| --- | --- |
-| Labels, help text, placeholders, units, field order, and visual groups | Field types, requiredness, defaults, validation, or secret semantics |
-| A compatible input widget such as text, select, slider, or secret input | Operation input values or admission behavior |
-| A compatible result display such as code, table, badge, or metric | Operation results or trigger payloads |
-| Provider, operation, trigger, or group icons | Capability identifiers, membership, availability, or authorization |
-
-Groups are optional. An operation or trigger with an empty `group_id` remains
-visible. A field omitted from `field_order`, `groups`, or `fields` also remains
-visible through normal schema-derived rendering. There is no presentation
-field that hides a capability or schema field.
-
-Widget and display preferences must agree with the referenced field schema. A
-secret widget, for example, requires a string field marked `writeOnly`; a
-slider requires a numeric field with explicit minimum and maximum; a table
-requires an array. Input preferences are invalid on result and trigger payload
-views.
-
-### Independent acceptance and revision
-
-The Agent validates the operational manifest first. It then handles the
-presentation snapshot independently:
-
-| Presentation state | Result |
-| --- | --- |
-| Absent | Accept the manifest and render directly from its schemas. |
-| Supported and valid | Accept both snapshots and merge the overlay into schema-derived rendering. |
-| Unsupported schema version | Accept the manifest and ignore the presentation snapshot. |
-| Invalid reference, preference, asset, or revision | Accept the manifest and ignore the presentation snapshot. |
-
-`manifest_revision` never includes presentation. Its value therefore remains
-stable when only labels, layout, groups, or assets change. The separate
-`presentation_revision` is SHA-256 over RFC 8785 canonical JSON of:
-
-```json
-{
-  "manifestRevision": "sha256:<accepted-manifest-revision>",
-  "presentation": {},
-  "providerInstanceId": "<canonical-provider-instance-uuid>"
-}
-```
-
-Binding the presentation revision to `manifestRevision` prevents an overlay
-from being reused with a different declaration. Session ID and endpoint
-generation remain response fences and are excluded from both revisions.
-
-### Asset boundary
-
-Presentation assets are data, never executable extensions. A snapshot may
-contain at most 64 assets, each no larger than 256 KiB and together no larger
-than 1 MiB. Dimensions are positive and bounded to 8192 × 8192 pixels. Every
-asset must be referenced, every reference must resolve, and each map key must
-equal the SHA-256 digest of the exact content.
-
-Only validated PNG and sanitized SVG are accepted. SVG uses a closed element
-and attribute allowlist and rejects scripts, event handlers, styles, external
-references, data URLs, DTDs, and entities. The contract has no field for HTML,
-CSS, JavaScript, a remote URL, or a filesystem path.
+The [Provider presentation guide](provider-presentation.md) explains what each
+view means, where it appears in a future Control Plane, how schema-derived
+defaults and presentation hints compose, and how embedded assets remain safe.
+The wire fields, validation pipeline, and limits remain defined on this page.
 
 ## Declaration model
 
