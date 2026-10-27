@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import re
 import tomllib
 from pathlib import Path
 
+import yaml
 from mkdocs.config import load_config
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,6 +62,215 @@ def test_documentation_home_orients_readers_to_the_protocol() -> None:
     assert "HandshakeRequest" in home
     assert "OperationRequest" in home
     assert "Reconcile" in home
+
+
+def test_getting_started_routes_readers_to_real_examples() -> None:
+    page = (ROOT / "docs/v0.1.0/getting-started.md").read_text(
+        encoding="utf-8"
+    )
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "python -m examples.bootstrap.server" in page
+    assert "python -m examples.bootstrap.client" in page
+    assert "```stateforge-entity-flow" in page
+    assert "source: getting-started-overview.yaml" in page
+    for destination in (
+        "../bootstrap/",
+        "../procedures/",
+        "../procedures/endpoint-discovery/",
+        "../reference/python-contracts/",
+    ):
+        assert f'href="{destination}"' in page
+
+    assert "avatars.githubusercontent.com/u/309498710" in readme
+    assert "docs/v0.1.0/assets/brand" not in readme
+
+
+def test_readme_uses_a_theme_neutral_protocol_lifecycle() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "```mermaid" in readme
+    assert "sequenceDiagram" in readme
+    assert "participant Directory as Discovery directory" in readme
+    assert "Bootstrap.Handshake" in readme
+    assert "Manifest.GetManifest" in readme
+    assert "Health.Watch" in readme
+    assert "AssessCapabilities" in readme
+    assert "Trigger publications" in readme
+    assert "Reconnect creates a new channel and fenced session" in readme
+    assert "protocol-flow.svg" not in readme
+    assert "docs/v0.1.0/" not in readme
+    assert "https://docs.stateforge.net/sfp/latest/" in readme
+    for reference in (
+        "reference/versioning-compatibility/",
+        "reference/status-errors/",
+        "reference/security-trust-boundary/",
+        "reference/glossary/",
+    ):
+        assert reference in readme
+
+
+def test_versioning_guide_keeps_compatibility_boundaries_distinct() -> None:
+    page = (
+        ROOT / "docs/v0.1.0/reference/versioning-compatibility.md"
+    ).read_text(encoding="utf-8")
+    normalized_page = " ".join(page.split())
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    for version_surface in (
+        "Python distribution",
+        "SFP wire contract",
+        "Protobuf and Python package",
+        "Endpoint descriptor schema",
+        "Provider manifest schema",
+        "Agent software version",
+        "Provider implementation",
+        "Operation or trigger identifier",
+    ):
+        assert version_surface in page
+
+    assert "highest common `(major, minor)` pair" in normalized_page
+    assert "Patch versions belong to software artifacts" in normalized_page
+    assert "Buf's `FILE` compatibility policy" in normalized_page
+    assert "reference/versioning-compatibility/" in readme
+
+    declaration = yaml.safe_load(
+        (ROOT / "docs/v0.1.0/reference/version-negotiation.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert declaration["schema"] == "stateforge.docs/procedure/v1"
+    assert declaration["default_scenario"] == "success"
+    assert set(declaration["scenarios"]) == {
+        "success",
+        "incompatible",
+        "response-mismatch",
+        "reconnect",
+    }
+    assert "source: version-negotiation.yaml" in page
+
+
+def test_status_reference_covers_canonical_error_taxonomy() -> None:
+    page = (ROOT / "docs/v0.1.0/reference/status-errors.md").read_text(
+        encoding="utf-8"
+    )
+
+    for status in (
+        "INVALID_ARGUMENT",
+        "FAILED_PRECONDITION",
+        "RESOURCE_EXHAUSTED",
+        "UNIMPLEMENTED",
+        "UNAVAILABLE",
+        "ALREADY_EXISTS",
+        "DEADLINE_EXCEEDED",
+        "CANCELLED",
+        "OUT_OF_RANGE",
+        "NOT_FOUND",
+        "INTERNAL",
+    ):
+        assert f"`{status}`" in page
+
+    fixture_fields = (
+        (
+            "tests/fixtures/operation_admission/error-cases.json",
+            "grpcStatus",
+        ),
+        (
+            "tests/fixtures/operation_lifecycle/error-cases.json",
+            "grpcCode",
+        ),
+    )
+    for fixture, status_field in fixture_fields:
+        cases = json.loads((ROOT / fixture).read_text(encoding="utf-8"))
+        for case in cases:
+            assert f"`{case[status_field]}`" in page
+            reason = case.get("reason") or case["detail"]["reason"]
+            assert f"`{reason}`" in page
+
+    assert "Local protocol failure" in page
+    assert "SERVICE_UNKNOWN" in page
+    assert "Operation `FAILED`" in page
+    assert "reference/status-errors/" in (
+        ROOT / "docs/v0.1.0/index.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_security_guide_preserves_the_local_trust_model() -> None:
+    page = (
+        ROOT / "docs/v0.1.0/reference/security-trust-boundary.md"
+    ).read_text(encoding="utf-8")
+    normalized_page = " ".join(page.split())
+
+    for boundary in (
+        "Local OS boundary",
+        "Endpoint observation",
+        "Bootstrap session",
+        "Accepted declaration",
+        "Runtime admission",
+    ):
+        assert boundary in page
+
+    for non_credential in (
+        "`provider_instance_id`",
+        "`endpoint_generation`",
+        "`provider_runtime_id`",
+        "`session_id`",
+        "`manifest_revision`",
+    ):
+        assert non_credential in page
+
+    assert (
+        "does not define a TCP listener, TLS, certificates" in normalized_page
+    )
+    assert "`writeOnly: true`" in page
+    assert "Capability Assessment never substitutes" in normalized_page
+    assert "Loss of evidence never creates permission" in normalized_page
+    assert "reference/security-trust-boundary/" in (
+        ROOT / "docs/v0.1.0/index.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_glossary_distinguishes_canonical_protocol_terms() -> None:
+    page = (ROOT / "docs/v0.1.0/reference/glossary.md").read_text(
+        encoding="utf-8"
+    )
+
+    for wire_name in (
+        "`provider_identity`",
+        "`provider_instance_id`",
+        "`provider_runtime_id`",
+        "`endpoint_generation`",
+        "`session_id`",
+        "`manifest_revision`",
+        "`operation_identifier`",
+        "`operation_id`",
+        "`publication_id`",
+    ):
+        assert wire_name in page
+
+    for distinction in (
+        "Provider identity / instance ID / runtime ID",
+        "Wire version / manifest schema version / package version",
+        "Health / availability / capability / authorization",
+        "Operation identifier / operation ID",
+        "Trigger identifier / publication ID",
+        "gRPC status / domain outcome",
+        "Retry / replay / reconnect / redispatch",
+    ):
+        assert distinction in page
+
+    for recovery_term in (
+        "**Retry**",
+        "**Replay**",
+        "**Reconnect**",
+        "**Redispatch**",
+        "**Fail closed**",
+    ):
+        assert recovery_term in page
+
+    assert "reference/glossary/" in (ROOT / "docs/v0.1.0/index.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_procedure_map_preserves_phases_lanes_and_unique_destinations() -> (

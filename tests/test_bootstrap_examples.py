@@ -1,5 +1,8 @@
 """Exercise the runnable Bootstrap documentation examples."""
 
+import argparse
+import asyncio
+import logging
 from uuid import UUID
 
 import pytest
@@ -78,3 +81,62 @@ async def test_documented_client_reports_incompatible_version() -> None:
                 )
     finally:
         await grpc_server.stop(grace=None)
+
+
+@pytest.mark.asyncio
+async def test_documented_server_stops_when_its_task_is_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wait_started = asyncio.Event()
+    stopped_with: list[float | None] = []
+
+    class FakeServer:
+        def add_insecure_port(self, target: str) -> int:
+            assert target == "127.0.0.1:0"
+            return 1
+
+        async def start(self) -> None:
+            return None
+
+        async def wait_for_termination(self) -> bool:
+            wait_started.set()
+            await asyncio.Future()
+            return False
+
+        async def stop(self, grace: float | None) -> None:
+            stopped_with.append(grace)
+
+    fake_server = FakeServer()
+    monkeypatch.setattr(server, "create_server", lambda endpoint: fake_server)
+    arguments = argparse.Namespace(
+        target="127.0.0.1:0",
+        provider_instance_id=str(_PROVIDER_INSTANCE_ID),
+        endpoint_generation=4,
+    )
+
+    task = asyncio.create_task(server._run(arguments))
+    await wait_started.wait()
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert stopped_with == [None]
+
+
+def test_documented_server_treats_keyboard_interrupt_as_clean_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(server, "_arguments", object)
+
+    def interrupt(coroutine: object) -> None:
+        coroutine.close()
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(server.asyncio, "run", interrupt)
+
+    server.main()
+
+    assert "Provider stopped" in caplog.text

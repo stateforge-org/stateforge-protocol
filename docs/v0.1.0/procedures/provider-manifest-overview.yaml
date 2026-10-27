@@ -1,0 +1,130 @@
+schema: stateforge.docs/entity-flow/v1
+flow: provider-manifest
+title: From Provider declarations to one accepted revision
+summary: Manifest Exchange captures one complete declaration snapshot and makes its canonical revision the Agent's capability boundary.
+autoplay: true
+entities:
+  - id: declaration
+    label: Provider Declaration
+    kind: Schema
+    brand: none
+    accent: neutral
+    description: Defines operations, triggers, schemas, requirements, and supported platforms.
+    state:
+      label: Declaration
+      value: Ready
+  - id: provider
+    label: StateForge Provider
+    kind: Process
+    brand: stateforge
+    accent: provider
+    description: Captures and serves one immutable manifest snapshot per response.
+    state:
+      label: Snapshot
+      value: Not captured
+  - id: agent
+    label: StateForge Agent
+    kind: Agent
+    brand: stateforge
+    accent: agent
+    description: Requests, validates, and accepts the complete manifest.
+    state:
+      label: Manifest
+      value: Not accepted
+  - id: cache
+    label: Manifest Cache
+    kind: Cache
+    brand: none
+    accent: neutral
+    description: Retains canonical bytes under the validated manifest key.
+    state:
+      label: Revision
+      value: None
+steps:
+  - id: request-manifest
+    phase: Manifest request
+    title: Request the active declaration
+    detail: The Agent sends the active session fences and its supported manifest schema versions.
+    active: [agent, provider]
+    states:
+      provider:
+        label: Request
+        value: Validating
+        tone: warning
+    transitions:
+      - source: agent
+        target: provider
+        label: GetManifest
+    responsibility:
+      entities: [agent]
+      label: The request is bound to the exact Bootstrap session already accepted by the Agent.
+  - id: capture-declaration
+    phase: Snapshot capture
+    title: Freeze one complete manifest
+    detail: The Provider resolves the active author declarations and captures operations, triggers, schemas, requirements, and platforms as one immutable snapshot.
+    active: [declaration, provider]
+    states:
+      provider:
+        label: Snapshot
+        value: Immutable
+        tone: warning
+    transitions:
+      - source: declaration
+        target: provider
+        label: complete declaration
+    responsibility:
+      entities: [provider]
+      label: A response never mixes fields from different declaration revisions.
+  - id: compute-revision
+    phase: Canonical revision
+    title: Validate and identify the snapshot
+    detail: The Provider validates embedded schemas and computes the deterministic revision from the canonical manifest preimage.
+    active: [provider]
+    states:
+      provider:
+        label: Snapshot
+        value: Validated · revisioned
+        tone: success
+    transitions: []
+    responsibility:
+      entities: [provider]
+      label: Equivalent declarations produce the same revision regardless of protobuf map order.
+  - id: return-manifest
+    phase: Manifest response
+    title: Return the complete snapshot
+    detail: The Provider returns the selected schema version, session envelope, full declaration, and computed revision.
+    active: [provider, agent]
+    states:
+      agent:
+        label: Manifest
+        value: Validating
+        tone: warning
+    transitions:
+      - source: provider
+        target: agent
+        label: GetManifestResponse
+    responsibility:
+      entities: [agent]
+      label: A successful gRPC status does not make an invalid manifest usable.
+  - id: accept-manifest
+    phase: Agent acceptance
+    title: Validate and cache canonical bytes
+    detail: The Agent verifies response fences, declaration semantics, embedded schemas, and the deterministic revision before accepting the snapshot.
+    active: [agent, cache]
+    states:
+      agent:
+        label: Manifest
+        value: Accepted
+        tone: success
+      cache:
+        label: Revision
+        value: Canonical bytes retained
+        tone: success
+    transitions:
+      - source: agent
+        target: cache
+        label: accepted revision
+        tone: success
+    responsibility:
+      entities: [agent]
+      label: Later assessment, admission, and trigger validation use this exact accepted revision.

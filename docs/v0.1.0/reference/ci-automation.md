@@ -1,59 +1,132 @@
 # CI/CD and artifact verification
 
-StateForge Protocol automation builds one immutable Python distribution and
-uses those exact bytes for installed-package and consumer verification. Pull
-requests, integration pushes, and release-candidate runs share the same
-repository-local actions and reusable workflows.
+StateForge Protocol verifies a release as a distributable contract, not only
+as source code. The pipeline builds one wheel and one source distribution,
+then passes those exact artifacts through clean installation and independent
+Agent and Provider checks.
 
-## Pipeline
+## Verification at a glance
 
 ```mermaid
 flowchart LR
-    S[Source and contract validation] --> B[Build wheel and sdist once]
-    B --> I[Installed-package matrix]
-    B --> A[Agent consumer verification]
-    B --> P[Provider consumer verification]
-    I --> G[Release evidence]
-    A --> G
-    P --> G
+    Source["Source contracts<br/>and generated code"] --> Build["Build once<br/>wheel + sdist"]
+    Build --> Installed["Install cleanly<br/>3 operating systems × 3 Python versions"]
+    Build --> Agent["Agent consumes<br/>the exact wheel"]
+    Build --> Provider["Provider consumes<br/>the exact wheel"]
+    Installed --> Evidence["Release evidence"]
+    Agent --> Evidence
+    Provider --> Evidence
 ```
 
-| Layer | Location | Responsibility |
+<div class="sf-docs-card-grid sf-docs-card-grid--two">
+  <article class="sf-docs-card">
+    <span class="sf-docs-card__label">01 / SOURCE</span>
+    <h3>The contract is internally consistent</h3>
+    <p>
+      Protobuf sources, generated bindings, schemas, fixtures, validators,
+      documentation, and compatibility checks agree before packaging begins.
+    </p>
+  </article>
+  <article class="sf-docs-card">
+    <span class="sf-docs-card__label">02 / ARTIFACT</span>
+    <h3>One build has one identity</h3>
+    <p>
+      The wheel and source distribution are built once and travel with their
+      hashes, package version, source commit, and builder provenance.
+    </p>
+  </article>
+  <article class="sf-docs-card">
+    <span class="sf-docs-card__label">03 / INSTALL</span>
+    <h3>The published package stands alone</h3>
+    <p>
+      Clean environments install the downloaded distributions outside the
+      checkout and replay the packaged contract and conformance evidence.
+    </p>
+  </article>
+  <article class="sf-docs-card">
+    <span class="sf-docs-card__label">04 / CONSUMERS</span>
+    <h3>Both runtimes consume the public contract</h3>
+    <p>
+      Immutable Agent and Provider revisions install the same wheel, run
+      their complete quality suites, and pass Protocol-ownership audits.
+    </p>
+  </article>
+</div>
+
+## One build, exact bytes
+
+[`protocol-build.yml`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/.github/workflows/protocol-build.yml)
+is the only distribution build in the verification graph. It produces one
+artifact bundle:
+
+| File | Purpose |
+| --- | --- |
+| `stateforge_protocol-<version>-py3-none-any.whl` | Python wheel installed by the matrix and both consumers |
+| `stateforge_protocol-<version>.tar.gz` | Source distribution independently installed by the matrix |
+| `SHA256SUMS` | SHA-256 identities for the wheel, source distribution, and provenance record |
+| `PROVENANCE` | Distribution name, version, source commit and ref, builder Python, runner OS, and architecture |
+
+Every downstream job downloads this bundle and verifies `SHA256SUMS` before
+installation. No downstream job rebuilds the package.
+
+!!! important "A green consumer run refers to one exact wheel"
+
+    Agent and Provider verification records both the wheel digest and the
+    installed package's `direct_url.json`. A different wheel with the same
+    version does not satisfy the check.
+
+## Verification gates
+
+| Gate | What runs | What it proves |
 | --- | --- | --- |
-| Contract validation | `.github/actions/contracts/validate` | Buf lint and format, deterministic generation, compatibility, fixtures, and the complete contract suite |
-| Package build | `.github/actions/python/build` | Build one wheel and one source distribution and record hashes and source provenance |
-| Installed verification | `.github/actions/python/test-installed` | Verify and install the downloaded artifact outside the checkout |
-| Consumer verification | `.github/workflows/protocol-consumer-test.yml` | Run independent Agent and Provider suites against the exact built Protocol wheel |
-| Ownership audit | `scripts/ci/audit_consumer.py` | Reject private validation imports and copied normative Protocol identities or limits |
-| Evidence collection | `.github/actions/evidence/collect` | Bound logs and record a small allow-listed runner summary |
-| Reusable workflows | `.github/workflows/protocol-*.yml` | Compose source, build, installed, and consumer verification jobs |
-| Entry workflows | `protocol-ci.yml`, `protocol-release-candidate.yml` | Select event-specific artifact names, retention, concurrency, and compatibility baselines |
+| Source contracts | Dependency-lock check, Actionlint, Zizmor, Buf lint and format, deterministic generation, Buf compatibility, the complete test suite with coverage, Ruff, mypy, and strict documentation build | The source tree, generated outputs, automation, and documented contract agree |
+| Distribution build | One wheel and one source distribution, followed by metadata, checksum, and provenance generation | The candidate has one attributable artifact identity |
+| Installed package | Wheel and source-distribution installation in isolated virtual environments with the checkout removed from Python import resolution | The package contains its generated modules, public contracts, schemas, typing marker, and conformance fixtures |
+| Agent consumer | Exact wheel installation, package-origin verification, Protocol-ownership audit, and the complete Agent quality suite | The Agent consumes this candidate through public Protocol APIs |
+| Provider consumer | Exact wheel installation, package-origin verification, Protocol-ownership audit, and the complete Provider quality suite | StateForge Provider Python consumes this candidate through public Protocol APIs |
 
-## Exact-artifact handoff
+The installed-package gate runs every combination below:
 
-`protocol-build.yml` is the only build owner. It uploads one immutable artifact
-containing the wheel, source distribution, `SHA256SUMS`, and a readable
-`PROVENANCE` record. Installed and consumer jobs download that artifact, verify
-its hashes, and install the recorded wheel. They never rebuild it.
+| Runner | Python versions | Distribution forms |
+| --- | --- | --- |
+| Ubuntu 24.04 | 3.11, 3.12, 3.13 | Wheel and source distribution |
+| macOS 14 | 3.11, 3.12, 3.13 | Wheel and source distribution |
+| Windows Server 2022 | 3.11, 3.12, 3.13 | Wheel and source distribution |
 
-The installed-package matrix verifies distribution metadata, `py.typed`, all
-generated protobuf and gRPC modules, public contract modules, validation
-schemas, and packaged conformance fixtures without a repository `PYTHONPATH`.
-It runs against every supported Python and runner combination.
+The verifier executes from the runner's temporary directory with
+`PYTHONPATH` and `PYTHONHOME` unset and Python isolated mode enabled. This
+prevents the repository checkout from hiding missing package data or broken
+imports.
 
-Agent and Provider verification first resolve each requested consumer ref to
-one immutable commit. Both consumers install the exact Protocol wheel, run
-their complete configured quality suites, and retain the wheel digest and
-resolved consumer identity as evidence.
+## Independent consumer verification
 
-## Portable build action
+Consumer refs may name branches, tags, or commits. The workflow resolves each
+ref once, records the resulting commit, and uses that immutable commit for the
+actual test job.
 
-Another repository may invoke the package action directly. The consumer owns
-revision selection and checks out Protocol below its workspace. The action
-always resolves and builds the checkout containing the action:
+For each consumer, the workflow then:
 
-```yaml
-- uses: actions/checkout@<immutable-sha>
+1. verifies the distribution bundle checksums;
+2. installs the exact Protocol wheel before installing the consumer;
+3. proves the installed distribution originated from that wheel and matches
+   its SHA-256 digest;
+4. audits the consumer for copied service identities, copied Protocol limits,
+   private validation imports, or use of generated bindings without the
+   corresponding public contract and validator; and
+5. runs formatting, linting, typing, tests, and a strict documentation build.
+
+The ownership audit is intentionally separate from ordinary import success.
+A consumer can import generated protobuf code successfully while still
+creating a second, divergent copy of a Protocol-owned rule.
+
+## Portable package build
+
+Another repository can use the package action without copying the build
+logic. The caller selects a Protocol revision, checks it out below its own
+workspace, and invokes the action from that checkout:
+
+```yaml title="Build StateForge Protocol from another repository"
+- uses: actions/checkout@<immutable-action-sha>
   with:
     repository: stateforge-org/stateforge-protocol
     ref: <protocol-ref-or-commit>
@@ -66,61 +139,79 @@ always resolves and builds the checkout containing the action:
     evidence-directory: evidence/protocol-build
 ```
 
-Both destination paths are normalized within the caller workspace before the
-source build begins. `PROVENANCE` records the exact commit and ref from the
-Protocol checkout, never the consuming repository.
+The action resolves its source relative to its own location, so provenance
+describes the Protocol checkout rather than the calling repository. Output and
+evidence paths are normalized inside the caller workspace before the build
+starts.
 
 ## Reusable workflow interfaces
 
-- `protocol-build-and-verify.yml` accepts `artifact-name`,
-  `breaking-against`, and `retention-days`; it returns `artifact-name`,
-  `version`, and `wheel-sha256`.
-- `protocol-build.yml` accepts artifact and evidence names plus retention; it
-  returns the exact build identity.
-- `protocol-installed-test.yml` accepts the artifact name produced by the
-  build workflow plus an evidence prefix and retention.
-- `protocol-consumer-test.yml` accepts the exact artifact name, Agent and
-  Provider refs, an evidence prefix, and retention.
-- `protocol-source-verify.yml` accepts the Buf comparison source plus an
-  evidence name and retention.
+| Workflow | Inputs | Outputs or result |
+| --- | --- | --- |
+| [`protocol-build-and-verify.yml`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/.github/workflows/protocol-build-and-verify.yml) | Artifact name, Buf comparison source, Agent ref, Provider ref, retention | Exact artifact name, package version, and wheel SHA-256 |
+| [`protocol-source-verify.yml`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/.github/workflows/protocol-source-verify.yml) | Buf comparison source, evidence name, retention | Source-contract and quality evidence |
+| [`protocol-build.yml`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/.github/workflows/protocol-build.yml) | Artifact name, evidence name, retention | Artifact name, package version, and wheel SHA-256 |
+| [`protocol-installed-test.yml`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/.github/workflows/protocol-installed-test.yml) | Built artifact name, evidence prefix, retention | Nine isolated wheel and source-distribution verification jobs |
+| [`protocol-consumer-test.yml`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/.github/workflows/protocol-consumer-test.yml) | Built artifact name, Agent ref, Provider ref, evidence prefix, retention | Agent and Provider compatibility evidence against immutable consumer commits |
 
-Pull requests and integration pushes retain artifacts for seven days. Manual
-release-candidate runs default to 30 days. Source, build, installed, and
-consumer jobs upload bounded evidence even when an earlier check fails.
+[`protocol-ci.yml`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/.github/workflows/protocol-ci.yml)
+runs the graph for pull requests and pushes to `main` and
+`mvp/implementation`. Artifacts are retained for seven days.
+
+[`protocol-release-candidate.yml`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/.github/workflows/protocol-release-candidate.yml)
+is manually dispatched. It accepts the compatibility baseline, selected Agent
+and Provider refs, and retention period; release-candidate evidence is retained
+for 30 days by default.
+
+## Evidence artifacts
+
+Evidence is uploaded even when its producing stage fails.
+
+| Stage | Representative evidence |
+| --- | --- |
+| Source | Contract-validation log, Python and documentation quality log, and bounded runner context |
+| Build | Build log and bounded runner context; the distribution bundle separately retains checksums and provenance |
+| Installed package | Wheel and source-distribution conformance JSON, installation logs, and per-matrix runner context |
+| Agent consumer | Requested ref, resolved commit, wheel digest, installed-origin JSON, ownership findings, environment, and quality log |
+| Provider consumer | Requested ref, resolved commit, wheel digest, installed-origin JSON, ownership findings, environment, and quality log |
+
+The evidence collector keeps only an allow-listed runner summary and bounds
+each retained file to 256 KiB by default. It does not dump the process
+environment or upload arbitrary workspace contents.
 
 ## Workflow security
 
-Workflows use read-only repository permissions, pin external actions to full
-commit SHAs, disable persisted checkout credentials, set job timeouts, and key
-Python caches from `pyproject.toml`. Actionlint validates workflow syntax.
-Zizmor blocks medium- or high-severity findings without receiving a GitHub
-token.
+| Control | Enforcement |
+| --- | --- |
+| Minimal token scope | Workflows declare read-only repository contents permission |
+| Immutable third-party automation | External actions are pinned to full commit SHAs |
+| Credential isolation | Checkout persistence is disabled |
+| Bounded execution | Every job has a timeout; CI runs cancel superseded work where appropriate |
+| Static workflow checks | Actionlint validates syntax and expressions |
+| Security audit | Zizmor runs offline and rejects medium-or-higher findings without a GitHub token |
+| Dependency drift | The lock file is checked and caches are keyed from declared dependencies |
 
-Evidence uploads contain bounded logs and a small allow-listed runner summary.
-They never dump the process environment or arbitrary workspace contents.
+## Run source checks locally
 
-## Local parity
-
-After installing the `dev` and `docs` dependency groups, run:
+After installing the `dev` and `docs` dependency groups, the source gates can
+be run with:
 
 ```bash
-GOBIN="$(pwd)/.cache/actionlint" \
-  go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-./.cache/actionlint/actionlint
+uv lock --check --python "3.13"
+actionlint -color
 zizmor --offline --persona auditor --min-severity medium .
 buf lint
 buf format --diff --exit-code
 python scripts/check_generated.py
 buf breaking --against '.git#branch=origin/mvp/implementation'
+python -m pytest --cov
 python -m ruff format --check .
 python -m ruff check .
 python -m mypy src
-python -m pytest
-python -m build
 python -m mkdocs build --strict
+python -m build
 ```
 
-The installed-package verifier, consumer verifier, and ownership auditor are
-CI tools for validating exact artifacts and independent repositories. Their
-source behavior is covered by the repository test suite; the cross-repository
-consumer workflow is the release evidence for real consumer compatibility.
+These commands exercise the source and build gates. GitHub Actions remains the
+proof for the complete operating-system matrix, exact artifact handoff, and
+independent Agent and Provider compatibility.

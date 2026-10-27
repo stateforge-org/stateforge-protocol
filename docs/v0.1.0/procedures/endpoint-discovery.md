@@ -10,6 +10,16 @@ Endpoint discovery is a versioned filesystem contract, not an RPC. The channel
 it produces remains untrusted until
 [Handshake and version negotiation](../bootstrap.md) succeeds.
 
+## Endpoint discovery at a glance
+
+The Provider publishes one generation-specific endpoint. The Agent trusts it
+only after the descriptor and Unix socket pass their separate validation
+boundaries.
+
+```stateforge-entity-flow
+source: endpoint-discovery-overview.yaml
+```
+
 ## Interactive walkthrough
 
 ```stateforge-procedure

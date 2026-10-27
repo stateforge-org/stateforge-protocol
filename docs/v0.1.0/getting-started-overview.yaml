@@ -1,0 +1,109 @@
+schema: stateforge.docs/entity-flow/v1
+flow: getting-started-bootstrap-example
+title: One server, one client, one fenced session
+summary: The Provider example listens on a Unix socket, and the Agent example completes one validated Bootstrap exchange over that local channel.
+autoplay: true
+entities:
+  - id: provider
+    label: Provider Terminal
+    kind: Process
+    brand: stateforge
+    accent: provider
+    description: Runs the example Bootstrap server for one Provider instance and endpoint generation.
+    state:
+      label: Server
+      value: Not started
+  - id: socket
+    label: Unix Socket
+    kind: Socket
+    brand: none
+    accent: neutral
+    description: Carries the local gRPC request and response between the two example processes.
+    state:
+      label: Channel
+      value: Not bound
+  - id: agent
+    label: Agent Terminal
+    kind: Agent
+    brand: stateforge
+    accent: agent
+    description: Runs the example client and accepts the session only after validating every response fence.
+    state:
+      label: Session
+      value: Not established
+steps:
+  - id: start-server
+    phase: Terminal 1
+    title: Start the Provider example
+    detail: The server creates a fresh Provider runtime identity and binds Bootstrap to the supplied Unix socket for the expected Provider instance and generation.
+    active: [provider, socket]
+    states:
+      provider:
+        label: Runtime
+        value: Listening · generation 1
+        tone: success
+      socket:
+        label: Channel
+        value: Bound
+        tone: success
+    transitions:
+      - source: provider
+        target: socket
+        label: listen
+        tone: success
+    responsibility:
+      entities: [provider]
+      label: Leave Terminal 1 running while the client performs the exchange.
+  - id: send-handshake
+    phase: Terminal 2
+    title: Run the Agent example
+    detail: The client creates a bounded local channel, validates its request, and offers SFP 1.0 with the Provider identity and generation supplied on the command line.
+    active: [agent, socket, provider]
+    states:
+      agent:
+        label: Request
+        value: Validated · SFP 1.0 offered
+        tone: warning
+    transitions:
+      - source: agent
+        target: provider
+        label: HandshakeRequest
+    responsibility:
+      entities: [agent]
+      label: The example arguments stand in for an already validated endpoint descriptor.
+  - id: issue-session
+    phase: Bootstrap
+    title: Negotiate and issue a session
+    detail: The Provider validates the request, confirms the live identity fence, selects the mutual wire version, and creates a fresh session ID.
+    active: [provider, socket, agent]
+    states:
+      provider:
+        label: Bootstrap
+        value: SFP 1.0 · fresh session
+        tone: success
+    transitions:
+      - source: provider
+        target: agent
+        label: HandshakeResponse
+        tone: success
+    responsibility:
+      entities: [provider]
+      label: The Provider owns version selection, runtime identity, and fresh session allocation.
+  - id: accept-session
+    phase: Client output
+    title: Validate and print the session
+    detail: The client validates the response, compares every returned fence with what it expected and offered, then prints the accepted wire version and session identities.
+    active: [agent, provider]
+    states:
+      agent:
+        label: Session
+        value: Established · SFP 1.0
+        tone: success
+      socket:
+        label: Exchange
+        value: Complete
+        tone: success
+    transitions: []
+    responsibility:
+      entities: [agent]
+      label: A response is not trusted until its structure, identity, generation, and selected version all validate.

@@ -1,0 +1,349 @@
+schema: stateforge.docs/procedure/v1
+procedure: version-negotiation
+title: SFP wire version negotiation
+summary: Select and bind one mutually supported wire version to a new session.
+default_scenario: success
+
+entities:
+  - id: agent
+    label: StateForge Agent
+    kind: process
+    role: Offers every SFP wire version it fully implements
+  - id: provider
+    label: Provider Process
+    kind: process
+    role: Selects from its own fully implemented wire versions
+  - id: session
+    label: Provider Session
+    kind: resource
+    role: Retains the selected wire version until the connection is replaced
+
+scenarios:
+  success:
+    label: Highest common version
+    steps:
+      - id: prepare-offer
+        title: Prepare the version offer
+        detail: The Agent constructs a nonempty, duplicate-free set containing only wire versions it fully implements.
+        phase: Agent offer
+        active: [agent]
+        fields: [supported_sfp_versions, "[1.0]"]
+        transitions:
+          - source: agent
+            target: agent
+            label: validate offer
+        activities:
+          agent:
+            title: Declare implemented versions
+            items:
+              - Include every supported major.minor pair
+              - Assign no preference to list order
+        context:
+          kind: Agent-owned input
+          value: supported_sfp_versions = [1.0]
+
+      - id: send-request
+        title: Send the offer
+        detail: The Agent sends its supported versions inside the fenced HandshakeRequest.
+        phase: Bootstrap request
+        active: [agent, provider]
+        fields: [HandshakeRequest, supported_sfp_versions]
+        transitions:
+          - source: agent
+            target: provider
+            label: HandshakeRequest
+        activities:
+          agent:
+            title: Retain the offered set
+            items:
+              - Keep the endpoint fences for response validation
+          provider:
+            title: Validate the request
+            items:
+              - Reject an empty or duplicate version set
+        context:
+          kind: Wire message
+          value: Agent offers SFP 1.0
+
+      - id: select-version
+        title: Select the highest common version
+        detail: The Provider intersects the Agent offer with its own implemented versions and chooses the greatest major.minor pair.
+        phase: Provider selection
+        active: [provider]
+        fields: [intersection, highest common version]
+        transitions:
+          - source: provider
+            target: provider
+            label: intersect sets
+        activities:
+          provider:
+            title: Resolve compatibility
+            items:
+              - Compare numeric major.minor pairs
+              - Select SFP 1.0
+        context:
+          kind: Selection rule
+          value: highest(agent versions ∩ provider versions) = 1.0
+
+      - id: return-selection
+        title: Return the selected version
+        detail: The Provider includes the selected version and fresh session fences in HandshakeResponse.
+        phase: Bootstrap response
+        active: [provider, agent]
+        fields: [selected_sfp_version, session_id]
+        transitions:
+          - source: provider
+            target: agent
+            label: HandshakeResponse
+            tone: success
+        activities:
+          provider:
+            title: Create a candidate session
+            items:
+              - Return selected_sfp_version = 1.0
+              - Issue a fresh session ID
+          agent:
+            title: Receive the candidate session
+            items:
+              - Do not bind it before correlation succeeds
+        context:
+          kind: Candidate result
+          value: selected_sfp_version = 1.0
+
+      - id: bind-version
+        title: Bind SFP 1.0 to the session
+        detail: The Agent confirms that the version was offered and every endpoint fence still matches before accepting the session.
+        phase: Session bound
+        active: [agent, session]
+        fields: [SFP 1.0, session bound]
+        transitions:
+          - source: agent
+            target: session
+            label: bind 1.0
+            tone: success
+        activities:
+          agent:
+            title: Validate Agent-owned fences
+            items:
+              - Confirm 1.0 was offered
+              - Match endpoint identity and generation
+          session:
+            title: Retain the negotiated contract
+            items:
+              - Use SFP 1.0 for this session
+        context:
+          kind: Result
+          value: The session speaks SFP 1.0 until its connection is replaced
+
+  incompatible:
+    label: No common version
+    steps:
+      - id: incompatible-offer
+        title: Offer a disjoint version set
+        detail: The Agent sends a valid offer that has no version in common with the Provider.
+        phase: Bootstrap request
+        active: [agent, provider]
+        fields: [supported_sfp_versions, no intersection]
+        transitions:
+          - source: agent
+            target: provider
+            label: HandshakeRequest
+        activities:
+          agent:
+            title: Offer implemented versions
+            items:
+              - Send a nonempty, duplicate-free set
+          provider:
+            title: Compare implemented versions
+            items:
+              - Find an empty intersection
+        context:
+          kind: Negotiation
+          value: agent versions ∩ provider versions = empty
+
+      - id: reject-incompatible
+        title: Reject the handshake
+        detail: The Provider returns UNIMPLEMENTED and creates no session.
+        phase: No compatible contract
+        active: [provider, agent]
+        fields: [UNIMPLEMENTED, no session]
+        transitions:
+          - source: provider
+            target: agent
+            label: UNIMPLEMENTED
+            tone: warning
+        activities:
+          provider:
+            title: Retain no session state
+            items:
+              - Return the canonical status
+          agent:
+            title: Reject the generation
+            items:
+              - Do not retry it indefinitely unchanged
+        context:
+          kind: Retry boundary
+          value: Retry only after the endpoint generation or supported versions change
+
+  response-mismatch:
+    label: Provider selects an unoffered version
+    steps:
+      - id: retain-offer
+        title: Retain the original offer
+        detail: The Agent keeps the exact offered set so it can validate the response independently.
+        phase: Agent offer
+        active: [agent, provider]
+        fields: [supported_sfp_versions, "[1.0]"]
+        transitions:
+          - source: agent
+            target: provider
+            label: HandshakeRequest
+        activities:
+          agent:
+            title: Preserve correlation state
+            items:
+              - Retain offered versions and endpoint fences
+          provider:
+            title: Process the request
+            items:
+              - Return a candidate response
+        context:
+          kind: Agent-owned fence
+          value: The Agent offered only SFP 1.0
+
+      - id: return-unoffered
+        title: Return an unoffered version
+        detail: The response is structurally valid but selects a version outside the Agent offer.
+        phase: Invalid correlation
+        active: [provider, agent]
+        fields: [selected_sfp_version, not offered]
+        transitions:
+          - source: provider
+            target: agent
+            label: HandshakeResponse
+            tone: warning
+        activities:
+          provider:
+            title: Return a mismatched candidate
+            items:
+              - Select a version absent from the request
+          agent:
+            title: Compare with the retained offer
+            items:
+              - Detect the unoffered version
+        context:
+          kind: Correlation failure
+          value: selected_sfp_version is not in supported_sfp_versions
+
+      - id: reject-candidate
+        title: Reject the candidate session
+        detail: The Agent records a local protocol failure and never binds the mismatched session.
+        phase: Session rejected
+        active: [agent, session]
+        fields: [protocol failure, no session bound]
+        transitions:
+          - source: agent
+            target: session
+            label: reject
+            tone: failure
+        activities:
+          agent:
+            title: Stop before manifest exchange
+            items:
+              - Preserve the mismatch for diagnostics
+          session:
+            title: Remain unbound
+            items:
+              - Accept no later SFP procedure
+        context:
+          kind: Required behavior
+          value: A structurally valid response is not enough to establish compatibility
+
+  reconnect:
+    label: Reconnect and renegotiate
+    prefix:
+      scenario: success
+      through: bind-version
+    steps:
+      - id: lose-session
+        title: Lose the active connection
+        detail: Connection replacement invalidates the session and its negotiated version binding.
+        phase: Session interrupted
+        active: [session, agent, provider]
+        fields: [old session stale]
+        transitions:
+          - source: session
+            target: agent
+            label: connection lost
+            tone: warning
+        activities:
+          agent:
+            title: Invalidate the old session
+            items:
+              - Reject late messages from it
+          provider:
+            title: Stop serving the old connection
+            items:
+              - Authorize no reuse of its session ID
+          session:
+            title: Become stale
+            items:
+              - Carry no version authority into a new connection
+        context:
+          kind: Session boundary
+          value: Negotiation never survives connection replacement
+
+      - id: renegotiate
+        title: Perform a fresh handshake
+        detail: The peers exchange their current supported sets again; neither side assumes that the former selection still applies.
+        phase: Renegotiation
+        active: [agent, provider]
+        fields: [new HandshakeRequest, current version sets]
+        transitions:
+          - source: agent
+            target: provider
+            label: new HandshakeRequest
+        activities:
+          agent:
+            title: Build a new offer
+            items:
+              - Use the versions implemented now
+          provider:
+            title: Recompute compatibility
+            items:
+              - Intersect the current sets again
+        context:
+          kind: Recovery rule
+          value: Every new connection performs version negotiation again
+
+      - id: bind-fresh-session
+        title: Bind a fresh session
+        detail: A successful response creates a new session with its own selected version and fences.
+        phase: Fresh session
+        active: [provider, agent, session]
+        fields: [fresh session_id, selected_sfp_version]
+        transitions:
+          - source: provider
+            target: agent
+            label: HandshakeResponse
+            tone: success
+          - source: agent
+            target: session
+            label: bind fresh session
+            tone: success
+        activities:
+          provider:
+            title: Issue new session fences
+            items:
+              - Return the new negotiated version
+          agent:
+            title: Validate and accept
+            items:
+              - Bind only after full response correlation
+          session:
+            title: Own the new version binding
+            items:
+              - Replace the stale session completely
+        context:
+          kind: Result
+          value: The new session owns its own wire-version selection

@@ -9,6 +9,16 @@ The StateForge Agent is the gRPC client. The Provider runtime is the gRPC
 server. Bootstrap is the first RPC on the shared local channel and no later
 SFP procedure may use that channel until the handshake succeeds.
 
+## Bootstrap at a glance
+
+The Agent begins with an expected endpoint identity from discovery. Bootstrap
+turns that expectation and a provisional channel into one negotiated, fenced
+session.
+
+```stateforge-entity-flow
+source: procedures/bootstrap-overview.yaml
+```
+
 ## Interactive walkthrough
 
 ```stateforge-procedure

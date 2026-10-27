@@ -1,273 +1,278 @@
 # Python contracts
 
-!!! warning
+The `stateforge-protocol` package is the canonical Python surface for SFP. It
+provides generated protobuf messages and gRPC bindings, versioned procedure
+constants, semantic validators, and the small cross-procedure helpers needed
+to host one shared Provider endpoint.
 
-    The `_pb2` and `_pb2_grpc` modules are generated from Protocol Buffers.
-    Treat the `.proto` schema as authoritative for their wire shape and never
-    edit generated modules. Handwritten `contract` modules expose normative
-    limits that Protocol Buffers cannot express.
+Provider authors using StateForge Provider Python normally use the framework's
+declarative API instead. The modules on this page are for Agent, Provider
+runtime, and independent SFP implementations.
 
-The bootstrap, manifest, capability-assessment, operation-admission,
-operation-lifecycle, and trigger-publication schemas generate these Python
-modules:
+## Choose the right layer
+
+```mermaid
+flowchart LR
+    Code[Runtime code] --> Wire[Generated messages and gRPC bindings]
+    Code --> Contract[contract.py]
+    Code --> Validation[validation.py]
+    Wire --> RPC[Serialized RPC]
+    Contract --> RPC
+    Validation --> Accepted[Semantically accepted exchange]
+    RPC --> Validation
+    Accepted --> Live[Runtime-owned state checks]
+```
+
+| You need to… | Import… | What it owns |
+| --- | --- | --- |
+| Build or read protobuf messages | `*_pb2` | Wire fields, protobuf types, and serialization |
+| Call or implement a gRPC service | `*_pb2_grpc` | Client stubs, servicer bases, and server registration |
+| Configure a procedure boundary | `contract` | Service identity, message limits, collection bounds, and stable constants |
+| Accept a message or exchange | `validation` | Context-independent semantic validation and correlation |
+| Configure the multiplexed endpoint | `stateforge_protocol.sfp.shared_endpoint` | Complete service inventory and aggregate gRPC ceilings |
+| Classify a reconnect | `stateforge_protocol.sfp.recovery` | Identity continuity between two already validated sessions |
+
+!!! important
+
+    Constructing a generated protobuf message proves only that its fields can
+    be represented on the wire. It does not prove that the message satisfies
+    the StateForge contract. Validate it before using it.
+
+## Procedure packages
+
+Each versioned procedure keeps its generated and handwritten APIs together.
+The import path is part of the contract version; do not import a private
+module or copy constants into a consumer.
+
+| Procedure | Python surface | Primary RPC or artifact |
+| --- | --- | --- |
+| [Endpoint Discovery](../procedures/endpoint-discovery.md) | `sfp.endpoint_discovery.v1.contract` | Endpoint descriptor and Unix socket names |
+| [Bootstrap](../bootstrap.md) | `sfp.bootstrap.v1` | `BootstrapService.Handshake` |
+| [Provider Manifest](../procedures/provider-manifest.md) | `sfp.manifest.v1` | `ManifestService.GetManifest` |
+| [Health](../procedures/health.md) | `sfp.health_contract` plus `grpc_health.v1` | Standard `grpc.health.v1.Health` service |
+| [Capability Assessment](../procedures/capability-assessment.md) | `sfp.capability_assessment.v1` | `CapabilityAssessmentService.AssessCapabilities` |
+| [Operation Admission](../procedures/operation-admission.md) | `sfp.operation_admission.v1` | `OperationAdmissionService.StartOperation` |
+| [Operation Lifecycle](../procedures/progress-results-cancellation.md) | `sfp.operation_lifecycle.v1` | `WatchOperation` and `CancelOperation` |
+| [Trigger Publication](../procedures/triggers.md) | `sfp.trigger_publication.v1` | `TriggerPublicationService.StreamTriggers` |
+| [Recovery](../procedures/disconnection-recovery.md) | `sfp.recovery` | Cross-procedure identity classification; no separate RPC |
+
+For a protobuf-backed procedure, its version package contains:
+
+```text
+stateforge_protocol.sfp.<procedure>.v1
+├── <procedure>_pb2.py       # messages and enums
+├── <procedure>_pb2_grpc.py  # stubs, servicers, registration
+├── contract.py              # names and normative limits
+└── validation.py            # semantic validators
+```
+
+The generated modules also ship `.pyi` typing information. Never edit generated
+`_pb2` or `_pb2_grpc` modules; change the owning `.proto` source and regenerate
+them.
+
+The canonical sources are the
+[protobuf definitions](https://github.com/stateforge-org/stateforge-protocol/tree/mvp/implementation/proto/stateforge_protocol/sfp)
+and the
+[versioned Python packages](https://github.com/stateforge-org/stateforge-protocol/tree/mvp/implementation/src/stateforge_protocol/sfp).
+
+## Validate an exchange
+
+Validate outgoing data before sending it, then validate the successful
+response together with the exact request that produced it. Exchange validators
+check both message bodies and their context-independent correlation.
 
 ```python
-from stateforge_protocol.sfp.bootstrap.v1 import bootstrap_pb2
-from stateforge_protocol.sfp.bootstrap.v1 import bootstrap_pb2_grpc
-from stateforge_protocol.sfp.manifest.v1 import manifest_pb2
-from stateforge_protocol.sfp.manifest.v1 import manifest_pb2_grpc
-from stateforge_protocol.sfp.capability_assessment.v1 import (
-    capability_assessment_pb2,
+from stateforge_protocol.sfp.operation_admission.v1 import (
+    operation_admission_pb2,
+    operation_admission_pb2_grpc,
+    validation,
 )
-from stateforge_protocol.sfp.capability_assessment.v1 import (
-    capability_assessment_pb2_grpc,
+
+
+async def start_operation(
+    stub: operation_admission_pb2_grpc.OperationAdmissionServiceStub,
+    request: operation_admission_pb2.StartOperationRequest,
+) -> operation_admission_pb2.StartOperationResponse:
+    validation.validate_start_operation_request(request)
+    response = await stub.StartOperation(request)
+    validation.validate_admission_exchange(request, response)
+    return response
+```
+
+The same pattern applies to each procedure:
+
+1. build a generated request;
+2. validate the request before transmission;
+3. call the generated gRPC stub;
+4. validate the response or complete exchange; and
+5. apply checks that depend on the runtime's current state.
+
+### Public validator inventory
+
+| Procedure | Message validation | Correlation and derived values |
+| --- | --- | --- |
+| Bootstrap | `validate_handshake_request`, `validate_handshake_response` | `validate_protocol_version` |
+| Provider Manifest | `validate_manifest_document`, `validate_manifest_response` | `compute_manifest_revision`, `validate_manifest_key` |
+| Capability Assessment | `validate_assess_capabilities_request`, `validate_assess_capabilities_response` | `validate_assessment_exchange` |
+| Operation Admission | Request, response, record, and error-detail validators | `validate_admission_exchange`, `canonical_invocation`, `compute_request_fingerprint` |
+| Operation Lifecycle | Watch, Cancel, snapshot, and error-detail validators | Watch/Cancel exchange, transition, and terminal-replay validators |
+| Trigger Publication | Stream, publication, and acknowledgement validators | Stream-open and publication/acknowledgement exchange validators; canonical content and fingerprint helpers |
+
+Every validator raises the procedure's public validation error, such as
+`OperationAdmissionValidationError`. Error messages identify the violated
+contract without echoing business payloads or secret configuration.
+
+Endpoint Discovery is a filesystem contract rather than a protobuf procedure.
+Its public `contract` module owns `EndpointDescriptor`, `parse_descriptor`,
+filename derivation, permissions, size bounds, and generation validation.
+
+## Contract constants
+
+Protobuf defines field types, but it cannot configure gRPC message ceilings or
+express every aggregate JSON and collection bound. Import those limits from the
+procedure's `contract` module.
+
+```python
+from stateforge_protocol.sfp.manifest.v1 import contract
+
+service_name = contract.SERVICE_NAME
+maximum_request_bytes = contract.MAX_REQUEST_BYTES
+maximum_response_bytes = contract.MAX_RESPONSE_BYTES
+maximum_operations = contract.MAX_OPERATIONS
+```
+
+Common categories include:
+
+| Category | Examples |
+| --- | --- |
+| RPC size | `MAX_REQUEST_BYTES`, `MAX_RESPONSE_BYTES` |
+| Canonical content | JSON depth, node count, string length, and preimage size |
+| Collections | Operations, triggers, findings, roles, observers, or in-flight publications |
+| Stable identities | `SERVICE_NAME`, descriptor suffix, transport name, reason-code vocabulary |
+| Flow control | Pending snapshots, observers, retry bounds, and stalled-delivery deadlines |
+
+Capability Assessment's core reason codes are extensible identifiers rather
+than a closed enum. Import constants such as
+`REASON_CODE_ACCESS_DENIED` and `REASON_CODE_REQUIREMENT_UNMET`; do not copy
+their dotted strings into a runtime.
+
+## Configure the shared endpoint
+
+One Provider gRPC server hosts Bootstrap, standard Health, and every SFP
+procedure. `shared_endpoint` derives transport ceilings from the complete
+service inventory.
+
+=== "Provider server"
+
+    ```python
+    import grpc
+
+    from stateforge_protocol.sfp import shared_endpoint
+
+    server = grpc.aio.server(
+        options=(
+            (
+                "grpc.max_receive_message_length",
+                shared_endpoint.MAX_PROVIDER_RECEIVE_BYTES,
+            ),
+            (
+                "grpc.max_send_message_length",
+                shared_endpoint.MAX_PROVIDER_SEND_BYTES,
+            ),
+        )
+    )
+    ```
+
+=== "Agent channel"
+
+    ```python
+    import grpc
+
+    from stateforge_protocol.sfp import shared_endpoint
+
+    channel = grpc.aio.insecure_channel(
+        "unix:///run/stateforge-agent/providers/provider.sock",
+        options=(
+            (
+                "grpc.max_send_message_length",
+                shared_endpoint.MAX_PROVIDER_RECEIVE_BYTES,
+            ),
+            (
+                "grpc.max_receive_message_length",
+                shared_endpoint.MAX_PROVIDER_SEND_BYTES,
+            ),
+        ),
+    )
+    ```
+
+`shared_endpoint.PROCEDURE_LIMITS` lists the service name and both message
+directions for every registered procedure. The aggregate ceiling prevents gRPC
+from rejecting a valid procedure message before its handler runs.
+
+!!! note
+
+    The shared ceiling does not replace per-procedure validation. A Manifest
+    request larger than `manifest.MAX_REQUEST_BYTES` remains invalid even when
+    the shared endpoint can receive a larger Capability Assessment request.
+
+## Cross-procedure APIs
+
+### Standard Health
+
+StateForge uses the generated `grpc_health.v1` messages and service. The
+handwritten `stateforge_protocol.sfp.health_contract` module identifies the
+authoritative empty-service Watch, named diagnostic services, and Health
+message limits.
+
+```python
+from grpc_health.v1 import health_pb2
+
+from stateforge_protocol.sfp import health_contract
+
+request = health_pb2.HealthCheckRequest(
+    service=health_contract.AUTHORITATIVE_WATCH_SERVICE
 )
+```
+
+### Recovery identity
+
+Recovery composes existing procedures rather than defining another service.
+Classify two independently validated endpoint/session identities before
+deciding which retained state may be reconciled.
+
+```python
 from stateforge_protocol.sfp.operation_admission.v1 import (
     operation_admission_pb2,
 )
-from stateforge_protocol.sfp.operation_admission.v1 import (
-    operation_admission_pb2_grpc,
-)
-from stateforge_protocol.sfp.operation_lifecycle.v1 import (
-    operation_lifecycle_pb2,
-    operation_lifecycle_pb2_grpc,
-)
-from stateforge_protocol.sfp.trigger_publication.v1 import (
-    trigger_publication_pb2,
-)
-from stateforge_protocol.sfp.trigger_publication.v1 import (
-    trigger_publication_pb2_grpc,
-)
-```
-
-The `_pb2` modules contain message classes; `_pb2_grpc` modules contain client
-and server bindings. Both include generated `.pyi` typing contracts. Manifest
-bindings expose `ManifestService.GetManifest`, its request/response, and typed
-Provider, operation, runtime-requirement, platform, and trigger declarations.
-Capability-assessment bindings expose
-`CapabilityAssessmentService.AssessCapabilities`, its request/response, and
-typed finding, requirement, reason, and constraint messages.
-Operation-admission bindings expose
-`OperationAdmissionService.StartOperation`, the immutable invocation and
-session-binding messages, admission record, dispositions, modes, and structured
-error detail.
-Operation-lifecycle bindings expose
-`OperationLifecycleService.WatchOperation` (server streaming) and
-`CancelOperation` (unary), complete operation snapshots, typed terminal
-outcomes, progress, cancellation dispositions, and structured RPC error detail.
-They reuse the Operation Admission session-binding and admission-record types.
-Trigger-publication bindings expose the bidirectional
-`TriggerPublicationService.StreamTriggers` stream, session/manifest binding,
-schema-bound publication envelope, acknowledgements, and structured rejection
-reasons.
-
-## Versioned runtime limits
-
-Protobuf and JSON Schema describe message structure, but they cannot configure
-gRPC message ceilings or portably enforce aggregate JSON depth. Each procedure
-with normative runtime limits therefore exposes them through a versioned
-`contract` module:
-
-```python
-from stateforge_protocol.sfp.capability_assessment.v1 import (
-    contract as capability_assessment,
-)
-from stateforge_protocol.sfp.bootstrap.v1 import contract as bootstrap
-from stateforge_protocol.sfp import health_contract as health
-from stateforge_protocol.sfp.manifest.v1 import contract as manifest
-from stateforge_protocol.sfp.operation_admission.v1 import (
-    contract as operation_admission,
-)
-from stateforge_protocol.sfp.operation_lifecycle.v1 import (
-    contract as operation_lifecycle,
-)
-from stateforge_protocol.sfp.trigger_publication.v1 import (
-    contract as trigger_publication,
-)
-```
-
-Use the selected procedure's constants at its RPC boundary. For example,
-Bootstrap accepts at most `bootstrap.MAX_REQUEST_BYTES`, standard gRPC Health
-accepts at most `health.MAX_REQUEST_BYTES`, Manifest Exchange accepts at most
-`manifest.MAX_REQUEST_BYTES`, and Capability Assessment accepts at most
-`capability_assessment.MAX_REQUEST_BYTES`. Collection constants such as
-`manifest.MAX_OPERATIONS` and
-`operation_admission.MAX_REQUIRED_IMPLEMENTATION_ROLES` mirror the packaged
-validation schemas. Depth, canonical-document size, retry, and flow-control
-constants cover limits that JSON Schema cannot express by itself.
-
-Capability Assessment also exposes its canonical core reason-code vocabulary
-through `capability_assessment.REASON_CODE_ACCESS_DENIED`,
-`REASON_CODE_PERMISSION_UNCERTAIN`, `REASON_CODE_UNSUPPORTED_VENDOR_STATE`,
-`REASON_CODE_INSUFFICIENT_EVIDENCE`, and `REASON_CODE_REQUIREMENT_UNMET`.
-Import these values rather than copying their dotted strings into a consumer.
-They are reusable core identifiers, not a closed enum; the contract continues
-to accept correctly namespaced extension reason codes.
-
-A process hosting every current Provider service uses the authoritative shared
-endpoint inventory. Its aggregate transport ceilings are derived from every
-Bootstrap, Health, and SFP procedure in that inventory:
-
-```python
-from stateforge_protocol.sfp import shared_endpoint
-
-server_receive_limit = shared_endpoint.MAX_PROVIDER_RECEIVE_BYTES  # 8 MiB
-server_send_limit = shared_endpoint.MAX_PROVIDER_SEND_BYTES  # 16 MiB
-```
-
-`shared_endpoint.PROCEDURE_LIMITS` exposes the service name and both message
-directions for each registered procedure. Agent send uses the Provider receive
-ceiling; Agent receive uses the Provider send ceiling.
-
-The shared ceiling only prevents the transport from rejecting a valid message
-before its handler runs. It does not replace the smaller per-RPC checks. A
-Manifest request larger than 8 KiB remains invalid even when the shared server
-accepts messages up to 8 MiB, and each procedure must still enforce its own
-canonical JSON, nesting, collection, retry, and flow-control limits.
-
-## Canonical validation architecture
-
-Context-independent procedure semantics are exposed from the owning version's
-public `validation` module. Consumers import that procedure module; they do not
-import Protocol's private `sfp._validation` support module or reimplement its
-mechanics.
-
-The ownership split is deliberate:
-
-| Module | Responsibility |
-| --- | --- |
-| `contract.py` | Normative procedure constants, service identities, message bounds, and small named predicates |
-| `validation.py` | Public procedure error type, message validators, exchange validators, and domain-specific correlation rules |
-| `sfp._validation` | Private schema loading, ProtoJSON projection, shared scalar translation, bounded traversal, and canonical JSON mechanics |
-| Private procedure helpers | Complex algorithms meaningful only to that procedure, such as Manifest embedded-schema inspection |
-
-A procedure `validation.py` must read as the procedure contract rather than as
-a collection of generic parsers. It may compose private shared mechanics, but
-its public API and errors remain procedure-owned and versioned. Shared support
-contains no procedure constants, schema paths, service names, or runtime-state
-policy.
-
-New procedures must ship their canonical validators with their wire contract.
-Their tests must prove both the semantic behavior and that generic mechanics
-were not copied back into the procedure module. Agent and Provider integrations
-then call those public validators and add only checks that require local state.
-Bootstrap, Manifest Exchange, Capability Assessment, Trigger Publication,
-Operation Admission, and Operation Lifecycle implement this pattern. A missing
-validator for a future procedure is an upstream Protocol gap, not permission
-for a consumer runtime to create its own canonical copy.
-
-Use the packaged semantic validator when building the consuming runtime. It
-applies the versioned ProtoJSON schema, embedded-schema restrictions, resource
-bounds, RFC 8785 canonicalization, and revision verification consistently.
-
-```python
-from stateforge_protocol.sfp.manifest.v1 import manifest_pb2
-from stateforge_protocol.sfp.manifest.v1.validation import (
-    validate_manifest_response,
-)
-
-
-def accept_manifest(response: manifest_pb2.GetManifestResponse) -> bytes:
-    """Validate semantics and return the canonical manifest document."""
-    return validate_manifest_response(response)
-```
-
-The [manifest procedure](../procedures/provider-manifest.md) defines required
-session checks, schema negotiation, revision calculation, privacy, resource
-limits and caching behavior. Constructing a generated message does not enforce
-those requirements. Populate `GetManifestRequest.expected_session_id` from
-`HandshakeResponse.session_id`. Before accepting a manifest, match the response
-`session_id` to both that request and the Agent's current session, even when
-reusing a cached manifest revision. JSON Schema checks the opaque string's
-shape; consumer runtimes enforce the active-session relationship.
-
-Capability Assessment exposes one canonical validator for each message and one
-for the complete request/response exchange:
-
-```python
-from stateforge_protocol.sfp.capability_assessment.v1 import (
-    capability_assessment_pb2,
-)
-from stateforge_protocol.sfp.capability_assessment.v1.validation import (
-    validate_assessment_exchange,
-)
-
-
-def accept_assessment(
-    request: capability_assessment_pb2.AssessCapabilitiesRequest,
-    response: capability_assessment_pb2.AssessCapabilitiesResponse,
-) -> None:
-    """Validate both messages and their context-independent correlation."""
-    validate_assessment_exchange(request, response)
-```
-
-The [capability-assessment procedure](../procedures/capability-assessment.md)
-defines runtime session/manifest fencing, declaration checks, readiness,
-failure mapping, deadlines, and retry behavior. The canonical validator
-enforces the complete ProtoJSON schema, context nesting, normalized finding
-invariants, unique detail identifiers, request/response correlation, and exact
-ordered finding coverage. Constructing a generated message does not perform
-either class of validation.
-
-Operation Admission exposes request, response, error-detail, record, exchange,
-canonical-invocation, and fingerprint validators from its public `validation`
-module. The
-[operation-admission procedure](../procedures/operation-admission.md) defines
-the canonical RFC 8785 fingerprint, current-session checks, validation order,
-atomic admission behavior, retry modes, retention, and structured error
-mapping. Constructing a generated message does not implement an operation
-registry or make dispatch idempotent by itself.
-
-Operation Lifecycle exposes Watch, Cancel, snapshot, transition, terminal
-replay, error-detail, and exchange validators from its public `validation`
-module. The
-[lifecycle procedure](../procedures/progress-results-cancellation.md) defines
-session/fingerprint checks, sequence gaps, immutable terminal outcomes,
-cancellation races, and bounded retention. Validate a success result against
-the originally admitted operation's pinned result schema as a separate step.
-For the initial Watch replay, `validate_watch_exchange` uses the request's
-`after_sequence`. For each later response on that stream, pass the last
-delivered snapshot sequence as `previous_sequence`; later responses must
-strictly advance and their `updates_skipped` flag is evaluated from that
-sequence.
-These bindings do not provide an execution manager or enforce runtime state
-transitions, sanitization, or backpressure.
-
-Trigger Publication exposes stream-envelope, stream-open, publication,
-acknowledgement, exchange, canonical-content, and fingerprint validators from
-its public `validation` module. The
-[trigger-publication procedure](../procedures/triggers.md) defines the exact
-manifest schema selection, stream fencing, canonical publication equality,
-acknowledgement boundary, retry behavior, flow control, and failure mapping.
-Constructing a generated publication does not validate its `payload` against
-the selected manifest declaration or make delivery durable by itself.
-
-## Recovery identity classification
-
-Disconnection recovery is a composition of the existing procedures rather
-than a separate RPC. The installed package exposes the context-independent
-identity classifier used to distinguish a same-process reconnect, endpoint
-replacement, process restart, and replacement installation:
-
-```python
-from stateforge_protocol.sfp.recovery import (
-    EndpointSessionIdentity,
-    classify_recovery,
-)
+from stateforge_protocol.sfp.recovery import classify_recovery
 
 transition = classify_recovery(previous_identity, current_identity)
+
+if transition.requires_resolve_only:
+    # A generation boundary forbids creating absent work during recovery.
+    admission_mode = operation_admission_pb2.ADMISSION_MODE_RESOLVE_ONLY
 ```
 
-Both identities must come from independently validated discovery and
-Bootstrap exchanges. The classifier rejects backward generations, session
-identities reused by the same Provider installation, and runtime changes hidden
-inside one endpoint generation. Session values are not compared across
-replacement installations because the installation identity scopes them. Its
-result describes identity continuity; it does not inspect runtime storage or
-claim that operation state actually survived. See the
-[disconnection and recovery procedure](../procedures/disconnection-recovery.md)
-for the required Manifest, Health, trigger, admission, and lifecycle sequence.
+The classifier proves identity continuity only. It does not inspect Provider
+storage or prove that an operation record, lifecycle snapshot, or pending
+trigger survived.
 
-Generated modules are deliberately excluded from mkdocstrings API rendering.
-Their signatures are generated by the Protocol Buffer toolchain, and their
-documentation belongs to the source schemas and their procedure pages.
+## Validation and runtime ownership
+
+| The Protocol package can decide… | The runtime must decide… |
+| --- | --- |
+| Whether one message satisfies its versioned structural and semantic contract | Whether the peer is the currently selected endpoint and session |
+| Whether a response correlates with its request | Whether the request belongs to the runtime's active retry or stream |
+| Whether canonical bytes, revisions, or fingerprints are correct | Whether payload/result data satisfies the manifest schema selected for this operation or trigger |
+| Whether a lifecycle transition is valid from two supplied snapshots | Whether retained state is current, durable, and authorized for this caller |
+| Whether reconnect identities form a valid transition | Whether the Provider actually retained the referenced work |
+
+Protocol validators use private `stateforge_protocol.sfp._validation`
+mechanics for schema loading, ProtoJSON projection, bounded traversal, and
+canonical JSON. Consumers must import the public procedure validator instead
+of `_validation` or reimplementing those mechanics.
+
+Keep live session, filesystem, retry, cache, admission, and policy checks in
+the Agent or Provider runtime. If a context-independent wire rule is missing,
+fix it in the owning Protocol procedure rather than creating a second contract
+in a consumer repository.

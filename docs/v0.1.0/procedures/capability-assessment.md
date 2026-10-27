@@ -10,6 +10,16 @@ session. Each response is a point-in-time evidence snapshot: useful for
 planning, but never authorization or a promise that later admission will
 succeed.
 
+## Capability assessment at a glance
+
+The Agent asks about manifest-declared operations. The Provider evaluates their
+declared requirement checks against the current target and returns a bounded,
+point-in-time evidence snapshot.
+
+```stateforge-entity-flow
+source: capability-assessment-overview.yaml
+```
+
 ## Interactive walkthrough
 
 ```stateforge-procedure

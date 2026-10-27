@@ -1,0 +1,167 @@
+schema: stateforge.docs/entity-flow/v1
+flow: health
+title: From Provider readiness to Agent availability
+summary: The Provider publishes process-wide Health while the Agent turns a current SERVING observation into permission to admit new work.
+autoplay: true
+entities:
+  - id: provider
+    label: StateForge Provider
+    kind: Process
+    brand: stateforge
+    accent: provider
+    description: Owns current readiness for new SFP work.
+    state:
+      label: Readiness
+      value: Starting
+  - id: health
+    label: gRPC Health
+    kind: Health
+    brand: none
+    accent: neutral
+    description: Publishes the Provider-wide status on the shared SFP endpoint.
+    state:
+      label: Overall status
+      value: NOT_SERVING
+      tone: warning
+  - id: agent
+    label: StateForge Agent
+    kind: Agent
+    brand: stateforge
+    accent: agent
+    description: Maintains the authoritative Watch and derives availability.
+    state:
+      label: Availability
+      value: UNAVAILABLE
+      tone: warning
+  - id: admission
+    label: Admission Gate
+    kind: Gate
+    brand: none
+    accent: neutral
+    description: Allows new operations only while every availability prerequisite is current.
+    state:
+      label: New work
+      value: Blocked
+      tone: warning
+steps:
+  - id: start-fail-closed
+    phase: Provider startup
+    title: Begin as NOT_SERVING
+    detail: The Provider registers standard gRPC Health and reports process-wide NOT_SERVING before initialization can accept work.
+    active: [provider, health]
+    states:
+      provider:
+        label: Readiness
+        value: Initializing
+        tone: warning
+    transitions:
+      - source: provider
+        target: health
+        label: NOT_SERVING
+        tone: warning
+    responsibility:
+      entities: [provider]
+      label: Startup is fail-closed; a listening socket is not readiness.
+  - id: become-serving
+    phase: Provider ready
+    title: Publish SERVING
+    detail: After startup completes, the Provider changes its overall Health status to SERVING.
+    active: [provider, health]
+    states:
+      provider:
+        label: Readiness
+        value: Ready
+        tone: success
+      health:
+        label: Overall status
+        value: SERVING
+        tone: success
+    transitions:
+      - source: provider
+        target: health
+        label: SERVING
+        tone: success
+    responsibility:
+      entities: [provider]
+      label: The Provider owns its current process-wide readiness signal.
+  - id: watch-status
+    phase: Authoritative Watch
+    title: Observe Provider-wide status
+    detail: The Agent opens Health.Watch with an empty service name and receives the current SERVING status immediately.
+    active: [health, agent]
+    states:
+      agent:
+        label: Health observation
+        value: Current · SERVING
+        tone: success
+    transitions:
+      - source: agent
+        target: health
+        label: Watch("")
+      - source: health
+        target: agent
+        label: SERVING
+        tone: success
+    responsibility:
+      entities: [agent]
+      label: Named SFP-service statuses are diagnostic; only the empty-name Watch controls availability.
+  - id: open-admission
+    phase: Availability derived
+    title: Admit new work
+    detail: The Agent combines the current Health observation with the endpoint, session, generation, and accepted manifest prerequisites.
+    active: [agent, admission]
+    states:
+      agent:
+        label: Availability
+        value: AVAILABLE
+        tone: success
+      admission:
+        label: New work
+        value: Allowed
+        tone: success
+    transitions:
+      - source: agent
+        target: admission
+        label: all prerequisites current
+        tone: success
+    responsibility:
+      entities: [agent]
+      label: SERVING is necessary but never sufficient by itself.
+  - id: health-lost
+    phase: Readiness lost
+    title: Fail closed on Health loss
+    detail: NOT_SERVING, an unknown status, or a broken Watch makes the Agent stop new admission without rewriting already admitted work.
+    active: [provider, health, agent, admission]
+    states:
+      provider:
+        label: Readiness
+        value: Degraded
+        tone: failure
+      health:
+        label: Overall status
+        value: NOT_SERVING
+        tone: failure
+      agent:
+        label: Availability
+        value: UNAVAILABLE
+        tone: failure
+      admission:
+        label: New work
+        value: Blocked
+        tone: failure
+    transitions:
+      - source: provider
+        target: health
+        label: NOT_SERVING
+        tone: failure
+      - source: health
+        target: agent
+        label: NOT_SERVING
+        tone: failure
+      - source: agent
+        target: admission
+        label: close gate
+        tone: failure
+    responsibility:
+      entities: [agent]
+      label: Health loss blocks new work; lifecycle evidence still decides outcomes for admitted operations.

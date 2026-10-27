@@ -10,6 +10,16 @@ The authoritative observation is `Health.Watch(service="")` on the existing
 SFP channel. `SERVING` can make an otherwise valid Provider eligible;
 `NOT_SERVING`, an unknown state, or a lost Watch always fails closed.
 
+## Health at a glance
+
+Provider-wide Health is one input to availability. The Agent admits new work
+only while the current Watch reports `SERVING` and every other session
+prerequisite remains valid.
+
+```stateforge-entity-flow
+source: health-overview.yaml
+```
+
 ## Interactive walkthrough
 
 ```stateforge-procedure

@@ -18,6 +18,7 @@ nav:
       - Home: index.md
       - v0.1.0:
           - Overview: v0.1.0/index.md
+          - Getting started: v0.1.0/getting-started.md
           - SFP procedures:
               - Procedure map: v0.1.0/procedures/index.md
               - Endpoint discovery and channel establishment: v0.1.0/procedures/endpoint-discovery.md
@@ -30,6 +31,10 @@ nav:
               - Progress, results, and cancellation: v0.1.0/procedures/progress-results-cancellation.md
               - Disconnection and recovery: v0.1.0/procedures/disconnection-recovery.md
           - Generated Python contracts: v0.1.0/reference/python-contracts.md
+          - Versioning and compatibility: v0.1.0/reference/versioning-compatibility.md
+          - SFP status and error handling: v0.1.0/reference/status-errors.md
+          - Security model and local trust boundary: v0.1.0/reference/security-trust-boundary.md
+          - SFP terminology glossary: v0.1.0/reference/glossary.md
           - Responsibility boundaries: v0.1.0/reference/responsibility-boundaries.md
           - Conformance coverage: v0.1.0/reference/conformance-coverage.md
           - CI/CD and artifact verification: v0.1.0/reference/ci-automation.md

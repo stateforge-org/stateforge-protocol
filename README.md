@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/v0.1.0/assets/brand/stateforge-mark.svg" width="112" alt="StateForge">
+  <img src="https://avatars.githubusercontent.com/u/309498710?s=224&amp;v=4" width="112" alt="StateForge">
 </p>
 
 <h1 align="center">StateForge Protocol</h1>
@@ -17,48 +17,54 @@
 
 <p align="center">
   <a href="https://stateforge.net">StateForge</a> ·
-  <a href="docs/v0.1.0/index.md">Documentation</a> ·
-  <a href="docs/v0.1.0/procedures/index.md">Procedure map</a> ·
-  <a href="docs/v0.1.0/reference/python-contracts.md">Python contracts</a>
+  <a href="https://docs.stateforge.net/sfp/latest/">Documentation</a> ·
+  <a href="https://docs.stateforge.net/sfp/latest/getting-started/">Getting started</a> ·
+  <a href="https://docs.stateforge.net/sfp/latest/procedures/">Procedure map</a> ·
+  <a href="https://docs.stateforge.net/sfp/latest/reference/python-contracts/">Python contracts</a>
 </p>
 
-StateForge Protocol (SFP) defines how a StateForge Agent discovers, identifies,
-monitors, and operates independently running Provider processes. One
-multiplexed local gRPC channel carries the complete Provider session lifecycle,
-from endpoint discovery and version negotiation through operations, triggers,
-and recovery.
+StateForge Protocol (SFP) defines how a StateForge Agent discovers, qualifies,
+and exchanges work with independently running Provider processes. It provides
+versioned contracts for identity, session fencing, capabilities, operations,
+triggers, and recovery.
 
 > [!IMPORTANT]
 > StateForge Protocol is in pre-alpha development. Wire contracts and public
 > Python APIs may change before the first stable release.
 
-## Protocol flow
+## Protocol lifecycle
 
-[![StateForge Protocol flow from endpoint discovery through recovery](docs/v0.1.0/assets/diagrams/protocol-flow.svg)](docs/v0.1.0/assets/diagrams/protocol-flow.svg)
+```mermaid
+sequenceDiagram
+    participant Provider as Provider process
+    participant Directory as Discovery directory
+    participant Agent as StateForge Agent
 
-1. A Provider publishes an endpoint descriptor and the Agent opens a local
-   channel.
-2. Bootstrap confirms endpoint identity, negotiates a protocol version, and
-   establishes a fenced session.
-3. The Agent retrieves the Provider manifest, including declared operations,
-   triggers, and schemas.
-4. Health monitoring establishes process availability while capability
-   assessment evaluates operation support for the current runtime context.
-5. The Agent admits operations and consumes lifecycle updates; Providers
-   publish triggers and receive acknowledgement dispositions.
-6. Reconnection creates a new session and reconciles retained state without
-   accepting stale messages.
+    Provider->>Directory: Publish endpoint descriptor
+    Directory-->>Agent: Observe descriptor
+    Agent->>Directory: Read and validate endpoint
 
-## Contract surface
+    Agent->>Provider: Bootstrap.Handshake
+    Provider-->>Agent: Negotiated version and fenced session
 
-| Surface | Contract |
-| --- | --- |
-| Endpoint discovery | Filesystem descriptor shape, identity, generation, transport, and socket semantics |
-| Bootstrap | Endpoint confirmation, wire-version negotiation, session creation, and fencing |
-| Provider description | Manifest identity, operations, triggers, schemas, health, and contextual capability assessment |
-| Operations | Immutable admission, idempotency, progress, results, cancellation, and terminal-state rules |
-| Triggers | Provider-originated publication, replay, deduplication, and acknowledgement |
-| Recovery | Reconnection classification, stale-session rejection, and retained-state reconciliation |
+    Agent->>Provider: Manifest.GetManifest
+    Provider-->>Agent: Operations, triggers, schemas, and requirements
+
+    par Process readiness
+        Agent->>Provider: Health.Watch
+        Provider-->>Agent: Health status
+    and Runtime support
+        Agent->>Provider: AssessCapabilities
+        Provider-->>Agent: Capability findings
+    end
+
+    Agent->>Provider: Admit and watch operations
+    Provider-->>Agent: Lifecycle updates
+    Provider->>Agent: Trigger publications
+    Agent-->>Provider: Acknowledgements
+
+    Note over Provider,Agent: Reconnect creates a new channel and fenced session
+```
 
 Endpoint discovery is a filesystem contract. Provider health uses the standard
 `grpc.health.v1` service. Other RPC procedures use versioned StateForge
@@ -82,17 +88,22 @@ python -m pip install .
 ```
 
 Public modules and supported imports are documented in the
-[Python contract reference](docs/v0.1.0/reference/python-contracts.md). Generated
+[Python contract reference](https://docs.stateforge.net/sfp/latest/reference/python-contracts/). Generated
 `*_pb2.py`, `*_pb2.pyi`, and `*_pb2_grpc.py` modules are derived artifacts and
 must not be edited manually.
 
 ## Documentation
 
-- [Protocol overview](docs/v0.1.0/index.md)
-- [SFP procedure map](docs/v0.1.0/procedures/index.md)
-- [Generated Python contracts](docs/v0.1.0/reference/python-contracts.md)
-- [Runtime responsibility boundaries](docs/v0.1.0/reference/responsibility-boundaries.md)
-- [Conformance coverage](docs/v0.1.0/reference/conformance-coverage.md)
+- [Protocol overview](https://docs.stateforge.net/sfp/latest/)
+- [Getting started](https://docs.stateforge.net/sfp/latest/getting-started/)
+- [SFP procedure map](https://docs.stateforge.net/sfp/latest/procedures/)
+- [Generated Python contracts](https://docs.stateforge.net/sfp/latest/reference/python-contracts/)
+- [Versioning and compatibility](https://docs.stateforge.net/sfp/latest/reference/versioning-compatibility/)
+- [SFP status and error handling](https://docs.stateforge.net/sfp/latest/reference/status-errors/)
+- [Security model and local trust boundary](https://docs.stateforge.net/sfp/latest/reference/security-trust-boundary/)
+- [SFP terminology glossary](https://docs.stateforge.net/sfp/latest/reference/glossary/)
+- [Runtime responsibility boundaries](https://docs.stateforge.net/sfp/latest/reference/responsibility-boundaries/)
+- [Conformance coverage](https://docs.stateforge.net/sfp/latest/reference/conformance-coverage/)
 
 Build the documentation locally with:
 
@@ -134,7 +145,7 @@ python -m mkdocs build --strict
 ```
 
 Maintainers can find the reusable workflow interfaces and evidence model in
-[CI/CD and artifact verification](docs/v0.1.0/reference/ci-automation.md).
+[CI/CD and artifact verification](https://docs.stateforge.net/sfp/latest/reference/ci-automation/).
 
 ## License
 

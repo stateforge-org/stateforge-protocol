@@ -159,7 +159,10 @@ async def _run(arguments: argparse.Namespace) -> None:
         endpoint.endpoint_generation,
         arguments.target,
     )
-    await server.wait_for_termination()
+    try:
+        await server.wait_for_termination()
+    finally:
+        await server.stop(grace=None)
 
 
 def _arguments() -> argparse.Namespace:
@@ -175,7 +178,10 @@ def _arguments() -> argparse.Namespace:
 def main() -> None:
     """Run the Bootstrap server example."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    asyncio.run(_run(_arguments()))
+    try:
+        asyncio.run(_run(_arguments()))
+    except KeyboardInterrupt:
+        _LOGGER.info("Provider stopped")
 
 
 if __name__ == "__main__":

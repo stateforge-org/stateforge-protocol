@@ -1,0 +1,148 @@
+schema: stateforge.docs/entity-flow/v1
+flow: capability-assessment
+title: From declared requirements to current runtime evidence
+summary: The Agent asks about a declared operation, and the Provider evaluates its reusable requirement checks against the current target.
+autoplay: true
+entities:
+  - id: agent
+    label: StateForge Agent
+    kind: Agent
+    brand: stateforge
+    accent: agent
+    description: Selects manifest-declared operations and owns evidence reuse for an exact scope.
+    state:
+      label: Evidence
+      value: None
+  - id: provider
+    label: StateForge Provider
+    kind: Process
+    brand: stateforge
+    accent: provider
+    description: Validates the request and normalizes one finding per requested operation.
+    state:
+      label: Assessment
+      value: Idle
+  - id: checks
+    label: Requirement Checks
+    kind: Checks
+    brand: none
+    accent: neutral
+    description: Reusable, typed checks referenced by operation declarations.
+    state:
+      label: Checks
+      value: Not evaluated
+  - id: target
+    label: Runtime Target
+    kind: Target
+    brand: service
+    accent: service
+    description: Supplies the current permissions, files, tools, and vendor state being inspected.
+    state:
+      label: /var/lib/example
+      value: Read-only
+      tone: warning
+steps:
+  - id: select-scope
+    phase: Assessment scope
+    title: Select declared operations
+    detail: The Agent chooses operations from the accepted manifest and binds the request to the current session, manifest revision, and execution context.
+    active: [agent]
+    states:
+      agent:
+        label: Requested operation
+        value: example.runtime/state.write@1
+        tone: warning
+    transitions: []
+    responsibility:
+      entities: [agent]
+      label: The Agent may request only operations declared by the accepted manifest.
+  - id: send-request
+    phase: Assessment request
+    title: Request point-in-time evidence
+    detail: The Agent sends AssessCapabilities with the exact operation set and current execution context.
+    active: [agent, provider]
+    states:
+      provider:
+        label: Assessment
+        value: Validating scope
+        tone: warning
+    transitions:
+      - source: agent
+        target: provider
+        label: AssessCapabilities
+    responsibility:
+      entities: [provider]
+      label: The Provider rejects stale session fences and undeclared operations before inspection.
+  - id: resolve-checks
+    phase: Requirement resolution
+    title: Resolve each distinct check once
+    detail: The Provider maps the requested operation to its declared requirement identifiers and deduplicates checks shared by multiple operations.
+    active: [provider, checks]
+    states:
+      checks:
+        label: Selected check
+        value: writable state directory
+        tone: warning
+    transitions:
+      - source: provider
+        target: checks
+        label: declared requirements
+    responsibility:
+      entities: [provider]
+      label: Requirement identifiers come from the accepted manifest declaration.
+  - id: inspect-target
+    phase: Read-only inspection
+    title: Evaluate the current runtime
+    detail: The requirement check inspects whether the Provider can write to /var/lib/example without performing the operation or changing the target.
+    active: [checks, target]
+    states:
+      checks:
+        label: Check result
+        value: UNSATISFIED
+        tone: warning
+    transitions:
+      - source: checks
+        target: target
+        label: inspect permissions
+      - source: target
+        target: checks
+        label: read-only
+        tone: warning
+    responsibility:
+      entities: [checks]
+      label: The Provider owns target-specific inspection and safe diagnostics.
+  - id: normalize-findings
+    phase: Assessment response
+    title: Produce one ordered finding
+    detail: The Provider normalizes the unsatisfied requirement into a bounded finding for the requested operation.
+    active: [checks, provider]
+    states:
+      provider:
+        label: Support state
+        value: SUPPORTED_WITH_REQUIREMENTS
+        tone: warning
+    transitions:
+      - source: checks
+        target: provider
+        label: UNSATISFIED
+    responsibility:
+      entities: [provider]
+      label: The response reports current evidence; it does not change the operation declaration.
+  - id: accept-evidence
+    phase: Evidence accepted
+    title: Bind evidence to its exact scope
+    detail: The Agent validates response correlation and may reuse the snapshot only while the session, manifest, availability, operation set, and context remain unchanged.
+    active: [provider, agent]
+    states:
+      agent:
+        label: Evidence
+        value: Current snapshot retained
+        tone: success
+    transitions:
+      - source: provider
+        target: agent
+        label: assessment findings
+        tone: success
+    responsibility:
+      entities: [agent]
+      label: Capability evidence informs planning; admission still rechecks its own current prerequisites.

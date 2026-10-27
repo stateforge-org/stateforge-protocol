@@ -10,6 +10,15 @@ Manifest Exchange is a read-only, idempotent RPC. A successful gRPC response is
 not enough: the Agent must validate the session envelope, declaration, embedded
 schemas, and deterministic revision before the manifest becomes usable.
 
+## Manifest exchange at a glance
+
+One request captures the Provider's complete declaration as an immutable,
+revisioned snapshot. The Agent accepts or rejects that snapshot as a whole.
+
+```stateforge-entity-flow
+source: provider-manifest-overview.yaml
+```
+
 ## Interactive walkthrough
 
 ```stateforge-procedure
