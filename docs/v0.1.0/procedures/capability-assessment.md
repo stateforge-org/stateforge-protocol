@@ -117,8 +117,7 @@ class ExampleProvider(Provider):
         "example.runtime/state.write@1",
         requires=("example.runtime.var_write",),
     )
-    async def write_state(self, request: WriteRequest) -> WriteResult:
-        ...
+    async def write_state(self, request: WriteRequest) -> WriteResult: ...
 ```
 
 The operation names the check by its stable identifier. The framework runs a
