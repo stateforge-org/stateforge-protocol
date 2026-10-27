@@ -167,7 +167,7 @@
           },
           "stateforge.ui/surface.operation.result@1": {
             "root": {
-              "componentIdentifier": "stateforge.git/data.commit_graph@1",
+              "componentIdentifier": "example.git/data.commit_graph@1",
               "properties": {},
               "bindings": {
                 "result": {
@@ -227,8 +227,8 @@
       }
     },
     "rendererRequirements": {
-      "stateforge.git": {
-        "extensionIdentifier": "stateforge.git/renderer@1",
+      "example.git": {
+        "extensionIdentifier": "example.git/renderer@1",
         "extensionVersion": "1.0.0",
         "rendererApiVersion": "1.0.0",
         "artifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -236,5 +236,5 @@
       }
     }
   },
-  "presentationRevision": "sha256:2eabed9abfbb8736d5cbe1f9bb788ff5283e18bdc1d7bb58b455719a6feeed3e"
+  "presentationRevision": "sha256:df215c63eb41659f8d38649cf84bd9f9e7696aa9d08b88219f219361d1bc8d2d"
 }

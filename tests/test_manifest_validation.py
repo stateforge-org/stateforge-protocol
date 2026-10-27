@@ -584,7 +584,7 @@ def test_core_data_components_have_semantic_binding_slots(
 
 def test_custom_component_requires_renderer_metadata() -> None:
     response = _presentation_response()
-    del response.presentation.renderer_requirements["stateforge.git"]
+    del response.presentation.renderer_requirements["example.git"]
 
     with pytest.raises(ManifestValidationError, match="renderer requirement"):
         _validate_presentation(response)
@@ -604,7 +604,7 @@ def test_custom_component_fallback_cannot_require_an_extension() -> None:
     response = _presentation_response()
     _operation_root(
         response, contract.OPERATION_RESULT_SURFACE
-    ).fallback.component_identifier = "stateforge.git/data.commit_graph@1"
+    ).fallback.component_identifier = "example.git/data.commit_graph@1"
 
     with pytest.raises(ManifestValidationError, match="core components"):
         _validate_presentation(response)
@@ -613,7 +613,7 @@ def test_custom_component_fallback_cannot_require_an_extension() -> None:
 def test_renderer_requirements_cannot_be_unreferenced() -> None:
     response = _presentation_response()
     response.presentation.renderer_requirements["example.widget"].CopyFrom(
-        response.presentation.renderer_requirements["stateforge.git"]
+        response.presentation.renderer_requirements["example.git"]
     )
     requirement = response.presentation.renderer_requirements["example.widget"]
     requirement.extension_identifier = "example.widget/renderer@1"
@@ -625,10 +625,42 @@ def test_renderer_requirements_cannot_be_unreferenced() -> None:
 def test_renderer_extension_must_share_component_namespace() -> None:
     response = _presentation_response()
     response.presentation.renderer_requirements[
-        "stateforge.git"
+        "example.git"
     ].extension_identifier = "example.widget/renderer@1"
 
     with pytest.raises(ManifestValidationError, match="namespace"):
+        _validate_presentation(response)
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        "stateforge.git/data.commit_graph@1",
+        "stateforge.ui.custom/data.commit_graph@1",
+    ],
+)
+def test_custom_components_cannot_claim_stateforge_namespaces(
+    identifier: str,
+) -> None:
+    response = _presentation_response()
+    _operation_root(
+        response, contract.OPERATION_RESULT_SURFACE
+    ).component_identifier = identifier
+
+    with pytest.raises(ManifestValidationError, match="StateForge-owned"):
+        _validate_presentation(response)
+
+
+def test_renderer_requirements_cannot_claim_stateforge_namespaces() -> None:
+    response = _presentation_response()
+    reserved = response.presentation.renderer_requirements["stateforge.git"]
+    reserved.CopyFrom(
+        response.presentation.renderer_requirements["example.git"]
+    )
+    reserved.extension_identifier = "stateforge.git/renderer@1"
+    del response.presentation.renderer_requirements["example.git"]
+
+    with pytest.raises(ManifestValidationError, match="StateForge-owned"):
         _validate_presentation(response)
 
 

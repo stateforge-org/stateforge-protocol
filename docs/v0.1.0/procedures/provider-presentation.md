@@ -211,7 +211,7 @@ validation or manufacture an operation field.
 ## Custom components and renderer extensions
 
 A Provider may use its own component identifier, such as
-`stateforge.git/data.commit_graph@1`. A custom node has two additional
+`example.git/data.commit_graph@1`. A custom node has two additional
 requirements:
 
 1. its namespace has one matching `RendererRequirement`; and
@@ -220,7 +220,7 @@ requirements:
 
 ```json
 {
-  "componentIdentifier": "stateforge.git/data.commit_graph@1",
+  "componentIdentifier": "example.git/data.commit_graph@1",
   "properties": {},
   "bindings": {
     "result": {
@@ -251,8 +251,8 @@ The matching requirement carries identity and compatibility metadata:
 
 ```json
 {
-  "stateforge.git": {
-    "extensionIdentifier": "stateforge.git/renderer@1",
+  "example.git": {
+    "extensionIdentifier": "example.git/renderer@1",
     "extensionVersion": "1.0.0",
     "rendererApiVersion": "1.0.0",
     "artifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -260,6 +260,11 @@ The matching requirement carries identity and compatibility metadata:
   }
 }
 ```
+
+Every namespace beginning with `stateforge.` is reserved for identifiers
+defined by StateForge contracts. A Provider-owned renderer must use a namespace
+it owns; it cannot introduce custom components or renderer requirements under
+`stateforge.ui`, `stateforge.ui.*`, or another `stateforge.*` namespace.
 
 The renderer artifact is distributed separately from SFP. The Control Plane
 uses the metadata to locate an already trusted or separately acquired bundle,

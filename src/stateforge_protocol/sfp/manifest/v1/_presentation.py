@@ -114,9 +114,10 @@ def validate_presentation_semantics(
         raise error_type(
             "presentation: trigger target does not name a declared trigger"
         )
-    if contract.CORE_COMPONENT_NAMESPACE in requirements:
+    if any(_is_stateforge_owned(namespace) for namespace in requirements):
         raise error_type(
-            "presentation: core components cannot require an extension"
+            "presentation: renderer requirements cannot use a "
+            "StateForge-owned namespace"
         )
 
     state = _PresentationState()
@@ -318,6 +319,11 @@ def _validate_component_identity(
                 "presentation: core component cannot declare a fallback"
             )
         return component_contract
+    if _is_stateforge_owned(namespace):
+        raise error_type(
+            "presentation: custom component cannot use a StateForge-owned "
+            "namespace"
+        )
     if core_only and not is_core:
         raise error_type(
             "presentation: custom component fallback must use core components"
@@ -538,6 +544,13 @@ def _validate_binding(
 
 def _namespace(identifier: str) -> str:
     return identifier.split("/", 1)[0]
+
+
+def _is_stateforge_owned(namespace: str) -> bool:
+    return (
+        namespace == contract.STATEFORGE_NAMESPACE_ROOT
+        or namespace.startswith(f"{contract.STATEFORGE_NAMESPACE_ROOT}.")
+    )
 
 
 def _validate_assets(

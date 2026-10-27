@@ -539,7 +539,7 @@ class ProviderPresentation(_message.Message):
     @_builtins.property
     def renderer_requirements(self) -> _containers.MessageMap[_builtins.str, Global___RendererRequirement]:
         """Renderer metadata keyed by the custom component namespace it serves.
-        Core stateforge.ui components never require an entry here.
+        Every stateforge.* namespace is reserved and cannot require an extension.
         """
 
     def __init__(

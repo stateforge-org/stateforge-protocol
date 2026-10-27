@@ -145,7 +145,7 @@ message ProviderPresentation {
   // Embedded content-addressed visuals keyed by their sha256 digest.
   map<string, PresentationAsset> assets = 5;
   // Renderer metadata keyed by the custom component namespace it serves.
-  // Core stateforge.ui components never require an entry here.
+  // Every stateforge.* namespace is reserved and cannot require an extension.
   map<string, RendererRequirement> renderer_requirements = 6;
 }
 
