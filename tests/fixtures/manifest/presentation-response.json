@@ -156,7 +156,7 @@
                   "scope": ""
                 },
                 "value": {
-                  "sourceIdentifier": "stateforge.binding/operation.request.value@1",
+                  "sourceIdentifier": "stateforge.binding/operation.request.public_value@1",
                   "pointer": "",
                   "scope": ""
                 }
@@ -236,5 +236,5 @@
       }
     }
   },
-  "presentationRevision": "sha256:d8064d4842d3210e5750618cdccaaa7c71140ba029819add565d9fa06a0e8e55"
+  "presentationRevision": "sha256:2eabed9abfbb8736d5cbe1f9bb788ff5283e18bdc1d7bb58b455719a6feeed3e"
 }

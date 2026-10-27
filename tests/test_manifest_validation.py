@@ -439,6 +439,36 @@ def test_surface_binding_source_must_be_available() -> None:
         _validate_presentation(response)
 
 
+def test_raw_operation_request_values_are_not_presentation_sources() -> None:
+    response = _presentation_response()
+    result = _operation_root(
+        response, contract.OPERATION_RESULT_SURFACE
+    ).fallback
+    result.bindings[
+        "secret"
+    ].source_identifier = "stateforge.binding/operation.request.value@1"
+    result.bindings["secret"].pointer = "/token"
+
+    with pytest.raises(ManifestValidationError, match="unavailable"):
+        _validate_presentation(response)
+
+
+def test_public_request_projection_is_available_across_lifecycle() -> None:
+    expected = contract.OPERATION_REQUEST_PUBLIC_VALUE_BINDING
+
+    for surface in (
+        contract.OPERATION_REQUEST_SURFACE,
+        contract.OPERATION_RUN_SURFACE,
+        contract.OPERATION_RESULT_SURFACE,
+    ):
+        assert expected in contract.SURFACE_BINDING_SOURCES[surface]
+
+    assert all(
+        "stateforge.binding/operation.request.value@1" not in sources
+        for sources in contract.SURFACE_BINDING_SOURCES.values()
+    )
+
+
 def test_core_component_catalog_is_explicit() -> None:
     response = _presentation_response()
     response.presentation.provider.surfaces[

@@ -99,6 +99,8 @@ def test_provider_presentation_guide_maps_components_to_surfaces() -> None:
         assert surface in page
     assert "schema-derived interface" in page.lower()
     assert "active Control Plane skin" in page
+    assert "operation.request.public_value@1" in page
+    assert "has no presentation binding identifier" in page
     assert "No second SFP presentation RPC" in page
     assert "SF-AOP" in page
 

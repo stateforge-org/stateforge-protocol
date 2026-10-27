@@ -125,9 +125,9 @@ Examples include:
 | Surface | Representative binding sources |
 | --- | --- |
 | Provider overview | Provider manifest and Provider runtime state |
-| Operation request | Request schema and current request value |
-| Operation run | Admitted request and live operation state |
-| Operation result | Request, result schema, result value, and operation evidence |
+| Operation request | Request schema and the public request draft |
+| Operation run | Public admitted-request projection and live operation state |
+| Operation result | Public request projection, result schema, result value, and operation evidence |
 | Trigger policy | Trigger payload schema |
 | Trigger event | Payload schema and published payload value |
 | Evidence | Operation evidence or trigger value plus audit data |
@@ -139,6 +139,14 @@ repetition also declares a positive `max_items` ceiling.
 Conditions support `EXISTS`, `NOT_EXISTS`, `EQUALS`, and `NOT_EQUALS`.
 Existence conditions omit a comparison value; equality conditions require one,
 including an explicitly supplied JSON `null`.
+
+The request-value source is
+`stateforge.binding/operation.request.public_value@1`. It is a safe projection,
+not the submitted request: every value whose applicable input schema marks it
+`writeOnly` is omitted. If an implementation cannot prove that a value is
+public, it must omit that value. Secret-entry state remains private to the form
+renderer and is never addressable by a presentation binding. The raw request
+has no presentation binding identifier.
 
 ## Core example
 
@@ -157,7 +165,7 @@ The manifest fixture uses a core form for the operation request:
       "scope": ""
     },
     "value": {
-      "sourceIdentifier": "stateforge.binding/operation.request.value@1",
+      "sourceIdentifier": "stateforge.binding/operation.request.public_value@1",
       "pointer": "",
       "scope": ""
     }
@@ -168,9 +176,10 @@ The manifest fixture uses a core form for the operation request:
 ```
 
 The operation input JSON Schema remains authoritative. The renderer can produce
-an appropriate form because the schema and current value arrive through
-bindings; the presentation cannot relax validation, disclose a `writeOnly`
-value, or manufacture an operation field.
+an appropriate form because the schema and public draft arrive through
+bindings. Secret fields keep their values in private form state, so the
+presentation cannot bind or display them. Presentation also cannot relax
+validation or manufacture an operation field.
 
 ## Custom components and renderer extensions
 

@@ -88,8 +88,11 @@ PROVIDER_RUNTIME_BINDING: Final = "stateforge.binding/provider.runtime@1"
 OPERATION_REQUEST_SCHEMA_BINDING: Final = (
     "stateforge.binding/operation.request.schema@1"
 )
-OPERATION_REQUEST_VALUE_BINDING: Final = (
-    "stateforge.binding/operation.request.value@1"
+# Presentation-safe projection only. The data-source owner must recursively
+# omit every value whose applicable input schema marks it writeOnly. Secret
+# form state is never exposed through a presentation binding.
+OPERATION_REQUEST_PUBLIC_VALUE_BINDING: Final = (
+    "stateforge.binding/operation.request.public_value@1"
 )
 OPERATION_RUN_BINDING: Final = "stateforge.binding/operation.run@1"
 OPERATION_RESULT_SCHEMA_BINDING: Final = (
@@ -116,20 +119,20 @@ SURFACE_BINDING_SOURCES: Final = {
         {
             PROVIDER_MANIFEST_BINDING,
             OPERATION_REQUEST_SCHEMA_BINDING,
-            OPERATION_REQUEST_VALUE_BINDING,
+            OPERATION_REQUEST_PUBLIC_VALUE_BINDING,
         }
     ),
     OPERATION_RUN_SURFACE: frozenset(
         {
             PROVIDER_MANIFEST_BINDING,
-            OPERATION_REQUEST_VALUE_BINDING,
+            OPERATION_REQUEST_PUBLIC_VALUE_BINDING,
             OPERATION_RUN_BINDING,
         }
     ),
     OPERATION_RESULT_SURFACE: frozenset(
         {
             PROVIDER_MANIFEST_BINDING,
-            OPERATION_REQUEST_VALUE_BINDING,
+            OPERATION_REQUEST_PUBLIC_VALUE_BINDING,
             OPERATION_RESULT_SCHEMA_BINDING,
             OPERATION_RESULT_VALUE_BINDING,
             OPERATION_EVIDENCE_BINDING,
