@@ -1,0 +1,127 @@
+schema: stateforge.docs/entity-flow/v1
+flow: bootstrap
+title: From an expected endpoint to a fenced session
+summary: Bootstrap confirms the discovered Provider, selects one mutual wire version, and issues a fresh session identity.
+autoplay: true
+entities:
+  - id: descriptor
+    label: Endpoint Descriptor
+    kind: Context
+    brand: none
+    accent: neutral
+    description: Supplies the Provider identity and generation the Agent expects to reach.
+    state:
+      label: Expected endpoint
+      value: Generation 42
+  - id: agent
+    label: StateForge Agent
+    kind: Agent
+    brand: stateforge
+    accent: agent
+    description: Offers supported versions and validates the returned session fences.
+    state:
+      label: Session
+      value: Not established
+  - id: channel
+    label: Local gRPC Channel
+    kind: Channel
+    brand: none
+    accent: neutral
+    description: Carries the handshake before later SFP procedures are allowed.
+    state:
+      label: Trust
+      value: Provisional
+      tone: warning
+  - id: provider
+    label: StateForge Provider
+    kind: Process
+    brand: stateforge
+    accent: provider
+    description: Confirms its live endpoint identity and creates the negotiated session.
+    state:
+      label: Runtime
+      value: Listening
+steps:
+  - id: bind-expectation
+    phase: Discovery handoff
+    title: Carry the endpoint expectation forward
+    detail: The Agent builds the request from the exact Provider identity and generation validated during endpoint discovery.
+    active: [descriptor, agent]
+    states:
+      agent:
+        label: Expected endpoint
+        value: Generation 42
+    transitions:
+      - source: descriptor
+        target: agent
+        label: identity + generation
+    responsibility:
+      entities: [agent]
+      label: Bootstrap confirms the selected endpoint; it does not choose a different one.
+  - id: send-handshake
+    phase: Handshake request
+    title: Offer supported SFP versions
+    detail: The Agent sends its runtime identity, software version, expected Provider endpoint, and explicit supported wire versions.
+    active: [agent, channel, provider]
+    states:
+      channel:
+        label: Procedure
+        value: Bootstrap only
+        tone: warning
+    transitions:
+      - source: agent
+        target: provider
+        label: Handshake
+    responsibility:
+      entities: [agent]
+      label: No later SFP procedure may use this channel before Bootstrap succeeds.
+  - id: verify-peer
+    phase: Identity fence
+    title: Confirm the live endpoint
+    detail: The Provider compares the request with its current installation identity and endpoint generation before negotiating a version.
+    active: [provider]
+    states:
+      provider:
+        label: Identity fence
+        value: Confirmed
+        tone: success
+    transitions: []
+    responsibility:
+      entities: [provider]
+      label: A request for a stale or foreign endpoint generation is rejected.
+  - id: create-session
+    phase: Version negotiation
+    title: Select one version and mint a session
+    detail: The Provider selects the highest mutually supported SFP version and issues a fresh session ID for this installation.
+    active: [provider, agent]
+    states:
+      provider:
+        label: Negotiation
+        value: v0.1.0 · fresh session
+        tone: success
+    transitions:
+      - source: provider
+        target: agent
+        label: HandshakeResponse
+        tone: success
+    responsibility:
+      entities: [provider]
+      label: The Provider owns version selection and fresh session allocation within the canonical contract.
+  - id: activate-session
+    phase: Session established
+    title: Validate and bind the session
+    detail: The Agent verifies every response fence and activates the session for Manifest Exchange and subsequent procedures.
+    active: [agent, channel, provider]
+    states:
+      agent:
+        label: Session
+        value: Active · v0.1.0
+        tone: success
+      channel:
+        label: Trust
+        value: Fenced SFP session
+        tone: success
+    transitions: []
+    responsibility:
+      entities: [agent, provider]
+      label: Later requests and stream events must carry the established session identity.

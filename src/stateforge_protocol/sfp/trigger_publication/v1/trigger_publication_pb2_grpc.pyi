@@ -42,7 +42,7 @@ class TriggerPublicationServiceStub:
     """StreamTriggers binds one stream to an active negotiated session and exact
     accepted manifest revision. The first request must be open; the first
     response must be ready. Later requests are acknowledgements and later
-    responses are publications. See docs/procedures/triggers.md for validation,
+    responses are publications. See docs/v0.1.0/procedures/triggers.md for validation,
     idempotency, retry, ordering, flow-control, and termination semantics.
     """
 
@@ -60,7 +60,7 @@ class TriggerPublicationServiceAsyncStub(TriggerPublicationServiceStub):
     """StreamTriggers binds one stream to an active negotiated session and exact
     accepted manifest revision. The first request must be open; the first
     response must be ready. Later requests are acknowledgements and later
-    responses are publications. See docs/procedures/triggers.md for validation,
+    responses are publications. See docs/v0.1.0/procedures/triggers.md for validation,
     idempotency, retry, ordering, flow-control, and termination semantics.
     """
 
@@ -81,7 +81,7 @@ class TriggerPublicationServiceServicer(metaclass=_abc_1.ABCMeta):
         """StreamTriggers binds one stream to an active negotiated session and exact
         accepted manifest revision. The first request must be open; the first
         response must be ready. Later requests are acknowledgements and later
-        responses are publications. See docs/procedures/triggers.md for validation,
+        responses are publications. See docs/v0.1.0/procedures/triggers.md for validation,
         idempotency, retry, ordering, flow-control, and termination semantics.
         """
 

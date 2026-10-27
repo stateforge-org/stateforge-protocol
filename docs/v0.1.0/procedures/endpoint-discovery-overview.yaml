@@ -1,0 +1,140 @@
+schema: stateforge.docs/entity-flow/v1
+flow: endpoint-discovery
+title: From local publication to a provisional channel
+summary: The Provider publishes one endpoint generation, and the Agent validates both the descriptor and its Unix socket before connecting.
+autoplay: true
+entities:
+  - id: provider
+    label: StateForge Provider
+    kind: Process
+    brand: stateforge
+    accent: provider
+    description: Owns the installation identity, endpoint generation, and listening socket.
+    state:
+      label: Endpoint
+      value: Preparing
+  - id: socket
+    label: Unix Socket
+    kind: Socket
+    brand: none
+    accent: neutral
+    description: Carries the generation-specific local HTTP/2 connection.
+    state:
+      label: Socket
+      value: Absent
+  - id: directory
+    label: Discovery Directory
+    kind: Storage
+    brand: none
+    accent: neutral
+    description: Contains atomically published endpoint descriptors.
+    state:
+      label: Descriptor
+      value: Absent
+  - id: agent
+    label: StateForge Agent
+    kind: Agent
+    brand: stateforge
+    accent: agent
+    description: Observes, validates, and connects to the exact published generation.
+    state:
+      label: Observation
+      value: None
+steps:
+  - id: bind-socket
+    phase: Endpoint preparation
+    title: Bind the generation-specific socket
+    detail: The Provider retains its installation identity, allocates the next generation, and binds the matching Unix socket before publishing anything.
+    active: [provider, socket]
+    states:
+      provider:
+        label: Endpoint generation
+        value: "42"
+      socket:
+        label: Socket
+        value: Bound · generation 42
+        tone: warning
+    transitions:
+      - source: provider
+        target: socket
+        label: bind
+    responsibility:
+      entities: [provider]
+      label: A descriptor is never published before its socket is ready.
+  - id: publish-descriptor
+    phase: Atomic publication
+    title: Publish one complete descriptor
+    detail: The Provider writes a bounded descriptor and atomically renames it to the canonical installation filename.
+    active: [provider, directory]
+    states:
+      directory:
+        label: Descriptor
+        value: Published · generation 42
+        tone: success
+    transitions:
+      - source: provider
+        target: directory
+        label: .sfp.json
+        tone: success
+    responsibility:
+      entities: [provider]
+      label: Readers observe either the previous complete descriptor or the new complete descriptor, never a partial file.
+  - id: observe-descriptor
+    phase: Filesystem observation
+    title: Treat the notification as a hint
+    detail: The Agent opens the final file itself, reads bounded bytes, and correlates its filename with the Provider identity inside the document.
+    active: [directory, agent]
+    states:
+      agent:
+        label: Descriptor
+        value: Parsed and correlated
+        tone: warning
+    transitions:
+      - source: directory
+        target: agent
+        label: current descriptor
+    responsibility:
+      entities: [agent]
+      label: A filesystem event alone never establishes a trusted endpoint.
+  - id: validate-socket
+    phase: Socket boundary
+    title: Validate the declared socket
+    detail: The Agent verifies the socket path, file type, ownership boundary, and required permissions for the same descriptor observation.
+    active: [agent, socket]
+    states:
+      socket:
+        label: Boundary
+        value: Trusted
+        tone: success
+    transitions:
+      - source: agent
+        target: socket
+        label: inspect
+    responsibility:
+      entities: [agent]
+      label: Valid descriptor JSON cannot make an unsafe socket acceptable.
+  - id: open-channel
+    phase: Channel establishment
+    title: Connect to the exact generation
+    detail: The Agent opens a local gRPC channel to the validated socket. Bootstrap must still prove the peer identity.
+    active: [agent, socket, provider]
+    states:
+      agent:
+        label: Channel
+        value: Provisional
+        tone: warning
+      provider:
+        label: Endpoint
+        value: Connected
+        tone: success
+    transitions:
+      - source: agent
+        target: socket
+        label: connect
+      - source: socket
+        target: provider
+        label: local HTTP/2
+        tone: success
+    responsibility:
+      entities: [agent, provider]
+      label: Discovery selects the endpoint; Bootstrap establishes a trusted SFP session.

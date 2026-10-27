@@ -38,7 +38,7 @@ class ManifestServiceStub:
     def __new__(cls, channel: _aio.Channel) -> ManifestServiceAsyncStub: ...
     GetManifest: _grpc.UnaryUnaryMultiCallable[_manifest_pb2.GetManifestRequest, _manifest_pb2.GetManifestResponse]
     """GetManifest selects the highest mutually supported manifest schema version.
-    See docs/procedures/provider-manifest.md for validation, errors and retries.
+    See docs/v0.1.0/procedures/provider-manifest.md for validation, errors and retries.
     """
 
 @_typing.type_check_only
@@ -51,7 +51,7 @@ class ManifestServiceAsyncStub(ManifestServiceStub):
     def __init__(self, channel: _aio.Channel) -> None: ...
     GetManifest: _aio.UnaryUnaryMultiCallable[_manifest_pb2.GetManifestRequest, _manifest_pb2.GetManifestResponse]  # type: ignore[assignment]
     """GetManifest selects the highest mutually supported manifest schema version.
-    See docs/procedures/provider-manifest.md for validation, errors and retries.
+    See docs/v0.1.0/procedures/provider-manifest.md for validation, errors and retries.
     """
 
 class ManifestServiceServicer(metaclass=_abc_1.ABCMeta):
@@ -67,7 +67,7 @@ class ManifestServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_manifest_pb2.GetManifestResponse, _abc.Awaitable[_manifest_pb2.GetManifestResponse]]:
         """GetManifest selects the highest mutually supported manifest schema version.
-        See docs/procedures/provider-manifest.md for validation, errors and retries.
+        See docs/v0.1.0/procedures/provider-manifest.md for validation, errors and retries.
         """
 
 def add_ManifestServiceServicer_to_server(servicer: ManifestServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

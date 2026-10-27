@@ -1,0 +1,555 @@
+schema: stateforge.docs/procedure/v1
+procedure: operation-admission
+title: Operation admission and idempotency
+summary: Admit one immutable operation at most once, or resolve its retained admission record.
+default_scenario: first-admission
+
+entities:
+  - id: agent
+    label: StateForge Agent
+    kind: process
+    role: Assigns the operation identity and submits the immutable invocation
+  - id: channel
+    label: SFP Channel
+    kind: resource
+    role: Carries one unary StartOperation exchange
+  - id: admission
+    label: Admission Service
+    kind: service
+    role: Validates the request and decides whether work may be dispatched
+  - id: registry
+    label: Admission Registry
+    kind: storage
+    role: Retains operation identities and canonical request fingerprints
+  - id: implementation
+    label: Provider Implementation
+    kind: process
+    role: Receives a newly admitted operation exactly once
+
+scenarios:
+  first-admission:
+    label: First admission
+    steps:
+      - id: prepare-request
+        title: Build one immutable invocation
+        detail: The Agent assigns a UUIDv4 operation ID and binds the payload to the accepted manifest declaration and execution deadline.
+        phase: Agent preparation
+        active: [agent]
+        fields: [operation_id, operation_identifier, payload, execution_deadline]
+        transitions: []
+        activities:
+          agent:
+            title: Freeze semantic content
+            items:
+              - Select one declared operation
+              - Reuse this exact invocation for every retry
+        context:
+          kind: Admission mode
+          value: ADMIT_OR_RESOLVE permits creation when no record exists
+
+      - id: submit-request
+        title: Submit StartOperation
+        detail: The Agent adds the current session binding and sends the request over the established local channel.
+        phase: Unary request
+        active: [agent, channel, admission]
+        fields: [session_binding, invocation, admission_mode]
+        transitions:
+          - source: agent
+            target: channel
+            label: StartOperationRequest
+          - source: channel
+            target: admission
+            label: bounded request
+        activities:
+          agent:
+            title: Add transport controls
+            items:
+              - Copy the current Provider, generation, and session fences
+          channel:
+            title: Enforce the request ceiling
+            items:
+              - Reject an oversized envelope before decoding
+          admission:
+            title: Receive one admission attempt
+            items:
+              - Treat an empty binding as invalid, not as a wildcard
+        context:
+          kind: RPC
+          value: OperationAdmissionService.StartOperation
+
+      - id: validate-request
+        title: Validate the current contract
+        detail: The Admission Service validates message shape, the active session, the accepted manifest revision, the operation declaration, roles, payload schema, and current prerequisites.
+        phase: Validation
+        active: [admission]
+        fields: [active session, manifest revision, input schema, prerequisites]
+        transitions: []
+        activities:
+          admission:
+            title: Establish eligibility
+            items:
+              - Apply Protocol validation and JSON bounds
+              - Resolve live runtime facts independently
+        context:
+          kind: Boundary
+          value: Capability Assessment evidence does not replace admission-time checks
+
+      - id: compute-fingerprint
+        title: Fingerprint the immutable invocation
+        detail: The Admission Service projects only OperationInvocation, sorts required implementation roles, canonicalizes it with RFC 8785, and hashes the bytes with SHA-256.
+        phase: Canonical identity
+        active: [admission]
+        fields: [OperationInvocation, RFC 8785, SHA-256]
+        transitions: []
+        activities:
+          admission:
+            title: Exclude retry controls
+            items:
+              - Include every semantic invocation field
+              - Exclude session_binding and admission_mode
+        context:
+          kind: Fingerprint
+          value: sha256:<64 lowercase hexadecimal digits>
+
+      - id: lookup-absent
+        title: Find no retained record
+        detail: The registry has no record or expiry tombstone for this operation identity, so a new admission may continue.
+        phase: Registry lookup
+        active: [admission, registry]
+        fields: [operation_id, request_fingerprint]
+        transitions:
+          - source: admission
+            target: registry
+            label: lookup
+          - source: registry
+            target: admission
+            label: absent
+        activities:
+          registry:
+            title: Resolve retained state first
+            items:
+              - Check the operation ID before deadline or capacity
+          admission:
+            title: Continue only for absence
+            items:
+              - Preserve the computed fingerprint for atomic insertion
+        context:
+          kind: Idempotency
+          value: Existing state always wins over new-admission checks
+
+      - id: create-record
+        title: Atomically create the admission record
+        detail: After deadline, readiness, prerequisite, and capacity checks pass, the registry inserts one immutable admission record.
+        phase: Durable admission
+        active: [admission, registry]
+        fields: [admitted_at, record_expires_at, admitted_endpoint_generation]
+        transitions:
+          - source: admission
+            target: registry
+            label: atomic insert
+            tone: success
+          - source: registry
+            target: admission
+            label: record created
+            tone: success
+        activities:
+          admission:
+            title: Admit only eligible work
+            items:
+              - Check the immutable execution deadline
+              - Check current capacity immediately before insertion
+          registry:
+            title: Retain the idempotency record
+            items:
+              - Bind the operation ID to the canonical fingerprint
+        context:
+          kind: Ordering guarantee
+          value: Record creation completes before Provider-specific dispatch
+
+      - id: dispatch-once
+        title: Dispatch Provider behavior once
+        detail: Only the successful creator of the admission record calls the Provider implementation.
+        phase: Provider dispatch
+        active: [admission, implementation]
+        fields: [one retained admission record]
+        transitions:
+          - source: admission
+            target: implementation
+            label: dispatch
+            tone: success
+        activities:
+          admission:
+            title: Cross the dispatch boundary
+            items:
+              - Dispatch only after record creation
+          implementation:
+            title: Begin declared behavior
+            items:
+              - Receive the operation once
+        context:
+          kind: Dispatch count
+          value: Exactly one
+
+      - id: return-accepted
+        title: Return ACCEPTED_NEW
+        detail: The Provider returns the immutable admission record. Progress and terminal results belong to the operation lifecycle procedure.
+        phase: Admission accepted
+        active: [admission, channel, agent]
+        fields: [ACCEPTED_NEW, OperationAdmissionRecord]
+        transitions:
+          - source: admission
+            target: channel
+            label: ACCEPTED_NEW
+            tone: success
+          - source: channel
+            target: agent
+            label: fenced response
+            tone: success
+        activities:
+          agent:
+            title: Accept the admission decision
+            items:
+              - Validate response fences and request fingerprint
+          admission:
+            title: Report admission only
+            items:
+              - Return no progress or business result
+        context:
+          kind: Result
+          value: One operation identity has one admitted dispatch
+
+  equivalent-retry:
+    label: Identical retry
+    prefix:
+      scenario: first-admission
+      through: compute-fingerprint
+    steps:
+      - id: lookup-matching-record
+        title: Match the retained fingerprint
+        detail: The registry finds the same operation ID with the same canonical invocation fingerprint.
+        phase: Idempotency lookup
+        active: [admission, registry]
+        fields: [same operation_id, same request_fingerprint]
+        transitions:
+          - source: admission
+            target: registry
+            label: lookup
+          - source: registry
+            target: admission
+            label: matching record
+            tone: success
+        activities:
+          registry:
+            title: Return the original record
+            items:
+              - Preserve admission time and original generation
+          admission:
+            title: Skip every new-admission action
+            items:
+              - Do not check a new deadline or dispatch again
+        context:
+          kind: Dispatch count
+          value: Zero additional dispatches
+      - id: return-resolved
+        title: Return RESOLVED_EXISTING
+        detail: The Provider returns the retained admission record without calling Provider-specific behavior again.
+        phase: Existing admission resolved
+        active: [admission, agent]
+        fields: [RESOLVED_EXISTING, retained record]
+        transitions:
+          - source: admission
+            target: agent
+            label: RESOLVED_EXISTING
+            tone: success
+        activities:
+          agent:
+            title: Continue with the known operation
+            items:
+              - Use the lifecycle procedure to observe its state
+        context:
+          kind: Result
+          value: The same logical operation remains admitted once
+
+  concurrent-duplicate:
+    label: Concurrent identical submissions
+    prefix:
+      scenario: first-admission
+      through: compute-fingerprint
+    steps:
+      - id: race-atomic-insert
+        title: Converge at atomic insertion
+        detail: Two equal submissions observe absence, but only one can create the operation record.
+        phase: Concurrent admission
+        active: [admission, registry]
+        fields: [same operation_id, same request_fingerprint]
+        transitions:
+          - source: admission
+            target: registry
+            label: competing inserts
+          - source: registry
+            target: admission
+            label: one winner
+            tone: success
+        activities:
+          registry:
+            title: Serialize the identity
+            items:
+              - Create one immutable record
+              - Return that record to the losing submission
+          admission:
+            title: Compare again after losing
+            items:
+              - Resolve the winner's equal fingerprint
+        context:
+          kind: Result
+          value: One ACCEPTED_NEW and one RESOLVED_EXISTING
+      - id: dispatch-concurrent-once
+        title: Dispatch only the winner
+        detail: The admission that created the record dispatches once; the equivalent loser returns the retained record.
+        phase: Converged dispatch
+        active: [admission, implementation]
+        fields: [dispatch count = 1]
+        transitions:
+          - source: admission
+            target: implementation
+            label: one dispatch
+            tone: success
+        activities:
+          implementation:
+            title: Receive one call
+            items:
+              - Execute no duplicate Provider dispatch
+        context:
+          kind: Dispatch count
+          value: Exactly one across both submissions
+
+  changed-content:
+    label: Same ID with changed content
+    prefix:
+      scenario: first-admission
+      through: compute-fingerprint
+    steps:
+      - id: reject-fingerprint-conflict
+        title: Reject the changed invocation
+        detail: The registry finds the operation ID, but its retained fingerprint differs from the submitted immutable invocation.
+        phase: Idempotency conflict
+        active: [admission, registry, agent]
+        fields: [ALREADY_EXISTS, IDEMPOTENCY_CONFLICT]
+        transitions:
+          - source: registry
+            target: admission
+            label: different fingerprint
+            tone: failure
+          - source: admission
+            target: agent
+            label: ALREADY_EXISTS
+            tone: failure
+        activities:
+          admission:
+            title: Protect the original identity
+            items:
+              - Create no record and dispatch no work
+          agent:
+            title: Stop retrying changed content
+            items:
+              - Allocate a new ID only for a genuinely new authorized attempt
+        context:
+          kind: Structured reason
+          value: ADMISSION_ERROR_REASON_IDEMPOTENCY_CONFLICT
+
+  terminal-replay:
+    label: Terminal record replay
+    prefix:
+      scenario: first-admission
+      through: compute-fingerprint
+    steps:
+      - id: find-terminal-record
+        title: Resolve the retained terminal record
+        detail: The registry retains the same admission record even though the operation lifecycle is already terminal.
+        phase: Retained record lookup
+        active: [admission, registry]
+        fields: [RESOLVE_ONLY, matching fingerprint]
+        transitions:
+          - source: admission
+            target: registry
+            label: resolve
+          - source: registry
+            target: admission
+            label: terminal record
+            tone: success
+        activities:
+          admission:
+            title: Separate admission from lifecycle
+            items:
+              - Return the retained admission record
+              - Dispatch no Provider behavior
+        context:
+          kind: Next step
+          value: Read the retained terminal outcome through Operation Lifecycle
+      - id: return-terminal-resolved
+        title: Return RESOLVED_EXISTING
+        detail: Admission resolution succeeds without redefining or replaying the terminal business outcome.
+        phase: Existing admission resolved
+        active: [admission, agent]
+        fields: [RESOLVED_EXISTING]
+        transitions:
+          - source: admission
+            target: agent
+            label: RESOLVED_EXISTING
+            tone: success
+        activities:
+          agent:
+            title: Preserve the operation identity
+            items:
+              - Query lifecycle state separately
+        context:
+          kind: Dispatch count
+          value: Zero additional dispatches
+
+  expired-deadline:
+    label: Deadline elapsed before admission
+    prefix:
+      scenario: first-admission
+      through: lookup-absent
+    steps:
+      - id: reject-expired-deadline
+        title: Reject new admission after the deadline
+        detail: No record exists and the immutable execution deadline is no longer in the future.
+        phase: Deadline rejection
+        active: [admission, agent]
+        fields: [DEADLINE_EXCEEDED, OPERATION_DEADLINE_EXPIRED]
+        transitions:
+          - source: admission
+            target: agent
+            label: DEADLINE_EXCEEDED
+            tone: failure
+        activities:
+          admission:
+            title: Admit nothing
+            items:
+              - Create no record
+              - Dispatch no Provider behavior
+          agent:
+            title: Preserve immutability
+            items:
+              - Use a new operation ID for a genuinely new attempt
+        context:
+          kind: Structured reason
+          value: ADMISSION_ERROR_REASON_OPERATION_DEADLINE_EXPIRED
+
+  unavailable-record:
+    label: State lost after generation change
+    steps:
+      - id: reconnect-resolve-only
+        title: Reconnect without changing the invocation
+        detail: After an uncertain submission crosses a Provider generation boundary, the Agent updates only the session binding and switches to RESOLVE_ONLY.
+        phase: Safe recovery
+        active: [agent, channel, admission]
+        fields: [same invocation, new session_binding, RESOLVE_ONLY]
+        transitions:
+          - source: agent
+            target: admission
+            label: resolve-only request
+        activities:
+          agent:
+            title: Forbid accidental redispatch
+            items:
+              - Preserve the operation ID and semantic content
+              - Permit resolution only
+        context:
+          kind: Fingerprint
+          value: Session changes do not change the invocation fingerprint
+      - id: find-no-recoverable-record
+        title: Find no verifiable record
+        detail: The new generation cannot recover an admission record or expiry tombstone for the operation identity.
+        phase: Unresolved outcome
+        active: [admission, registry]
+        fields: [record unavailable]
+        transitions:
+          - source: admission
+            target: registry
+            label: resolve
+          - source: registry
+            target: admission
+            label: unavailable
+            tone: failure
+        activities:
+          admission:
+            title: Fail closed
+            items:
+              - Create no replacement record
+              - Dispatch no Provider behavior
+        context:
+          kind: Safety rule
+          value: Missing state is not permission to execute again
+      - id: return-record-unavailable
+        title: Report an unresolved outcome
+        detail: The Provider returns FAILED_PRECONDITION with OPERATION_RECORD_UNAVAILABLE.
+        phase: Resolution failed
+        active: [admission, agent]
+        fields: [FAILED_PRECONDITION, OPERATION_RECORD_UNAVAILABLE]
+        transitions:
+          - source: admission
+            target: agent
+            label: FAILED_PRECONDITION
+            tone: failure
+        activities:
+          agent:
+            title: Escalate the decision
+            items:
+              - Do not manufacture success, failure, or retry authorization
+        context:
+          kind: Dispatch count
+          value: Zero
+
+  expired-record:
+    label: Expired retained record
+    steps:
+      - id: resolve-expired-record
+        title: Submit a resolve-only request
+        detail: The Agent reuses the immutable invocation and asks only for retained evidence.
+        phase: Safe recovery
+        active: [agent, admission, registry]
+        fields: [RESOLVE_ONLY, same operation_id]
+        transitions:
+          - source: agent
+            target: admission
+            label: resolve-only request
+          - source: admission
+            target: registry
+            label: lookup
+        activities:
+          registry:
+            title: Preserve an expiry tombstone
+            items:
+              - Prove that the former record crossed its retention boundary
+        context:
+          kind: Record state
+          value: Expired tombstone retained
+      - id: return-record-expired
+        title: Report the expired boundary
+        detail: The Provider returns FAILED_PRECONDITION with OPERATION_RECORD_EXPIRED and never dispatches replacement work.
+        phase: Resolution expired
+        active: [registry, admission, agent]
+        fields: [FAILED_PRECONDITION, OPERATION_RECORD_EXPIRED]
+        transitions:
+          - source: registry
+            target: admission
+            label: expired tombstone
+            tone: warning
+          - source: admission
+            target: agent
+            label: FAILED_PRECONDITION
+            tone: failure
+        activities:
+          admission:
+            title: Preserve uncertainty
+            items:
+              - Dispatch no work
+          agent:
+            title: Escalate the decision
+            items:
+              - Treat expiry as evidence loss, not retry authorization
+        context:
+          kind: Dispatch count
+          value: Zero

@@ -1,0 +1,158 @@
+schema: stateforge.docs/entity-flow/v1
+flow: operation-lifecycle
+title: From accepted work to a validated result
+summary: The Agent watches one admitted database-maintenance operation as the Provider commits progress and a terminal result.
+autoplay: true
+entities:
+  - id: agent
+    label: StateForge Agent
+    kind: StateForge Agent
+    brand: stateforge
+    accent: agent
+    description: Watches the admitted operation and validates each complete snapshot.
+    state:
+      label: Last sequence
+      value: None
+  - id: provider
+    label: Database Provider
+    kind: StateForge Provider
+    brand: stateforge
+    accent: provider
+    description: Executes the declared operation and normalizes its lifecycle.
+    state:
+      label: Execution
+      value: Admitted
+  - id: record
+    label: Operation Record
+    kind: Provider state
+    brand: none
+    accent: neutral
+    description: Retains current state, latest progress, and the immutable terminal result.
+    state:
+      label: Snapshot
+      value: ACCEPTED · sequence 1
+  - id: database
+    label: Database Cluster
+    kind: Managed system
+    brand: service
+    accent: service
+    description: The system being compacted by the Provider operation.
+    state:
+      label: Maintenance
+      value: Waiting
+steps:
+  - id: watch-current-state
+    phase: Watch attached
+    title: Replay the current snapshot
+    detail: The Agent identifies the admitted operation and immediately receives its complete current state.
+    active: [agent, provider, record]
+    states:
+      agent:
+        label: Last sequence
+        value: "1"
+      record:
+        label: Snapshot
+        value: ACCEPTED · sequence 1
+    transitions:
+      - source: agent
+        target: provider
+        label: WatchOperation
+      - source: provider
+        target: agent
+        label: ACCEPTED · 1
+    responsibility:
+      entities: [provider]
+      label: The Provider owns the retained lifecycle snapshot; Watch never creates or restarts work.
+  - id: execution-starts
+    phase: Execution started
+    title: Commit RUNNING
+    detail: Provider-specific execution begins and the retained snapshot advances exactly once.
+    active: [provider, record, database]
+    states:
+      provider:
+        label: Execution
+        value: Running
+        tone: warning
+      record:
+        label: Snapshot
+        value: RUNNING · sequence 2
+        tone: warning
+      database:
+        label: Maintenance
+        value: Compacting
+        tone: warning
+    transitions:
+      - source: provider
+        target: database
+        label: compact
+    responsibility:
+      entities: [provider]
+      label: The Provider commits business state independently of the observer stream.
+  - id: progress-committed
+    phase: Progress committed
+    title: Report normalized progress
+    detail: A complete RUNNING snapshot carries the latest bounded progress update.
+    active: [provider, record, agent]
+    states:
+      record:
+        label: Snapshot
+        value: RUNNING · sequence 3 · 25%
+        tone: warning
+      agent:
+        label: Last sequence
+        value: "3"
+    transitions:
+      - source: record
+        target: agent
+        label: RUNNING · 25%
+    responsibility:
+      entities: [provider]
+      label: Progress is evidence of current state, not a terminal result.
+  - id: result-validated
+    phase: Terminal commit
+    title: Validate and retain the result
+    detail: The Provider validates the complete result against the manifest revision pinned by admission before committing SUCCEEDED.
+    active: [provider, record, database]
+    states:
+      provider:
+        label: Execution
+        value: Completed
+        tone: success
+      record:
+        label: Snapshot
+        value: SUCCEEDED · sequence 5
+        tone: success
+      database:
+        label: Maintenance
+        value: Complete
+        tone: success
+    transitions:
+      - source: database
+        target: provider
+        label: reclaimedBytes = 4096
+        tone: success
+      - source: provider
+        target: record
+        label: validated result
+        tone: success
+    responsibility:
+      entities: [provider, record]
+      label: The terminal snapshot is immutable and retained with the admission record.
+  - id: terminal-delivered
+    phase: Terminal delivery
+    title: Deliver SUCCEEDED and close
+    detail: The Agent validates the terminal snapshot, advances its cursor, and the Provider closes this Watch stream with gRPC OK.
+    active: [record, provider, agent]
+    states:
+      agent:
+        label: Last sequence
+        value: "5 · SUCCEEDED"
+        tone: success
+    transitions:
+      - source: record
+        target: agent
+        label: SUCCEEDED · result
+        tone: success
+    responsibility:
+      entities: [agent]
+      label: The validated terminal snapshot is the Agent's evidence of the operation outcome.

@@ -45,16 +45,17 @@ dev = [
     "pytest>=8.4",
     "pytest-asyncio>=1",
     "pytest-cov>=6.2",
+    "pyyaml>=6.0",
     "ruff>=0.12",
     "types-grpcio",
     "types-grpcio-health-checking",
     "types-jsonschema",
+    "types-pyyaml",
     "types-protobuf",
 ]
 docs = [
-    "mkdocs>=1.6,<2",
-    "mkdocs-material>=9.6,<10",
     "mkdocstrings[python]>=0.30,<1",
+    "stateforge-docs-theme @ git+https://github.com/stateforge-org/stateforge-docs.git@0a1a0048acdc3a6683c6bb2a9bbbe1923b7e99c5",
 ]
 
 
@@ -80,6 +81,7 @@ include = [
     "/buf.gen.yaml",
     "/buf.yaml",
     "/docs",
+    "/examples",
     "/mkdocs.yml",
     "/proto",
     "/pyproject.toml",
@@ -178,4 +180,24 @@ addopts = [
     "--strict-markers",
 ]
 testpaths = ["tests"]
+pythonpath = ["."]
 asyncio_mode = "strict"
+
+
+[tool.coverage.run]
+branch = true
+source = [
+    "stateforge_protocol",
+    "scripts.ci.audit_consumer",
+    "scripts.ci.verify_consumer_protocol",
+]
+omit = [
+    "*/sfp/*/v*/*_pb2.py",
+    "*/sfp/*/v*/*_pb2_grpc.py",
+]
+
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+skip_covered = true

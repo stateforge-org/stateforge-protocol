@@ -18,6 +18,9 @@ from grpc_health.v1 import health_pb2, health_pb2_grpc
 from stateforge_protocol.sfp import health_contract, recovery, shared_endpoint
 from stateforge_protocol.sfp.bootstrap.v1 import bootstrap_pb2
 from stateforge_protocol.sfp.bootstrap.v1 import contract as bootstrap_contract
+from stateforge_protocol.sfp.bootstrap.v1 import (
+    validation as bootstrap_validation,
+)
 from stateforge_protocol.sfp.capability_assessment.v1 import (
     capability_assessment_pb2,
 )
@@ -26,6 +29,10 @@ from stateforge_protocol.sfp.capability_assessment.v1 import (
 )
 from stateforge_protocol.sfp.endpoint_discovery.v1 import (
     contract as endpoint_discovery_contract,
+)
+from stateforge_protocol.sfp.manifest.v1 import manifest_pb2
+from stateforge_protocol.sfp.manifest.v1 import (
+    validation as manifest_validation,
 )
 from stateforge_protocol.sfp.operation_admission.v1 import (
     operation_admission_pb2,
@@ -143,6 +150,151 @@ def _object_cases(
     ):
         raise ValueError(f"Expected an object array named {name}")
     return value
+
+
+def _verify_endpoint_discovery_fixtures(fixture_root: Path) -> int:
+    """Exercise endpoint discovery from the installed package and fixtures."""
+    path = fixture_root / "endpoint_discovery" / "descriptor.json"
+    content = path.read_bytes()
+    descriptor = endpoint_discovery_contract.parse_descriptor(content)
+    if descriptor.to_json_bytes() != content:
+        raise ValueError("Installed endpoint descriptor is not canonical")
+    if (
+        endpoint_discovery_contract.descriptor_filename(
+            descriptor.provider_instance_id
+        )
+        != f"{descriptor.provider_instance_id}.sfp.json"
+    ):
+        raise ValueError("Installed endpoint descriptor filename is invalid")
+    return 1
+
+
+def _verify_bootstrap_validation(fixture_root: Path) -> int:
+    """Exercise Bootstrap validation from the installed package."""
+    handshake = _read_json_object(
+        fixture_root / "bootstrap" / "handshake.json"
+    )
+    request = ParseDict(
+        handshake["request"],
+        bootstrap_pb2.HandshakeRequest(),
+    )
+    response = ParseDict(
+        handshake["response"],
+        bootstrap_pb2.HandshakeResponse(),
+    )
+    validated_request = bootstrap_validation.validate_handshake_request(
+        request
+    )
+    validated_response = bootstrap_validation.validate_handshake_response(
+        response
+    )
+    if (
+        validated_response.provider_instance_id
+        != validated_request.expected_provider_instance_id
+    ):
+        raise ValueError("Installed Bootstrap fixture identities differ")
+    if response.endpoint_generation != request.expected_endpoint_generation:
+        raise ValueError("Installed Bootstrap fixture generations differ")
+    return 2
+
+
+def _verify_manifest_validation(fixture_root: Path) -> int:
+    """Exercise Manifest validation from the installed package."""
+    response = ParseDict(
+        _read_json_object(fixture_root / "manifest" / "response.json"),
+        manifest_pb2.GetManifestResponse(),
+    )
+    manifest_validation.validate_manifest_response(response)
+    key = manifest_validation.validate_manifest_key(
+        response.provider_instance_id,
+        response.manifest_schema_version,
+        response.manifest_revision,
+    )
+    if key.revision != response.manifest_revision:
+        raise ValueError("Installed Manifest key validation is invalid")
+    return 2
+
+
+def _verify_trigger_publication_validation(fixture_root: Path) -> int:
+    """Exercise ordinary Trigger Publication validation."""
+    root = fixture_root / "trigger_publication"
+    open_request = ParseDict(
+        _read_json_object(root / "open.json"),
+        trigger_publication_pb2.StreamTriggersRequest(),
+    )
+    ready_response = ParseDict(
+        _read_json_object(root / "ready.json"),
+        trigger_publication_pb2.StreamTriggersResponse(),
+    )
+    publication_response = ParseDict(
+        _read_json_object(root / "publication.json"),
+        trigger_publication_pb2.StreamTriggersResponse(),
+    )
+    acknowledgement_request = ParseDict(
+        _read_json_object(root / "acknowledgement-accepted-new.json"),
+        trigger_publication_pb2.StreamTriggersRequest(),
+    )
+    trigger_validation.validate_stream_request(open_request)
+    trigger_validation.validate_stream_response(ready_response)
+    trigger_validation.validate_stream_open_exchange(
+        open_request.open,
+        ready_response.ready,
+    )
+    trigger_validation.validate_stream_response(publication_response)
+    trigger_validation.validate_stream_request(acknowledgement_request)
+    trigger_validation.validate_publication_acknowledgement(
+        publication_response.publication,
+        acknowledgement_request.acknowledgement,
+    )
+    return 4
+
+
+def _verify_operation_admission_validation(fixture_root: Path) -> int:
+    """Exercise ordinary Operation Admission validation."""
+    root = fixture_root / "operation_admission"
+    request = ParseDict(
+        _read_json_object(root / "request.json"),
+        operation_admission_pb2.StartOperationRequest(),
+    )
+    response = ParseDict(
+        _read_json_object(root / "response-accepted-new.json"),
+        operation_admission_pb2.StartOperationResponse(),
+    )
+    admission_validation.validate_start_operation_request(request)
+    admission_validation.validate_start_operation_response(response)
+    admission_validation.validate_admission_exchange(request, response)
+    return 2
+
+
+def _verify_operation_lifecycle_validation(fixture_root: Path) -> int:
+    """Exercise ordinary Operation Lifecycle validation."""
+    root = fixture_root / "operation_lifecycle"
+    watch_request = ParseDict(
+        _read_json_object(root / "watch-request.json"),
+        operation_lifecycle_pb2.WatchOperationRequest(),
+    )
+    watch_response = ParseDict(
+        _read_json_object(root / "watch-terminal.json"),
+        operation_lifecycle_pb2.WatchOperationResponse(),
+    )
+    watch_response.updates_skipped = False
+    cancel_request = ParseDict(
+        _read_json_object(root / "cancel-request.json"),
+        operation_lifecycle_pb2.CancelOperationRequest(),
+    )
+    cancel_response = ParseDict(
+        _read_json_object(root / "cancel-requested.json"),
+        operation_lifecycle_pb2.CancelOperationResponse(),
+    )
+    lifecycle_validation.validate_watch_exchange(
+        watch_request,
+        watch_response,
+    )
+    lifecycle_validation.validate_cancel_exchange(
+        cancel_request,
+        cancel_response,
+    )
+    return 2
 
 
 def _verify_health_fixtures(fixture_root: Path) -> int:
@@ -711,6 +863,94 @@ def _verify_recovery_contracts(fixture_root: Path) -> int:
     )
 
 
+def _coverage_resources(
+    procedure: dict[str, object], member: str
+) -> list[str]:
+    """Return one string-list field from a coverage entry."""
+    resources = procedure.get(member)
+    if not isinstance(resources, list) or not all(
+        isinstance(resource, str) for resource in resources
+    ):
+        raise ValueError(f"Installed {member} entry is invalid")
+    return resources
+
+
+def _verify_coverage_entry(
+    package_root: Path,
+    procedure: dict[str, object],
+) -> str | None:
+    """Verify the modules and resources declared by one coverage entry."""
+    contract_module = procedure.get("contractModule")
+    if not isinstance(contract_module, str):
+        raise ValueError("Installed contract module entry is invalid")
+    module = importlib.import_module(contract_module)
+    if not _is_within(Path(module.__file__ or "").resolve(), package_root):
+        raise ValueError("Contract module loaded outside the installation")
+
+    validation_module = procedure.get("validationModule")
+    if validation_module is None:
+        if not isinstance(procedure.get("validationException"), str):
+            raise ValueError("Validation exception is not documented")
+    elif isinstance(validation_module, str):
+        validation = importlib.import_module(validation_module)
+        if not getattr(validation, "__all__", None):
+            raise ValueError("Public validation API is not explicit")
+    else:
+        raise ValueError("Installed validation module entry is invalid")
+
+    for member in ("schemaResources", "fixtureRoots"):
+        for resource in _coverage_resources(procedure, member):
+            if not (package_root.parent / resource).exists():
+                raise ValueError(
+                    f"Installed conformance resource is missing: {resource}"
+                )
+
+    service_name = procedure.get("serviceName")
+    if service_name is not None and not isinstance(service_name, str):
+        raise ValueError("Installed service identity is invalid")
+    return service_name
+
+
+def _verify_coverage_inventory(
+    package_root: Path,
+    fixture_root: Path,
+    results: dict[str, int],
+) -> int:
+    """Prove every declared contract ships and executed successfully."""
+    inventory = _read_json_object(
+        fixture_root / "conformance" / "coverage.json"
+    )
+    if inventory.get("schemaVersion") != 1:
+        raise ValueError("Installed conformance inventory version is invalid")
+    procedures = _object_cases(inventory, "procedures")
+    result_keys = {
+        str(procedure.get("installedResultKey")) for procedure in procedures
+    }
+    if result_keys != set(results):
+        raise ValueError("Installed conformance execution is incomplete")
+    if any(count <= 0 for count in results.values()):
+        raise ValueError(
+            "Installed conformance execution produced no evidence"
+        )
+
+    services = {
+        service_name
+        for procedure in procedures
+        if (service_name := _verify_coverage_entry(package_root, procedure))
+        is not None
+    }
+
+    expected_services = {
+        procedure.service_name
+        for procedure in shared_endpoint.PROCEDURE_LIMITS
+    }
+    if services != expected_services:
+        raise ValueError(
+            "Installed conformance service coverage is incomplete"
+        )
+    return len(procedures)
+
+
 def _is_within(path: Path, parent: Path) -> bool:
     """Return whether ``path`` is contained below ``parent``."""
     try:
@@ -772,11 +1012,42 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
         json.loads(fixture.read_text(encoding="utf-8"))
 
     procedure_contract_count = _verify_wire_contracts()
+    endpoint_discovery_vector_count = _verify_endpoint_discovery_fixtures(
+        fixture_root
+    )
+    bootstrap_vector_count = _verify_bootstrap_validation(fixture_root)
     health_scenario_count = _verify_health_fixtures(fixture_root)
+    manifest_vector_count = _verify_manifest_validation(fixture_root)
     capability_assessment_vector_count = (
         _verify_capability_assessment_validation(fixture_root)
     )
+    trigger_publication_vector_count = _verify_trigger_publication_validation(
+        fixture_root
+    )
+    operation_admission_vector_count = _verify_operation_admission_validation(
+        fixture_root
+    )
+    operation_lifecycle_vector_count = _verify_operation_lifecycle_validation(
+        fixture_root
+    )
     recovery_scenario_count = _verify_recovery_contracts(fixture_root)
+    conformance_results = {
+        "endpoint-discovery": endpoint_discovery_vector_count,
+        "bootstrap": bootstrap_vector_count,
+        "health": health_scenario_count,
+        "manifest": manifest_vector_count,
+        "capability-assessment": capability_assessment_vector_count,
+        "trigger-publication": trigger_publication_vector_count,
+        "operation-admission": operation_admission_vector_count,
+        "operation-lifecycle": operation_lifecycle_vector_count,
+        "disconnection-recovery": recovery_scenario_count,
+        "shared-endpoint": procedure_contract_count,
+    }
+    coverage_inventory_count = _verify_coverage_inventory(
+        package_root,
+        fixture_root,
+        conformance_results,
+    )
 
     return {
         "distribution": _DISTRIBUTION,
@@ -786,6 +1057,8 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
         "schema_count": len(schemas),
         "fixture_count": len(fixture_files),
         "procedure_contract_count": procedure_contract_count,
+        "coverage_inventory_count": coverage_inventory_count,
+        "conformance_results": conformance_results,
         "health_scenario_count": health_scenario_count,
         "capability_assessment_vector_count": (
             capability_assessment_vector_count
@@ -799,13 +1072,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--workspace", type=Path)
+    parser.add_argument("--output", type=Path)
     arguments = parser.parse_args()
     try:
         result = verify(arguments.expected_version, arguments.workspace)
     except (ImportError, OSError, ValueError, json.JSONDecodeError) as error:
         sys.stderr.write(f"Installed-package verification failed: {error}\n")
         return 1
-    sys.stdout.write(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    rendered = json.dumps(result, indent=2, sort_keys=True) + "\n"
+    if arguments.output is not None:
+        arguments.output.parent.mkdir(parents=True, exist_ok=True)
+        arguments.output.write_text(rendered, encoding="utf-8")
+    sys.stdout.write(rendered)
     return 0
 
 

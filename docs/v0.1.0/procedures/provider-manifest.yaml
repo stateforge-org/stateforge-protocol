@@ -1,0 +1,553 @@
+schema: stateforge.docs/procedure/v1
+procedure: provider-manifest
+title: Provider manifest exchange
+summary: From a negotiated session to one accepted Provider declaration.
+default_scenario: success
+
+entities:
+  - id: agent
+    label: StateForge Agent
+    kind: process
+    role: Requests, validates, and caches Provider declarations
+  - id: provider
+    label: Manifest Service
+    kind: service
+    role: Serves one session-bound declaration snapshot
+  - id: declaration
+    label: Provider Declaration
+    kind: resource
+    role: Describes operations, triggers, schemas, and requirements
+  - id: cache
+    label: Manifest Cache
+    kind: storage
+    role: Retains only previously validated declarations
+
+scenarios:
+  success:
+    label: New manifest accepted
+    steps:
+      - id: request-manifest
+        title: Request the manifest
+        detail: The Agent binds the read to its active Bootstrap session and offers every manifest schema version it understands.
+        phase: Request
+        active: [agent, provider]
+        fields: [expected_provider_instance_id, expected_endpoint_generation, expected_session_id, supported_manifest_schema_versions]
+        transitions:
+          - source: agent
+            target: provider
+            label: GetManifestRequest
+        activities:
+          agent:
+            title: Build a fenced request
+            items:
+              - Copy identity and generation from the active endpoint
+              - Copy the exact negotiated session ID
+          provider:
+            title: Receive a read-only request
+            items:
+              - Start no operation and mutate no Provider state
+        context:
+          kind: RPC
+          value: ManifestService.GetManifest
+
+      - id: validate-request
+        title: Validate the request contract
+        detail: The Provider checks the byte limit, required identity fields, session-ID shape, and unique positive schema offers.
+        phase: Request validation
+        active: [provider]
+        fields: [request limit, canonical UUID, allocated generation, unique schema versions]
+        transitions: []
+        activities:
+          provider:
+            title: Reject malformed input first
+            items:
+              - Apply the packaged request schema
+              - Treat empty fields as invalid, never as wildcards
+        context:
+          kind: Validation order
+          value: Syntax is checked before live session lookup
+
+      - id: bind-session
+        title: Resolve the active session
+        detail: The Provider confirms that the supplied session belongs to the requested installation and endpoint generation.
+        phase: Session binding
+        active: [agent, provider]
+        fields: [active session, matching instance, matching generation]
+        transitions:
+          - source: provider
+            target: agent
+            label: session confirmed
+            tone: success
+        activities:
+          agent:
+            title: Retain the request fence
+            items:
+              - Keep the request session for response comparison
+          provider:
+            title: Confirm negotiated context
+            items:
+              - Resolve the exact active session
+              - Reject identity or generation mismatch
+        context:
+          kind: Session fence
+          value: instance plus generation plus session must agree
+
+      - id: select-schema
+        title: Select a manifest schema
+        detail: The Provider chooses the highest manifest schema version supported by both peers.
+        phase: Schema negotiation
+        active: [agent, provider]
+        fields: [manifest_schema_version]
+        transitions:
+          - source: provider
+            target: agent
+            label: schema selected
+        activities:
+          agent:
+            title: Keep the offered set
+            items:
+              - Accept only a version it offered
+          provider:
+            title: Negotiate independently of SFP
+            items:
+              - Select the highest common manifest schema
+        context:
+          kind: Version rule
+          value: SFP, manifest schema, and software versions are independent
+
+      - id: snapshot-declaration
+        title: Capture one immutable declaration
+        detail: The Provider reads one complete snapshot containing its operations, triggers, requirements, platforms, and schemas.
+        phase: Snapshot
+        active: [provider, declaration]
+        fields: [ProviderManifest, one consistent snapshot]
+        transitions:
+          - source: declaration
+            target: provider
+            label: immutable snapshot
+        activities:
+          provider:
+            title: Freeze the declaration
+            items:
+              - Use one identity, generation, and declaration snapshot
+              - Transfer no configured values or secrets
+          declaration:
+            title: Describe the Provider surface
+            items:
+              - Declare operations and triggers
+              - Declare schemas, requirements, and platforms
+        context:
+          kind: Boundary
+          value: The manifest describes capability shape, not runtime evidence
+
+      - id: build-response
+        title: Validate and revise the snapshot
+        detail: The Provider validates every embedded schema and computes the RFC 8785 SHA-256 revision over the canonical declaration preimage.
+        phase: Response construction
+        active: [provider, declaration]
+        fields: [manifest_revision, canonical preimage, session_id]
+        transitions:
+          - source: provider
+            target: declaration
+            label: validate and hash
+            tone: success
+        activities:
+          provider:
+            title: Build a complete response
+            items:
+              - Enforce structural and resource limits
+              - Echo the validated request session
+          declaration:
+            title: Supply canonical declaration data
+            items:
+              - Resolve local schema references only
+              - Keep secret-bearing schemas value-free
+        context:
+          kind: Revision preimage
+          value: manifest plus schema version plus Provider instance ID
+
+      - id: return-response
+        title: Return the complete manifest
+        detail: The Provider returns one full response; success is never empty and never means not modified.
+        phase: Response
+        active: [provider, agent]
+        fields: [GetManifestResponse, complete ProviderManifest]
+        transitions:
+          - source: provider
+            target: agent
+            label: GetManifestResponse
+            tone: success
+        activities:
+          agent:
+            title: Receive one bounded response
+            items:
+              - Decode under the Manifest response limit
+          provider:
+            title: Serve the session-bound envelope
+            items:
+              - Return the complete snapshot
+              - Preserve the call's exact session ID
+        context:
+          kind: Success rule
+          value: Every successful response carries the complete declaration
+
+      - id: validate-envelope
+        title: Validate the response fences
+        detail: Before consulting its cache, the Agent compares identity, generation, selected schema, and session with the request and current session.
+        phase: Agent validation
+        active: [agent, provider]
+        fields: [identity match, generation match, offered schema, current session]
+        transitions:
+          - source: provider
+            target: agent
+            label: envelope accepted
+            tone: success
+        activities:
+          agent:
+            title: Reject stale or foreign responses
+            items:
+              - Compare the response with the exact request
+              - Confirm the session is still current
+          provider:
+            title: Remain bound to the call
+            items:
+              - Substitute no newer global session
+        context:
+          kind: Acceptance order
+          value: Current-session checks always happen before cache reuse
+
+      - id: accept-declaration
+        title: Accept and cache the declaration
+        detail: For a new cache key, the Agent validates the complete manifest, embedded schemas, and revision before storing canonical bytes.
+        phase: Manifest accepted
+        active: [agent, declaration, cache]
+        fields: [provider_instance_id, SFP version, manifest_schema_version, manifest_revision]
+        transitions:
+          - source: agent
+            target: declaration
+            label: validate
+          - source: declaration
+            target: cache
+            label: store accepted bytes
+            tone: success
+        activities:
+          agent:
+            title: Admit one trusted declaration
+            items:
+              - Verify embedded schemas and canonical revision
+              - Expose operations only after validation succeeds
+          declaration:
+            title: Become the accepted Provider surface
+            items:
+              - Remain immutable under this revision
+          cache:
+            title: Retain validated canonical bytes
+            items:
+              - Key independently of the per-call session header
+        context:
+          kind: Result
+          value: The Provider manifest is accepted for later SFP procedures
+
+  cache-hit:
+    label: Validated declaration reused
+    prefix:
+      scenario: success
+      through: validate-envelope
+    steps:
+      - id: reuse-cache
+        title: Reuse the validated declaration
+        detail: The response key matches an accepted cache entry, so the Agent reuses that exact declaration after current-session checks pass.
+        phase: Manifest accepted
+        active: [agent, declaration, cache]
+        fields: [matching cache key, current session already validated]
+        transitions:
+          - source: agent
+            target: cache
+            label: lookup
+          - source: cache
+            target: declaration
+            label: validated bytes
+            tone: success
+        activities:
+          agent:
+            title: Reuse without merging
+            items:
+              - Keep the cached declaration exact
+              - Never let a cache hit bypass envelope checks
+          declaration:
+            title: Remain unchanged
+            items:
+              - Retain the accepted revision
+          cache:
+            title: Return only validated content
+            items:
+              - Keep session headers outside the cache entry
+        context:
+          kind: Cache key
+          value: Provider instance plus SFP version plus schema version plus revision
+
+  invalid-request:
+    label: Invalid request
+    prefix:
+      scenario: success
+      through: request-manifest
+    steps:
+      - id: reject-invalid-request
+        title: Reject malformed request data
+        detail: The request exceeds its limit or contains malformed identity, generation, session, or schema-version fields.
+        phase: Request rejected
+        active: [agent, provider]
+        fields: [INVALID_ARGUMENT or RESOURCE_EXHAUSTED, no snapshot served]
+        transitions:
+          - source: provider
+            target: agent
+            label: request rejected
+            tone: failure
+        activities:
+          agent:
+            title: Treat the request as failed
+            items:
+              - Correct local request construction before retrying
+          provider:
+            title: Fail before session lookup
+            items:
+              - Reveal no rejected values
+              - Serve no declaration
+        context:
+          kind: Result
+          value: Invalid input never selects a Provider session
+
+  inactive-session:
+    label: Session no longer active
+    prefix:
+      scenario: success
+      through: validate-request
+    steps:
+      - id: reject-inactive-session
+        title: Reject the session binding
+        detail: The session is unknown, inactive, or does not belong to the requested Provider instance and endpoint generation.
+        phase: Session rejected
+        active: [agent, provider]
+        fields: [FAILED_PRECONDITION, no snapshot served]
+        transitions:
+          - source: provider
+            target: agent
+            label: FAILED_PRECONDITION
+            tone: failure
+        activities:
+          agent:
+            title: Re-establish negotiated context
+            items:
+              - Run Bootstrap again before retrying
+              - Rediscover first if the endpoint changed
+          provider:
+            title: Reject the stale context
+            items:
+              - Substitute no other active session
+        context:
+          kind: Result
+          value: Endpoint identity alone never proves an active session
+
+  incompatible-schema:
+    label: No common manifest schema
+    prefix:
+      scenario: success
+      through: bind-session
+    steps:
+      - id: reject-schema-offer
+        title: Reject incompatible schema versions
+        detail: The Agent and Provider share an SFP session but no manifest schema version.
+        phase: Schema rejected
+        active: [agent, provider]
+        fields: [UNIMPLEMENTED, no response snapshot]
+        transitions:
+          - source: provider
+            target: agent
+            label: UNIMPLEMENTED
+            tone: warning
+        activities:
+          agent:
+            title: Mark the endpoint incompatible
+            items:
+              - Do not retry an unchanged version offer indefinitely
+          provider:
+            title: Return the canonical status
+            items:
+              - Select no unsupported schema
+        context:
+          kind: Result
+          value: SFP compatibility does not imply manifest-schema compatibility
+
+  invalid-snapshot:
+    label: Provider snapshot invalid
+    prefix:
+      scenario: success
+      through: snapshot-declaration
+    steps:
+      - id: reject-invalid-snapshot
+        title: Refuse an invalid Provider snapshot
+        detail: The Provider cannot validate, canonicalize, or serialize a complete declaration within the contract limits.
+        phase: Snapshot rejected
+        active: [provider, declaration, agent]
+        fields: [INTERNAL, sanitized diagnostics, no partial success]
+        transitions:
+          - source: provider
+            target: agent
+            label: INTERNAL
+            tone: failure
+        activities:
+          agent:
+            title: Keep the Provider unusable
+            items:
+              - Accept no partial declaration
+          provider:
+            title: Fail closed
+            items:
+              - Return sanitized diagnostics
+              - Prefer failing startup before ready publication
+          declaration:
+            title: Remain unaccepted
+            items:
+              - Expose no invalid snapshot
+        context:
+          kind: Result
+          value: Health cannot make an invalid manifest usable
+
+  message-too-large:
+    label: Message limit exceeded
+    prefix:
+      scenario: success
+      through: snapshot-declaration
+    steps:
+      - id: reject-oversized-message
+        title: Reject an oversized request or response
+        detail: The receiver enforces the Manifest procedure limit independently of the shared channel ceiling.
+        phase: Message rejected
+        active: [agent, provider, declaration]
+        fields: [RESOURCE_EXHAUSTED, 8 KiB request, 2 MiB response]
+        transitions:
+          - source: provider
+            target: agent
+            label: RESOURCE_EXHAUSTED
+            tone: failure
+        activities:
+          agent:
+            title: Reject oversized response bytes
+            items:
+              - Cache no declaration
+          provider:
+            title: Enforce the procedure bounds
+            items:
+              - Reject oversized requests before processing
+              - Return no oversized response
+          declaration:
+            title: Remain outside the accepted surface
+            items:
+              - Require a smaller valid declaration
+        context:
+          kind: Result
+          value: An unchanged oversized message is not retryable
+
+  unavailable:
+    label: Provider temporarily unavailable
+    prefix:
+      scenario: success
+      through: request-manifest
+    steps:
+      - id: retry-unavailable
+        title: Retry a transient read
+        detail: The Provider or channel is temporarily unavailable, so the Agent uses a finite deadline and bounded backoff.
+        phase: Read retry
+        active: [agent, provider]
+        fields: [UNAVAILABLE, bounded attempts, exponential backoff]
+        transitions:
+          - source: provider
+            target: agent
+            label: UNAVAILABLE
+            tone: warning
+          - source: agent
+            target: provider
+            label: retry same read
+        activities:
+          agent:
+            title: Retry only while context remains valid
+            items:
+              - Apply a finite deadline per attempt
+              - Re-establish the session if it was lost
+          provider:
+            title: Remain read-only
+            items:
+              - Start no operation on repeated reads
+        context:
+          kind: Retry rule
+          value: Retries may observe a newer complete manifest revision
+
+  invalid-response:
+    label: Response rejected locally
+    prefix:
+      scenario: success
+      through: return-response
+    steps:
+      - id: reject-invalid-response
+        title: Reject an invalid success payload
+        detail: The Agent detects an envelope mismatch, malformed declaration, unsafe schema, or incorrect manifest revision.
+        phase: Manifest rejected
+        active: [agent, declaration, cache]
+        fields: [local protocol failure, no cache update]
+        transitions:
+          - source: agent
+            target: declaration
+            label: validation failed
+            tone: failure
+        activities:
+          agent:
+            title: Reject independently of transport health
+            items:
+              - Block later operational requests
+              - Preserve only prior validated cache entries
+          declaration:
+            title: Remain untrusted
+            items:
+              - Supply no accepted Provider surface
+          cache:
+            title: Refuse the candidate
+            items:
+              - Store no invalid bytes
+        context:
+          kind: Result
+          value: A gRPC success is not manifest acceptance
+
+  superseded-session:
+    label: Late response from superseded session
+    prefix:
+      scenario: success
+      through: return-response
+    steps:
+      - id: reject-late-response
+        title: Reject the late response
+        detail: Bootstrap established a newer session before the response was accepted, so the Agent rejects the old session header even if its revision is cached.
+        phase: Response superseded
+        active: [agent, provider, cache]
+        fields: [old session_id, current session changed, cache bypass forbidden]
+        transitions:
+          - source: provider
+            target: agent
+            label: stale response
+            tone: failure
+        activities:
+          agent:
+            title: Fence by the current session
+            items:
+              - Reject the old response before cache lookup
+              - Issue a new request under the fresh session
+          provider:
+            title: Keep response identity unchanged
+            items:
+              - Substitute no newer session header
+          cache:
+            title: Grant no exception
+            items:
+              - Never authorize stale session reuse
+        context:
+          kind: Result
+          value: Manifest revision stability never overrides session fencing

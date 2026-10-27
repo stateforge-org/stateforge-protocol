@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 from uuid import UUID
 
 from stateforge_protocol.sfp import _validation
@@ -197,9 +197,7 @@ def validate_manifest_response(
         limits=limits,
     )
     validate_structure(projected, "getManifestResponse", "response")
-    manifest = projected.get("manifest")
-    if not isinstance(manifest, dict):
-        raise ManifestValidationError("response: manifest must be an object")
+    manifest = cast(dict[str, Any], projected["manifest"])
     document = validate_manifest_document(manifest, limits=limits)
     revision = compute_manifest_revision(
         manifest,
@@ -237,50 +235,28 @@ def _validate_embedded_schemas(
     limits: ManifestValidationLimits,
 ) -> None:
     """Validate every embedded JSON Schema without retrieving content."""
-    configuration = manifest.get("configurationSchema")
-    if not isinstance(configuration, dict):
-        raise ManifestValidationError(
-            "manifest.configurationSchema: must be an object"
-        )
+    # validate_manifest_document establishes these shapes through the packaged
+    # schema before this domain-specific traversal begins.
+    configuration = cast(dict[str, Any], manifest["configurationSchema"])
     validate_schema(
         configuration,
         "manifest.configurationSchema",
         limits=limits,
     )
 
-    operations = manifest.get("operations")
-    if not isinstance(operations, dict):
-        raise ManifestValidationError("manifest.operations: must be an object")
+    operations = cast(dict[str, dict[str, Any]], manifest["operations"])
     for index, declaration in enumerate(operations.values()):
-        if not isinstance(declaration, dict):
-            raise ManifestValidationError(
-                f"manifest.operations[{index}]: must be an object"
-            )
         for field in ("inputSchema", "resultSchema"):
-            schema = declaration.get(field)
-            if not isinstance(schema, dict):
-                raise ManifestValidationError(
-                    f"manifest.operations[{index}].{field}: must be an object"
-                )
+            schema = cast(dict[str, Any], declaration[field])
             validate_schema(
                 schema,
                 f"manifest.operations[{index}].{field}",
                 limits=limits,
             )
 
-    triggers = manifest.get("triggers")
-    if not isinstance(triggers, dict):
-        raise ManifestValidationError("manifest.triggers: must be an object")
+    triggers = cast(dict[str, dict[str, Any]], manifest["triggers"])
     for index, declaration in enumerate(triggers.values()):
-        if not isinstance(declaration, dict):
-            raise ManifestValidationError(
-                f"manifest.triggers[{index}]: must be an object"
-            )
-        schema = declaration.get("payloadSchema")
-        if not isinstance(schema, dict):
-            raise ManifestValidationError(
-                f"manifest.triggers[{index}].payloadSchema: must be an object"
-            )
+        schema = cast(dict[str, Any], declaration["payloadSchema"])
         validate_schema(
             schema,
             f"manifest.triggers[{index}].payloadSchema",

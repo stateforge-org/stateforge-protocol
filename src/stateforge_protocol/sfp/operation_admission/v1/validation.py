@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Final
+from typing import Final, cast
 
 from stateforge_protocol.sfp import _validation
 from stateforge_protocol.sfp.operation_admission.v1 import (
@@ -212,18 +212,14 @@ def canonical_invocation(
         path="invocation",
     )
     projected = _VALIDATION.project_message(invocation, "invocation")
-    contract_context = projected.get("contract")
-    if not isinstance(contract_context, dict):
-        raise OperationAdmissionValidationError(
-            "invocation: contract must be an object"
-        )
-    roles = contract_context.get("requiredImplementationRoles")
-    if not isinstance(roles, list) or not all(
-        isinstance(role, str) for role in roles
-    ):
-        raise OperationAdmissionValidationError(
-            "invocation: implementation roles must be strings"
-        )
+    _VALIDATION.validate_schema_definition(
+        _SCHEMA,
+        projected,
+        "operationInvocation",
+        "invocation",
+    )
+    contract_context = cast(dict[str, object], projected["contract"])
+    roles = cast(list[str], contract_context["requiredImplementationRoles"])
     roles.sort()
     return _VALIDATION.canonicalize_json(
         projected,

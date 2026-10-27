@@ -2,38 +2,55 @@ site_name: StateForge Protocol
 site_description: Wire-contract documentation for StateForge Protocol.
 site_author: StateForge
 copyright: Copyright &copy; StateForge
+repo_name: stateforge-org/stateforge-protocol
+repo_url: https://github.com/stateforge-org/stateforge-protocol
 
 strict: true
 
 theme:
-  name: material
-  language: en
-  features:
-    - content.code.copy
-    - navigation.indexes
-    - navigation.sections
-    - navigation.top
+  name: stateforge
+
+extra_css:
+  - v0.1.0/stylesheets/extra.css
 
 nav:
-  - Overview: index.md
-  - SFP procedures:
-      - Procedure map: procedures/index.md
-      - Endpoint discovery and channel establishment: procedures/endpoint-discovery.md
-      - Handshake and version negotiation: bootstrap.md
-      - Provider manifest exchange: procedures/provider-manifest.md
-      - Health and availability monitoring: procedures/health.md
-      - Capability assessment: procedures/capability-assessment.md
-      - Trigger publication and acknowledgement: procedures/triggers.md
-      - Operation admission and idempotency: procedures/operation-admission.md
-      - Backup preparation: procedures/backup-preparation.md
-      - Disaster-recovery execution: procedures/disaster-recovery.md
-      - Progress, results, and cancellation: procedures/progress-results-cancellation.md
-      - Disconnection and recovery: procedures/disconnection-recovery.md
-  - Generated Python contracts: reference/python-contracts.md
-  - Responsibility boundaries: reference/responsibility-boundaries.md
+  - Protocol documentation:
+      - Home: index.md
+      - v0.1.0:
+          - Overview: v0.1.0/index.md
+          - Getting started: v0.1.0/getting-started.md
+          - SFP procedures:
+              - Procedure map: v0.1.0/procedures/index.md
+              - Endpoint discovery and channel establishment: v0.1.0/procedures/endpoint-discovery.md
+              - Handshake and version negotiation: v0.1.0/bootstrap.md
+              - Provider manifest exchange: v0.1.0/procedures/provider-manifest.md
+              - Health and availability monitoring: v0.1.0/procedures/health.md
+              - Capability assessment: v0.1.0/procedures/capability-assessment.md
+              - Trigger publication and acknowledgement: v0.1.0/procedures/triggers.md
+              - Operation admission and idempotency: v0.1.0/procedures/operation-admission.md
+              - Progress, results, and cancellation: v0.1.0/procedures/progress-results-cancellation.md
+              - Disconnection and recovery: v0.1.0/procedures/disconnection-recovery.md
+          - Generated Python contracts: v0.1.0/reference/python-contracts.md
+          - Versioning and compatibility: v0.1.0/reference/versioning-compatibility.md
+          - SFP status and error handling: v0.1.0/reference/status-errors.md
+          - Security model and local trust boundary: v0.1.0/reference/security-trust-boundary.md
+          - SFP terminology glossary: v0.1.0/reference/glossary.md
+          - Responsibility boundaries: v0.1.0/reference/responsibility-boundaries.md
+          - Conformance coverage: v0.1.0/reference/conformance-coverage.md
+          - CI/CD and artifact verification: v0.1.0/reference/ci-automation.md
 
 plugins:
-  - search
+  - material/search
+  - stateforge:
+      component: protocol
+      documentation_version: v0.1.0
+      latest_version: v0.1.0
+      versions:
+        - label: v0.1.0
+          url: v0.1.0/
+      historical_warning: true
+      procedure_players: true
+      entity_flows: true
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -51,13 +68,27 @@ plugins:
 markdown_extensions:
   - admonition
   - attr_list
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
   - pymdownx.details
+  - pymdownx.snippets:
+      base_path:
+        - .
+      check_paths: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
   - tables
+
+extra:
+  annotate:
+    json: [.s2]
 
 validation:
   omitted_files: warn

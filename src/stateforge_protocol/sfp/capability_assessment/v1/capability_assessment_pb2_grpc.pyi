@@ -43,7 +43,7 @@ class CapabilityAssessmentServiceStub:
     AssessCapabilities: _grpc.UnaryUnaryMultiCallable[_capability_assessment_pb2.AssessCapabilitiesRequest, _capability_assessment_pb2.AssessCapabilitiesResponse]
     """AssessCapabilities returns one normalized finding per requested
     operation identifier. See
-    docs/procedures/capability-assessment.md for validation, findings,
+    docs/v0.1.0/procedures/capability-assessment.md for validation, findings,
     failure mapping, deadlines, and retries.
     """
 
@@ -62,7 +62,7 @@ class CapabilityAssessmentServiceAsyncStub(CapabilityAssessmentServiceStub):
     AssessCapabilities: _aio.UnaryUnaryMultiCallable[_capability_assessment_pb2.AssessCapabilitiesRequest, _capability_assessment_pb2.AssessCapabilitiesResponse]  # type: ignore[assignment]
     """AssessCapabilities returns one normalized finding per requested
     operation identifier. See
-    docs/procedures/capability-assessment.md for validation, findings,
+    docs/v0.1.0/procedures/capability-assessment.md for validation, findings,
     failure mapping, deadlines, and retries.
     """
 
@@ -84,7 +84,7 @@ class CapabilityAssessmentServiceServicer(metaclass=_abc_1.ABCMeta):
     ) -> _typing.Union[_capability_assessment_pb2.AssessCapabilitiesResponse, _abc.Awaitable[_capability_assessment_pb2.AssessCapabilitiesResponse]]:
         """AssessCapabilities returns one normalized finding per requested
         operation identifier. See
-        docs/procedures/capability-assessment.md for validation, findings,
+        docs/v0.1.0/procedures/capability-assessment.md for validation, findings,
         failure mapping, deadlines, and retries.
         """
 

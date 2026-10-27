@@ -1,0 +1,9 @@
+{
+  "schema_version": "1",
+  "provider_instance_id": "7f7db7d8-68b4-4f71-9769-065b5c4f941c",
+  "endpoint_generation": 4,
+  "transport": {
+    "type": "unix",
+    "socket_path": "/run/stateforge-agent/providers/7f7db7d8-68b4-4f71-9769-065b5c4f941c.4.sock"
+  }
+}

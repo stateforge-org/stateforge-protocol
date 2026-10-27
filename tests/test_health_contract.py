@@ -3,7 +3,10 @@
 import json
 from pathlib import Path
 
+import yaml
+from google.protobuf import json_format
 from grpc_health.v1 import health_pb2, health_pb2_grpc
+from tests.documentation import annotated_json_example
 
 from stateforge_protocol.sfp import health_contract as contract
 from stateforge_protocol.sfp.bootstrap.v1 import bootstrap_pb2
@@ -271,9 +274,9 @@ def test_sanitized_diagnostic_boundary_is_portable() -> None:
 
 
 def test_health_documentation_matches_exported_limits() -> None:
-    documentation = (_ROOT / "docs" / "procedures" / "health.md").read_text(
-        encoding="utf-8"
-    )
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "health.md"
+    ).read_text(encoding="utf-8")
     assert (
         f"| Serialized request | {contract.MAX_REQUEST_BYTES // 1024} KiB |"
         in documentation
@@ -282,3 +285,69 @@ def test_health_documentation_matches_exported_limits() -> None:
         f"| Serialized response | {contract.MAX_RESPONSE_BYTES} bytes |"
         in documentation
     )
+
+
+def test_health_walkthrough_covers_every_documented_scenario() -> None:
+    declaration = yaml.safe_load(
+        (_ROOT / "docs" / "v0.1.0" / "procedures" / "health.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    expected_markers = {
+        "success": "New operation admission may proceed",
+        "degraded-recovery": "Existing admitted work is not rewritten",
+        "watch-lost": "Fresh Watch evidence restores availability",
+        "watch-unsupported": "Do not fall back to polling Check",
+        "stale-session": "stale SERVING event cannot restore",
+        "slow-observer": "Backpressure fails closed",
+        "unknown-name": "SERVICE_UNKNOWN is a stream value",
+        "serving-with-invalid-manifest": "SERVING alone never makes",
+        "graceful-shutdown": "NOT_SERVING is published before",
+        "admitted-work": "Health loss never invents",
+    }
+
+    assert set(declaration["scenarios"]) == set(expected_markers)
+    for scenario_id, marker in expected_markers.items():
+        serialized = json.dumps(declaration["scenarios"][scenario_id])
+        assert marker in serialized
+
+
+def test_health_documentation_identifies_standard_contract_sources() -> None:
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "health.md"
+    ).read_text(encoding="utf-8")
+
+    assert "grpc/health/v1/health.proto" in documentation
+    assert "sfp/health_contract.py" in documentation
+    assert "sfp/shared_endpoint.py" in documentation
+    assert "has no StateForge protobuf and no separate `validation.py`" in (
+        documentation
+    )
+
+
+def test_documented_health_protojson_uses_the_standard_messages() -> None:
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "health.md"
+    ).read_text(encoding="utf-8")
+    request = json_format.ParseDict(
+        annotated_json_example(documentation, title="HealthCheckRequest"),
+        health_pb2.HealthCheckRequest(),
+    )
+    serving = json_format.ParseDict(
+        annotated_json_example(
+            documentation,
+            title="HealthCheckResponse · current state",
+        ),
+        health_pb2.HealthCheckResponse(),
+    )
+    not_serving = json_format.ParseDict(
+        annotated_json_example(
+            documentation,
+            title="HealthCheckResponse · later update",
+        ),
+        health_pb2.HealthCheckResponse(),
+    )
+
+    assert request.service == contract.AUTHORITATIVE_WATCH_SERVICE == ""
+    assert serving.status == health_pb2.HealthCheckResponse.SERVING
+    assert not_serving.status == health_pb2.HealthCheckResponse.NOT_SERVING

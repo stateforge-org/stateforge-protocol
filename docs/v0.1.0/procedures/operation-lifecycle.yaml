@@ -1,0 +1,669 @@
+schema: stateforge.docs/procedure/v1
+procedure: operation-lifecycle
+title: Progress, results, and cancellation
+summary: Observe one admitted operation, validate its retained snapshots, and request cooperative cancellation without creating new work.
+default_scenario: success
+
+entities:
+  - id: agent
+    label: StateForge Agent
+    kind: process
+    role: Watches one admitted operation and requests cancellation
+  - id: channel
+    label: SFP Channel
+    kind: resource
+    role: Carries WatchOperation snapshots and CancelOperation decisions
+  - id: runtime
+    label: Provider Runtime
+    kind: service
+    role: Validates requests, commits transitions, and controls delivery
+  - id: record
+    label: Operation Record
+    kind: storage
+    role: Retains current state, progress, effects, and the terminal outcome
+
+scenarios:
+  success:
+    label: Successful operation
+    steps:
+      - id: attach-watch
+        title: Attach to the admitted operation
+        detail: The Agent sends WatchOperation with the current session, operation ID, request fingerprint, and its last validated sequence.
+        phase: Watch attachment
+        active: [agent, channel, runtime]
+        fields: [operation_id, expected_request_fingerprint, after_sequence]
+        transitions:
+          - source: agent
+            target: channel
+            label: WatchOperationRequest
+          - source: channel
+            target: runtime
+            label: bounded request
+        activities:
+          agent:
+            title: Resume from known evidence
+            items:
+              - Use zero for a first attachment
+              - Reuse the last validated sequence after reconnecting
+          runtime:
+            title: Validate current ownership
+            items:
+              - Match the session, record, and fingerprint
+        context:
+          kind: Boundary
+          value: Watch observes existing work; it never admits or restarts it
+
+      - id: replay-current
+        title: Replay the complete current snapshot
+        detail: The Provider atomically captures current state and subscribes the observer before returning the first snapshot.
+        phase: Current state replay
+        active: [runtime, record, agent]
+        fields: [ACCEPTED, sequence 1, updates_skipped false]
+        transitions:
+          - source: record
+            target: runtime
+            label: current snapshot
+          - source: runtime
+            target: agent
+            label: ACCEPTED · 1
+        activities:
+          runtime:
+            title: Close the attachment race
+            items:
+              - Capture and subscribe atomically
+              - Replay even when the cursor equals current state
+          agent:
+            title: Validate before advancing
+            items:
+              - Correlate the admission record and declaration pin
+        context:
+          kind: Delivery model
+          value: Complete current snapshots, not historical deltas
+
+      - id: enter-running
+        title: Commit RUNNING
+        detail: Provider execution begins and the operation record advances from ACCEPTED to RUNNING.
+        phase: Execution started
+        active: [runtime, record, agent]
+        fields: [RUNNING, sequence 2]
+        transitions:
+          - source: runtime
+            target: record
+            label: commit RUNNING
+          - source: record
+            target: agent
+            label: RUNNING · 2
+        activities:
+          record:
+            title: Retain one complete state
+            items:
+              - Keep immutable admission context
+        context:
+          kind: Ordering
+          value: Sequence orders commits even if the wall clock changes
+
+      - id: report-progress
+        title: Commit normalized progress
+        detail: The Provider retains and streams a newer RUNNING snapshot carrying bounded progress.
+        phase: Progress update
+        active: [runtime, record, agent]
+        fields: [RUNNING, sequence 3, 25%]
+        transitions:
+          - source: runtime
+            target: record
+            label: compacting · 25%
+          - source: record
+            target: agent
+            label: RUNNING · 3
+        activities:
+          runtime:
+            title: Normalize author progress
+            items:
+              - Commit one sequence per state or progress change
+          agent:
+            title: Replace the current view
+            items:
+              - Treat percentage as progress, never terminal success
+        context:
+          kind: Progress
+          value: Percentage may be absent, zero, or reset between phases
+
+      - id: commit-success
+        title: Validate and commit SUCCEEDED
+        detail: The Provider validates the result against the manifest revision pinned by admission before retaining one immutable terminal snapshot.
+        phase: Terminal commit
+        active: [runtime, record]
+        fields: [SUCCEEDED, sequence 5, validated result]
+        transitions:
+          - source: runtime
+            target: record
+            label: SUCCEEDED · result
+            tone: success
+        activities:
+          runtime:
+            title: Protect the result boundary
+            items:
+              - Validate the complete result before committing success
+          record:
+            title: Freeze terminal evidence
+            items:
+              - Retain the latest progress and result unchanged
+        context:
+          kind: Result
+          value: reclaimedBytes = 4096
+
+      - id: deliver-terminal
+        title: Deliver terminal evidence and close
+        detail: The Agent validates the SUCCEEDED snapshot and the Provider closes this Watch stream with gRPC OK.
+        phase: Terminal delivery
+        active: [record, runtime, channel, agent]
+        fields: [SUCCEEDED, sequence 5, gRPC OK]
+        transitions:
+          - source: record
+            target: runtime
+            label: retained terminal
+            tone: success
+          - source: runtime
+            target: agent
+            label: SUCCEEDED · 5
+            tone: success
+        activities:
+          agent:
+            title: Accept the outcome
+            items:
+              - Advance the cursor only after complete validation
+          runtime:
+            title: End this observer
+            items:
+              - Send one terminal snapshot and close OK
+        context:
+          kind: Evidence
+          value: The validated terminal snapshot is the business outcome
+
+  late-attachment:
+    label: Late attachment
+    steps:
+      - id: attach-after-progress
+        title: Attach after work has progressed
+        detail: The Agent opens Watch with cursor zero after the operation has already reached RUNNING sequence 4.
+        phase: Late Watch attachment
+        active: [agent, runtime, record]
+        fields: [after_sequence 0, current sequence 4]
+        transitions:
+          - source: agent
+            target: runtime
+            label: WatchOperation · cursor 0
+        activities:
+          runtime:
+            title: Replay current state
+            items:
+              - Do not replay unavailable earlier progress
+        context:
+          kind: Snapshot
+          value: RUNNING · sequence 4 · 100%
+      - id: replay-late-current
+        title: Return the complete current snapshot
+        detail: The first response is current sequence 4 with updates_skipped false because a zero cursor requested no history.
+        phase: Current replay
+        active: [record, runtime, agent]
+        fields: [RUNNING, sequence 4, updates_skipped false]
+        transitions:
+          - source: record
+            target: agent
+            label: RUNNING · 4
+        activities:
+          agent:
+            title: Adopt current state
+            items:
+              - Infer nothing about unseen earlier updates
+        context:
+          kind: Gap rule
+          value: A zero cursor never reports a historical gap
+      - id: late-terminal
+        title: Receive the later terminal snapshot
+        detail: SUCCEEDED sequence 5 advances the stream normally and closes it with gRPC OK.
+        phase: Terminal delivery
+        active: [runtime, agent]
+        fields: [SUCCEEDED, sequence 5]
+        transitions:
+          - source: runtime
+            target: agent
+            label: SUCCEEDED · 5
+            tone: success
+        activities:
+          agent:
+            title: Accept terminal evidence
+            items:
+              - Validate the pinned result schema
+        context:
+          kind: Stream result
+          value: Terminal snapshot delivered
+
+  reconnect-gap:
+    label: Reconnect after skipped updates
+    steps:
+      - id: reconnect-with-cursor
+        title: Resume from the last validated sequence
+        detail: After losing the stream at sequence 2, the Agent reconnects with a new session binding and after_sequence 2.
+        phase: Watch recovery
+        active: [agent, channel, runtime]
+        fields: [new session, after_sequence 2]
+        transitions:
+          - source: agent
+            target: runtime
+            label: WatchOperation · cursor 2
+        activities:
+          agent:
+            title: Preserve operation identity
+            items:
+              - Change only the session binding
+        context:
+          kind: Cursor
+          value: Last fully validated sequence = 2
+      - id: replay-with-gap
+        title: Replay the current terminal snapshot
+        detail: The retained current state is SUCCEEDED sequence 5, so the Provider explicitly reports that intermediate updates were skipped.
+        phase: Coalesced recovery
+        active: [record, runtime, agent]
+        fields: [SUCCEEDED, sequence 5, updates_skipped true]
+        transitions:
+          - source: record
+            target: agent
+            label: SUCCEEDED · 5 · gap
+            tone: success
+        activities:
+          agent:
+            title: Replace the current view
+            items:
+              - Do not invent sequences 3 and 4
+        context:
+          kind: Gap rule
+          value: 5 is greater than cursor 2 + 1
+
+  operation-failed:
+    label: Operation fails
+    prefix:
+      scenario: success
+      through: report-progress
+    steps:
+      - id: commit-failure
+        title: Commit a sanitized failure
+        detail: Execution ends unsuccessfully, so the Provider records a stable code, safe explanation, and explicit effect and cleanup states.
+        phase: Terminal failure
+        active: [runtime, record]
+        fields: [FAILED, provider error, effects]
+        transitions:
+          - source: runtime
+            target: record
+            label: FAILED
+            tone: failure
+        activities:
+          runtime:
+            title: Normalize the failure
+            items:
+              - Exclude raw exceptions and credentials
+          record:
+            title: Retain uncertainty explicitly
+            items:
+              - Preserve remaining side effects and cleanup state
+        context:
+          kind: Terminal state
+          value: FAILED
+      - id: deliver-failure
+        title: Deliver FAILED and close
+        detail: The Agent receives one immutable terminal failure snapshot and the Watch stream closes with gRPC OK.
+        phase: Terminal delivery
+        active: [runtime, agent]
+        fields: [FAILED, sequence 5, gRPC OK]
+        transitions:
+          - source: runtime
+            target: agent
+            label: FAILED · effects
+            tone: failure
+        activities:
+          agent:
+            title: Preserve the reported effects
+            items:
+              - Do not reinterpret failure as rollback
+        context:
+          kind: Evidence
+          value: Business failure is a successful Watch delivery
+
+  invalid-result:
+    label: Provider returns an invalid result
+    prefix:
+      scenario: success
+      through: report-progress
+    steps:
+      - id: reject-author-result
+        title: Reject the invalid result locally
+        detail: Provider output does not satisfy the result schema pinned by admission, so the invalid payload is never committed or sent.
+        phase: Result validation
+        active: [runtime]
+        fields: [pinned result_schema, invalid author output]
+        transitions: []
+        activities:
+          runtime:
+            title: Fail closed
+            items:
+              - Discard invalid author data
+              - Use a small valid failure fallback
+        context:
+          kind: Failure code
+          value: stateforge.operation.invalid_result
+      - id: commit-invalid-result-failure
+        title: Commit FAILED instead of SUCCEEDED
+        detail: The Provider retains a sanitized FAILED snapshot with explicit unknown effects when the real outcome cannot be established safely.
+        phase: Terminal failure
+        active: [runtime, record, agent]
+        fields: [FAILED, invalid_result, effects unknown]
+        transitions:
+          - source: runtime
+            target: record
+            label: FAILED
+            tone: failure
+          - source: record
+            target: agent
+            label: FAILED · invalid_result
+            tone: failure
+        activities:
+          agent:
+            title: Receive only valid contract data
+            items:
+              - Never see the rejected author payload
+        context:
+          kind: Terminal state
+          value: FAILED
+
+  cancellation-stops:
+    label: Cancellation stops execution
+    prefix:
+      scenario: success
+      through: report-progress
+    steps:
+      - id: request-cancellation
+        title: Request cooperative cancellation
+        detail: CancelOperation identifies the same admitted operation and fingerprint under the current session.
+        phase: Cancellation request
+        active: [agent, channel, runtime]
+        fields: [operation_id, fingerprint]
+        transitions:
+          - source: agent
+            target: runtime
+            label: CancelOperation
+        activities:
+          agent:
+            title: Cancel the operation, not the Watch
+            items:
+              - Keep the observer stream independent
+        context:
+          kind: Scope
+          value: This operation only
+      - id: request-committed
+        title: Commit CANCELLATION_REQUESTED
+        detail: The Provider atomically commits the monotonic request before arranging cooperative interruption.
+        phase: Cancellation accepted
+        active: [runtime, record, agent]
+        fields: [REQUESTED, CANCELLATION_REQUESTED, sequence 5]
+        transitions:
+          - source: runtime
+            target: record
+            label: CANCELLATION_REQUESTED
+          - source: runtime
+            target: agent
+            label: REQUESTED
+        activities:
+          runtime:
+            title: Signal once
+            items:
+              - Preserve the pending request until execution ends
+        context:
+          kind: Important
+          value: REQUESTED does not mean execution has stopped
+      - id: cancellation-confirmed
+        title: Confirm that execution stopped
+        detail: Only positive stop confirmation permits a CANCELLED terminal commit with explicit cleanup and remaining-effect state.
+        phase: Terminal cancellation
+        active: [runtime, record]
+        fields: [CANCELLED, sequence 6, effects]
+        transitions:
+          - source: runtime
+            target: record
+            label: CANCELLED
+            tone: success
+        activities:
+          record:
+            title: Retain the terminal report
+            items:
+              - Keep incomplete cleanup visible
+        context:
+          kind: Cleanup
+          value: Stopped does not necessarily mean undone
+      - id: deliver-cancelled
+        title: Deliver CANCELLED and close
+        detail: The Watch stream sends the immutable cancellation outcome once and then closes with gRPC OK.
+        phase: Terminal delivery
+        active: [record, runtime, agent]
+        fields: [CANCELLED, effects, gRPC OK]
+        transitions:
+          - source: record
+            target: agent
+            label: CANCELLED · effects
+            tone: success
+        activities:
+          agent:
+            title: Preserve cleanup evidence
+            items:
+              - Do not assume rollback from the state name
+        context:
+          kind: Terminal state
+          value: CANCELLED
+
+  cancellation-unsupported:
+    label: Cancellation unsupported
+    prefix:
+      scenario: success
+      through: report-progress
+    steps:
+      - id: return-unsupported
+        title: Leave the operation unchanged
+        detail: The operation cannot be interrupted safely in isolation, so CancelOperation returns UNSUPPORTED with the same current snapshot.
+        phase: Cancellation decision
+        active: [agent, runtime, record]
+        fields: [UNSUPPORTED, unchanged RUNNING snapshot]
+        transitions:
+          - source: agent
+            target: runtime
+            label: CancelOperation
+          - source: runtime
+            target: agent
+            label: UNSUPPORTED
+            tone: warning
+        activities:
+          runtime:
+            title: Signal nothing
+            items:
+              - Keep execution running
+              - Allocate no new sequence
+        context:
+          kind: Dispatch effect
+          value: Zero cancellation signals
+
+  cancellation-race:
+    label: Completion wins after cancellation request
+    prefix:
+      scenario: cancellation-stops
+      through: request-committed
+    steps:
+      - id: success-wins-race
+        title: Commit the first terminal outcome
+        detail: Normal completion wins before cooperative interruption is confirmed, so SUCCEEDED becomes the immutable terminal state.
+        phase: Terminal race
+        active: [runtime, record]
+        fields: [SUCCEEDED, sequence 6]
+        transitions:
+          - source: runtime
+            target: record
+            label: SUCCEEDED wins
+            tone: success
+        activities:
+          runtime:
+            title: Discard later terminal proposals
+            items:
+              - Never rewrite success to make cancellation appear successful
+        context:
+          kind: Race rule
+          value: First terminal commit wins
+      - id: deliver-race-outcome
+        title: Deliver SUCCEEDED
+        detail: The Agent receives the real terminal result even though cancellation was previously requested.
+        phase: Terminal delivery
+        active: [record, agent]
+        fields: [SUCCEEDED, retained result]
+        transitions:
+          - source: record
+            target: agent
+            label: SUCCEEDED
+            tone: success
+        activities:
+          agent:
+            title: Accept actual outcome
+            items:
+              - Do not infer CANCELLED from REQUESTED
+        context:
+          kind: Terminal state
+          value: SUCCEEDED
+
+  repeated-cancellation:
+    label: Repeated cancellation request
+    steps:
+      - id: retry-cancel
+        title: Retry after losing the reply
+        detail: The Agent repeats CancelOperation for an operation already in CANCELLATION_REQUESTED.
+        phase: Idempotent retry
+        active: [agent, runtime, record]
+        fields: [same operation_id, same fingerprint]
+        transitions:
+          - source: agent
+            target: runtime
+            label: CancelOperation retry
+        activities:
+          runtime:
+            title: Read current state atomically
+            items:
+              - Observe the existing cancellation request
+        context:
+          kind: Current state
+          value: CANCELLATION_REQUESTED
+      - id: already-requested
+        title: Return ALREADY_REQUESTED
+        detail: The Provider returns the current snapshot without another signal or sequence allocation.
+        phase: Existing request resolved
+        active: [runtime, agent]
+        fields: [ALREADY_REQUESTED, unchanged snapshot]
+        transitions:
+          - source: runtime
+            target: agent
+            label: ALREADY_REQUESTED
+            tone: success
+        activities:
+          runtime:
+            title: Preserve idempotency
+            items:
+              - Send zero additional interruption signals
+        context:
+          kind: Sequence change
+          value: None
+
+  transport-disconnect:
+    label: Watch transport disconnects
+    prefix:
+      scenario: success
+      through: enter-running
+    steps:
+      - id: lose-watch
+        title: Lose only the observer stream
+        detail: The Watch ends with UNAVAILABLE after the Agent validated RUNNING sequence 2.
+        phase: Transport failure
+        active: [channel, agent, runtime]
+        fields: [UNAVAILABLE, last sequence 2]
+        transitions:
+          - source: channel
+            target: agent
+            label: UNAVAILABLE
+            tone: failure
+        activities:
+          runtime:
+            title: Continue business execution
+            items:
+              - Do not cancel the operation
+          agent:
+            title: Retain confirmed evidence
+            items:
+              - Treat the terminal outcome as unknown
+        context:
+          kind: Boundary
+          value: Transport status is not a business outcome
+      - id: resume-watch
+        title: Reconnect with a bounded retry
+        detail: The Agent establishes a current session and resumes Watch from its last fully validated sequence.
+        phase: Observer recovery
+        active: [agent, channel, runtime]
+        fields: [new session, after_sequence 2]
+        transitions:
+          - source: agent
+            target: runtime
+            label: WatchOperation · cursor 2
+        activities:
+          agent:
+            title: Resume without redispatch
+            items:
+              - Never call StartOperation as a Watch fallback
+        context:
+          kind: Recovery
+          value: Reattach to existing work
+
+  slow-observer:
+    label: Slow observer
+    steps:
+      - id: observer-stalls
+        title: Bound pending delivery
+        detail: One response remains in flight while at most one newer complete snapshot replaces pending intermediate updates.
+        phase: Backpressure
+        active: [runtime, record, channel]
+        fields: [1 in flight, 1 pending]
+        transitions:
+          - source: record
+            target: runtime
+            label: newer snapshots coalesced
+        activities:
+          runtime:
+            title: Protect execution
+            items:
+              - Never block operation completion on this observer
+        context:
+          kind: Observer bound
+          value: One in-flight response plus one pending snapshot
+      - id: observer-terminated
+        title: Terminate the stalled observer
+        detail: When delivery cannot progress within the bounded interval, the Provider closes this Watch with RESOURCE_EXHAUSTED and SLOW_OBSERVER.
+        phase: Observer failure
+        active: [runtime, channel, agent]
+        fields: [RESOURCE_EXHAUSTED, SLOW_OBSERVER]
+        transitions:
+          - source: runtime
+            target: agent
+            label: SLOW_OBSERVER
+            tone: failure
+        activities:
+          runtime:
+            title: Preserve operation state
+            items:
+              - Retain any terminal result independently
+          agent:
+            title: Reattach later
+            items:
+              - Resume from the last validated cursor
+        context:
+          kind: Delivery bound
+          value: At most 30 seconds

@@ -32,7 +32,7 @@ class ManifestServiceServicer:
 
     def GetManifest(self, request, context):
         """GetManifest selects the highest mutually supported manifest schema version.
-        See docs/procedures/provider-manifest.md for validation, errors and retries.
+        See docs/v0.1.0/procedures/provider-manifest.md for validation, errors and retries.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

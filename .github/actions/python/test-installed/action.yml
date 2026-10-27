@@ -81,6 +81,7 @@ runs:
           isolated_python="${environment}/bin/python"
         fi
         mkdir -p "${EVIDENCE_DIRECTORY}"
+        evidence_directory="$(cd "${EVIDENCE_DIRECTORY}" && pwd -P)"
         {
           "${isolated_python}" -m pip install \
             --disable-pip-version-check \
@@ -90,7 +91,8 @@ runs:
           "${isolated_python}" -I \
             "${GITHUB_WORKSPACE}/scripts/ci/verify_installed.py" \
             --expected-version "${EXPECTED_VERSION}" \
-            --workspace "${GITHUB_WORKSPACE}"
+            --workspace "${GITHUB_WORKSPACE}" \
+            --output "${evidence_directory}/wheel-conformance.json"
         } 2>&1 | tee "${EVIDENCE_DIRECTORY}/installed-package.log"
 
     - name: Install and verify exact source distribution outside the checkout
@@ -110,6 +112,7 @@ runs:
           isolated_python="${environment}/bin/python"
         fi
         mkdir -p "${EVIDENCE_DIRECTORY}"
+        evidence_directory="$(cd "${EVIDENCE_DIRECTORY}" && pwd -P)"
         {
           "${isolated_python}" -m pip install \
             --disable-pip-version-check \
@@ -119,5 +122,6 @@ runs:
           "${isolated_python}" -I \
             "${GITHUB_WORKSPACE}/scripts/ci/verify_installed.py" \
             --expected-version "${EXPECTED_VERSION}" \
-            --workspace "${GITHUB_WORKSPACE}"
+            --workspace "${GITHUB_WORKSPACE}" \
+            --output "${evidence_directory}/sdist-conformance.json"
         } 2>&1 | tee "${EVIDENCE_DIRECTORY}/installed-sdist.log"

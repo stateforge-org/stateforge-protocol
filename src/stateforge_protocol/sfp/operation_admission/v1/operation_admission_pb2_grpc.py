@@ -36,7 +36,7 @@ class OperationAdmissionServiceServicer:
         """StartOperation either creates one retained admission record and dispatches
         once, or resolves an existing matching record without dispatching again.
         Rejections create no accepted operation record. See
-        docs/procedures/operation-admission.md for ordering, errors, and retries.
+        docs/v0.1.0/procedures/operation-admission.md for ordering, errors, and retries.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

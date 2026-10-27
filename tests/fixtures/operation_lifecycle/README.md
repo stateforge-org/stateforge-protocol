@@ -37,7 +37,7 @@ business deadline;
 its unchanged expiry does not imply that an active record was deleted.
 
 The full retention and backpressure obligations are normative in
-`docs/procedures/progress-results-cancellation.md`: retain current/latest state
+`docs/v0.1.0/procedures/progress-results-cancellation.md`: retain current/latest state
 and terminal results while the admission record exists; intermediate history
 may be lost; bound observer queues and stall duration. Provider and Agent
 runtime implementations must test actual concurrency, cancellation isolation,

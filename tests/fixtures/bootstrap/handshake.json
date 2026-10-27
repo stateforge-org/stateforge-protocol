@@ -1,0 +1,26 @@
+{
+  "request": {
+    "agentRuntime": {
+      "runtimeId": "d81855f6-79ac-4b49-9f1a-c9f0985e7c58",
+      "softwareVersion": "0.1.0"
+    },
+    "expectedProviderInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c",
+    "expectedEndpointGeneration": "4",
+    "supportedSfpVersions": [
+      {
+        "major": 1,
+        "minor": 0
+      }
+    ]
+  },
+  "response": {
+    "providerInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c",
+    "endpointGeneration": "4",
+    "selectedSfpVersion": {
+      "major": 1,
+      "minor": 0
+    },
+    "providerRuntimeId": "68d818de-3671-471d-a0ba-044cf60e2c8e",
+    "sessionId": "session-A"
+  }
+}

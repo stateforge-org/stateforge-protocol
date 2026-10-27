@@ -8,7 +8,7 @@ import "stateforge_protocol/sfp/operation_admission/v1/operation_admission.proto
 
 // OperationLifecycleService observes or cancels an already admitted operation
 // on the existing negotiated SFP channel. Neither method creates or dispatches
-// work. See docs/procedures/progress-results-cancellation.md for normative
+// work. See docs/v0.1.0/procedures/progress-results-cancellation.md for normative
 // transitions, retention, correlation, limits, races, and retry behavior.
 service OperationLifecycleService {
   // Immediately replay a complete current snapshot, then newer snapshots.

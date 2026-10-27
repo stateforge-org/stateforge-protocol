@@ -1,0 +1,685 @@
+schema: stateforge.docs/procedure/v1
+procedure: trigger-publication
+title: Trigger publication and acknowledgement
+summary: From a fenced trigger stream to durable Agent delivery responsibility.
+default_scenario: success
+
+entities:
+  - id: agent
+    label: StateForge Agent
+    kind: process
+    role: Opens the stream, validates publications, and returns terminal acknowledgements
+  - id: agent-store
+    label: Agent Durable Store
+    kind: storage
+    role: Records accepted publication identities and canonical content
+  - id: channel
+    label: SFP Channel
+    kind: resource
+    role: Carries the ordered bidirectional trigger stream
+  - id: provider
+    label: Provider Runtime
+    kind: process
+    role: Serves the stream and retains unacknowledged publications
+  - id: provider-queue
+    label: Provider Pending Queue
+    kind: storage
+    role: Holds normalized events until terminal acknowledgement
+
+scenarios:
+  success:
+    label: New trigger accepted
+    steps:
+      - id: open-stream
+        title: Open a fenced stream
+        detail: The Agent sends the current Provider, endpoint, session, and manifest fences together with its requested receive window.
+        phase: Stream opening
+        active: [agent, channel, provider]
+        fields: [TriggerStreamOpen, session_binding, requested_max_in_flight_publications]
+        transitions:
+          - source: agent
+            target: channel
+            label: open
+          - source: channel
+            target: provider
+            label: fenced request
+        activities:
+          agent:
+            title: Select the current declaration
+            items:
+              - Bind the stream to one active Bootstrap session
+              - Request a bounded receive window
+          channel:
+            title: Carry the first Agent message
+            items:
+              - Accept no acknowledgement before open
+          provider:
+            title: Validate the opening request
+            items:
+              - Apply Protocol validation and byte limits
+              - Match every live session fence
+        context:
+          kind: RPC
+          value: TriggerPublicationService.StreamTriggers
+
+      - id: ready-stream
+        title: Confirm the stream binding
+        detail: The Provider echoes the active binding and selects a positive receive window no larger than the Agent requested.
+        phase: Stream ready
+        active: [provider, channel, agent]
+        fields: [TriggerStreamReady, maximum_in_flight_publications]
+        transitions:
+          - source: provider
+            target: channel
+            label: ready
+            tone: success
+          - source: channel
+            target: agent
+            label: confirmed binding
+            tone: success
+        activities:
+          provider:
+            title: Bind one active trigger stream
+            items:
+              - Echo Provider, endpoint, session, and manifest identity
+              - Select the effective receive window
+          channel:
+            title: Enter publication framing
+            items:
+              - Carry no publication before ready
+          agent:
+            title: Validate the opening exchange
+            items:
+              - Compare every echoed fence
+              - Retain the selected receive window
+        context:
+          kind: Result
+          value: One current stream is ready for publications
+
+      - id: queue-publication
+        title: Normalize one Provider event
+        detail: The Provider creates one immutable publication declared by the accepted manifest and retains it until terminal acknowledgement.
+        phase: Provider observation
+        active: [provider, provider-queue]
+        fields: [publication_id, trigger_identifier, observed_at, payload]
+        transitions:
+          - source: provider
+            target: provider-queue
+            label: retain
+        activities:
+          provider:
+            title: Build canonical content
+            items:
+              - Mint a UUIDv4 publication identity
+              - Validate the payload against the manifest schema
+          provider-queue:
+            title: Preserve the pending event
+            items:
+              - Retain the exact ID and canonical content
+              - Keep it pending until terminal acknowledgement
+        context:
+          kind: Declaration
+          value: trigger_identifier selects one accepted payload schema
+
+      - id: publish-event
+        title: Publish within the receive window
+        detail: The Provider sends the retained publication while fewer than the selected number of publications remain unacknowledged.
+        phase: Publication
+        active: [provider-queue, provider, channel, agent]
+        fields: [TriggerPublication, in_flight below selected window]
+        transitions:
+          - source: provider-queue
+            target: provider
+            label: pending event
+          - source: provider
+            target: channel
+            label: publication
+          - source: channel
+            target: agent
+            label: bounded envelope
+        activities:
+          provider:
+            title: Respect backpressure
+            items:
+              - Count every unacknowledged publication
+              - Stop sending when the window is full
+          channel:
+            title: Carry immutable content
+            items:
+              - Preserve stream order
+          agent:
+            title: Validate before acceptance
+            items:
+              - Apply Protocol validation and payload bounds
+              - Resolve the exact manifest trigger declaration
+        context:
+          kind: Flow control
+          value: Publications sent minus terminal acknowledgements stays within the selected window
+
+      - id: accept-new
+        title: Assume durable responsibility
+        detail: The Agent validates the payload schema and atomically records the new publication identity and canonical content before acknowledging it.
+        phase: Durable acceptance
+        active: [agent, agent-store]
+        fields: [Provider installation, publication_id, content fingerprint]
+        transitions:
+          - source: agent
+            target: agent-store
+            label: commit
+            tone: success
+        activities:
+          agent:
+            title: Accept one logical trigger
+            items:
+              - Validate the declared payload schema
+              - Compute canonical publication content
+          agent-store:
+            title: Commit the idempotency record
+            items:
+              - Bind Provider installation and publication ID
+              - Record the canonical content fingerprint atomically
+        context:
+          kind: Responsibility boundary
+          value: Durable acceptance happens before acknowledgement
+
+      - id: acknowledge-new
+        title: Acknowledge the new trigger
+        detail: The Agent returns ACCEPTED_NEW, allowing the Provider to remove the matching pending publication.
+        phase: Terminal acknowledgement
+        active: [agent, channel, provider, provider-queue]
+        fields: [ACCEPTED_NEW, publication_id]
+        transitions:
+          - source: agent
+            target: channel
+            label: ACCEPTED_NEW
+            tone: success
+          - source: channel
+            target: provider
+            label: terminal decision
+            tone: success
+          - source: provider
+            target: provider-queue
+            label: remove pending
+            tone: success
+        activities:
+          agent:
+            title: Transfer delivery responsibility
+            items:
+              - Correlate the outstanding publication
+          provider:
+            title: Apply the terminal decision
+            items:
+              - Remove only the acknowledged publication
+          provider-queue:
+            title: Release retained content
+            items:
+              - Keep no retry obligation for this event
+        context:
+          kind: Result
+          value: ACCEPTED_NEW means delivery responsibility, not business completion
+
+  duplicate-replay:
+    label: Identical publication replayed
+    prefix:
+      scenario: success
+      through: publish-event
+    steps:
+      - id: detect-duplicate
+        title: Match a previously accepted publication
+        detail: The Agent finds the same Provider installation and publication ID with identical canonical content in its durable store.
+        phase: Idempotency lookup
+        active: [agent, agent-store]
+        fields: [matching idempotency key, matching content fingerprint]
+        transitions:
+          - source: agent
+            target: agent-store
+            label: lookup
+          - source: agent-store
+            target: agent
+            label: identical accepted record
+            tone: success
+        activities:
+          agent:
+            title: Create no second logical trigger
+            items:
+              - Compare canonical content
+          agent-store:
+            title: Preserve the original record
+            items:
+              - Return the accepted identity unchanged
+        context:
+          kind: Idempotency
+          value: An identical replay is already the Agent's responsibility
+      - id: acknowledge-duplicate
+        title: Acknowledge the replay
+        detail: The Agent returns ACCEPTED_DUPLICATE and the Provider removes its retained copy.
+        phase: Terminal acknowledgement
+        active: [agent, provider, provider-queue]
+        fields: [ACCEPTED_DUPLICATE, publication_id]
+        transitions:
+          - source: agent
+            target: provider
+            label: ACCEPTED_DUPLICATE
+            tone: success
+          - source: provider
+            target: provider-queue
+            label: remove replay
+            tone: success
+        activities:
+          provider:
+            title: Finish the retry
+            items:
+              - Remove the acknowledged publication
+          agent:
+            title: Preserve exactly-once logical acceptance
+            items:
+              - Emit no second logical trigger
+        context:
+          kind: Result
+          value: ACCEPTED_DUPLICATE closes the replay without duplication
+
+  lost-acknowledgement:
+    label: Acknowledgement lost and recovered
+    prefix:
+      scenario: success
+      through: accept-new
+    steps:
+      - id: lose-acknowledgement
+        title: Lose the acknowledgement
+        detail: The current transport closes after the Agent commit but before the Provider receives its terminal acknowledgement.
+        phase: Transport loss
+        active: [channel, provider-queue, agent-store]
+        fields: [accepted record retained, publication still pending]
+        transitions:
+          - source: channel
+            target: provider
+            label: transport closed
+            tone: failure
+        activities:
+          agent-store:
+            title: Keep durable responsibility
+            items:
+              - Preserve the accepted record
+          provider-queue:
+            title: Keep the unacknowledged event
+            items:
+              - Do not infer acceptance from transport loss
+        context:
+          kind: Recovery invariant
+          value: Neither side discards its durable evidence
+      - id: replay-after-reconnect
+        title: Replay the same publication
+        detail: After a fresh current stream becomes ready, the Provider retransmits the same publication ID and exact canonical content.
+        phase: Recovery
+        active: [provider-queue, provider, channel, agent]
+        fields: [same publication_id, same canonical content]
+        transitions:
+          - source: provider-queue
+            target: provider
+            label: retained event
+          - source: provider
+            target: agent
+            label: replay
+        activities:
+          provider:
+            title: Preserve identity across retry
+            items:
+              - Change no canonical field
+          agent:
+            title: Recognize the durable record
+            items:
+              - Return ACCEPTED_DUPLICATE
+        context:
+          kind: Result
+          value: Replay the same publication and transfer no responsibility twice
+
+  idempotency-conflict:
+    label: Publication identity reused with changed content
+    prefix:
+      scenario: success
+      through: publish-event
+    steps:
+      - id: reject-conflict
+        title: Reject conflicting content
+        detail: The idempotency key already exists, but the trigger identifier, observed time, or payload produces a different canonical fingerprint.
+        phase: Publication rejected
+        active: [agent, agent-store, provider]
+        fields: [IDEMPOTENCY_CONFLICT, retryable=false]
+        transitions:
+          - source: agent-store
+            target: agent
+            label: different fingerprint
+            tone: failure
+          - source: agent
+            target: provider
+            label: REJECTED
+            tone: failure
+        activities:
+          agent:
+            title: Protect the accepted identity
+            items:
+              - Return IDEMPOTENCY_CONFLICT
+              - Keep the original record unchanged
+          provider:
+            title: Stop retrying unchanged identity
+            items:
+              - Treat the rejection as permanent
+        context:
+          kind: Result
+          value: A publication ID never names two different logical events
+
+  retryable-rejection:
+    label: Agent temporarily cannot accept
+    prefix:
+      scenario: success
+      through: publish-event
+    steps:
+      - id: reject-capacity
+        title: Decline delivery responsibility temporarily
+        detail: The Agent cannot durably accept the event, so it returns a retryable rejection without creating an accepted record.
+        phase: Publication deferred
+        active: [agent, agent-store, provider, provider-queue]
+        fields: [AGENT_CAPACITY_EXHAUSTED, retryable=true, retry_after]
+        transitions:
+          - source: agent
+            target: provider
+            label: REJECTED
+            tone: warning
+        activities:
+          agent:
+            title: Fail before responsibility transfer
+            items:
+              - Commit no accepted publication
+              - Bound retry guidance to 24 hours
+          provider:
+            title: Retain the same event
+            items:
+              - Honor bounded retry guidance
+          provider-queue:
+            title: Keep the publication pending
+            items:
+              - Preserve ID and canonical content
+        context:
+          kind: Result
+          value: AGENT_CAPACITY_EXHAUSTED permits a later unchanged retry
+
+  payload-rejected:
+    label: Payload violates its declaration
+    prefix:
+      scenario: success
+      through: publish-event
+    steps:
+      - id: reject-payload
+        title: Reject the invalid payload
+        detail: The publication envelope is valid, but its payload does not satisfy the trigger schema in the accepted manifest revision.
+        phase: Publication rejected
+        active: [agent, provider]
+        fields: [PAYLOAD_SCHEMA_VIOLATION, retryable=false]
+        transitions:
+          - source: agent
+            target: provider
+            label: REJECTED
+            tone: failure
+        activities:
+          agent:
+            title: Accept no invalid trigger
+            items:
+              - Return the stable rejection reason
+              - Keep diagnostics sanitized
+          provider:
+            title: Correct a future event
+            items:
+              - Do not mutate this publication ID and retry
+        context:
+          kind: Result
+          value: PAYLOAD_SCHEMA_VIOLATION does not terminate a healthy stream
+
+  acknowledgement-before-open:
+    label: Acknowledgement arrives before open
+    steps:
+      - id: invalid-first-request
+        title: Reject invalid Agent framing
+        detail: The first Agent message is an acknowledgement instead of TriggerStreamOpen.
+        phase: Stream rejected
+        active: [agent, channel, provider]
+        fields: [acknowledgement first, INVALID_ARGUMENT]
+        transitions:
+          - source: agent
+            target: provider
+            label: acknowledgement
+            tone: failure
+          - source: provider
+            target: agent
+            label: INVALID_ARGUMENT
+            tone: failure
+        activities:
+          provider:
+            title: Terminate the stream
+            items:
+              - Bind no session
+          agent:
+            title: Correct local framing
+            items:
+              - Open before acknowledging
+        context:
+          kind: Result
+          value: INVALID_ARGUMENT ends the malformed stream
+
+  stale-binding:
+    label: Opening binding is stale
+    prefix:
+      scenario: success
+      through: open-stream
+    steps:
+      - id: reject-stale-binding
+        title: Reject the stale session
+        detail: One or more Provider, endpoint, Bootstrap session, or manifest values no longer match the Provider's active binding.
+        phase: Stream rejected
+        active: [provider, channel, agent]
+        fields: [FAILED_PRECONDITION, no ready response]
+        transitions:
+          - source: provider
+            target: agent
+            label: FAILED_PRECONDITION
+            tone: failure
+        activities:
+          provider:
+            title: Bind no stale stream
+            items:
+              - Substitute no newer session
+          agent:
+            title: Re-establish current context
+            items:
+              - Rediscover or Bootstrap as required
+        context:
+          kind: Result
+          value: FAILED_PRECONDITION protects the active session fences
+
+  active-stream-exists:
+    label: Session already has a stream
+    prefix:
+      scenario: success
+      through: open-stream
+    steps:
+      - id: reject-second-stream
+        title: Keep the established stream
+        detail: A second StreamTriggers call tries to bind to a session that already has an active trigger stream.
+        phase: Duplicate stream rejected
+        active: [provider, agent]
+        fields: [ALREADY_EXISTS, first stream unchanged]
+        transitions:
+          - source: provider
+            target: agent
+            label: ALREADY_EXISTS
+            tone: warning
+        activities:
+          provider:
+            title: Reject only the new stream
+            items:
+              - Preserve the original active stream
+          agent:
+            title: Reuse current ownership
+            items:
+              - Avoid competing stream consumers
+        context:
+          kind: Result
+          value: ALREADY_EXISTS preserves one trigger stream per session
+
+  ready-mismatch:
+    label: Provider ready binding mismatches
+    prefix:
+      scenario: success
+      through: open-stream
+    steps:
+      - id: cancel-mismatched-ready
+        title: Reject the Provider response locally
+        detail: TriggerStreamReady does not echo the opening session and manifest fences or selects an invalid receive window.
+        phase: Client validation failure
+        active: [provider, channel, agent]
+        fields: [Local FAILED_PRECONDITION, RPC cancelled]
+        transitions:
+          - source: provider
+            target: agent
+            label: mismatched ready
+            tone: failure
+        activities:
+          agent:
+            title: Cancel the RPC
+            items:
+              - Accept no publication on this stream
+              - Record a local protocol failure
+          provider:
+            title: Observe transport closure
+            items:
+              - Receive no Agent-side gRPC status
+        context:
+          kind: Result
+          value: Local FAILED_PRECONDITION prevents a misbound stream
+
+  publication-before-ready:
+    label: Publication arrives before ready
+    prefix:
+      scenario: success
+      through: open-stream
+    steps:
+      - id: cancel-early-publication
+        title: Reject invalid Provider framing locally
+        detail: The Provider sends TriggerPublication before its matching TriggerStreamReady.
+        phase: Client framing failure
+        active: [provider, channel, agent]
+        fields: [Local INTERNAL, RPC cancelled]
+        transitions:
+          - source: provider
+            target: agent
+            label: publication first
+            tone: failure
+        activities:
+          agent:
+            title: Cancel the RPC
+            items:
+              - Assume no delivery responsibility
+          provider:
+            title: Observe transport closure
+            items:
+              - Retain the unacknowledged publication
+        context:
+          kind: Result
+          value: Local INTERNAL rejects the impossible response order
+
+  receive-window-exceeded:
+    label: Provider exceeds flow control
+    prefix:
+      scenario: success
+      through: publish-event
+    steps:
+      - id: cancel-window-violation
+        title: Enforce the selected receive window
+        detail: The Provider sends another publication while the selected number remains unacknowledged.
+        phase: Flow-control failure
+        active: [provider, channel, agent]
+        fields: [Local RESOURCE_EXHAUSTED, RPC cancelled]
+        transitions:
+          - source: provider
+            target: agent
+            label: excess publication
+            tone: failure
+        activities:
+          agent:
+            title: Cancel the violating stream
+            items:
+              - Record a local flow-control failure
+          provider:
+            title: Retain unacknowledged events
+            items:
+              - Reopen only under a current session
+        context:
+          kind: Result
+          value: Local RESOURCE_EXHAUSTED makes backpressure enforceable
+
+  invalid-acknowledgement:
+    label: Acknowledgement cannot be correlated
+    prefix:
+      scenario: success
+      through: publish-event
+    steps:
+      - id: reject-invalid-acknowledgement
+        title: Reject invalid acknowledgement framing
+        detail: The Agent acknowledges an unknown ID, an already acknowledged ID, or an ID sent only on an earlier stream.
+        phase: Stream rejected
+        active: [agent, provider]
+        fields: [INVALID_ARGUMENT, uncorrelated publication_id]
+        transitions:
+          - source: agent
+            target: provider
+            label: invalid acknowledgement
+            tone: failure
+          - source: provider
+            target: agent
+            label: INVALID_ARGUMENT
+            tone: failure
+        activities:
+          provider:
+            title: Terminate malformed framing
+            items:
+              - Preserve every still-pending publication
+          agent:
+            title: Correct local correlation
+            items:
+              - Acknowledge only outstanding IDs on this stream
+        context:
+          kind: Result
+          value: INVALID_ARGUMENT protects per-stream acknowledgement ownership
+
+  session-lost:
+    label: Bound session becomes unavailable
+    prefix:
+      scenario: success
+      through: ready-stream
+    steps:
+      - id: close-unavailable-session
+        title: End the stale stream
+        detail: The bound Bootstrap session becomes unavailable, so the Provider terminates the trigger stream and retains every unacknowledged event.
+        phase: Session loss
+        active: [provider, channel, agent, provider-queue]
+        fields: [UNAVAILABLE, retained pending publications]
+        transitions:
+          - source: provider
+            target: agent
+            label: UNAVAILABLE
+            tone: failure
+        activities:
+          provider:
+            title: Stop the inactive binding
+            items:
+              - Send no later publication on this stream
+          provider-queue:
+            title: Preserve pending evidence
+            items:
+              - Retain every unacknowledged publication
+          agent:
+            title: Re-establish prerequisites
+            items:
+              - Create a new session and stream before receiving replay
+        context:
+          kind: Result
+          value: UNAVAILABLE requires a newly fenced stream before replay

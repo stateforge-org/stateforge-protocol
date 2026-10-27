@@ -1,17 +1,13 @@
 """Tests for private mechanics shared by procedure-owned validators."""
 
 import ast
+import importlib
 from pathlib import Path
 
 import pytest
-from google.protobuf.struct_pb2 import Struct
+from google.protobuf.struct_pb2 import ListValue, Struct
 
 from stateforge_protocol.sfp import _validation
-from stateforge_protocol.sfp.bootstrap.v1 import validation as bootstrap
-from stateforge_protocol.sfp.capability_assessment.v1 import (
-    validation as capability_assessment,
-)
-from stateforge_protocol.sfp.manifest.v1 import validation as manifest
 
 _SOURCE_ROOT = (
     Path(__file__).parents[1] / "src" / "stateforge_protocol" / "sfp"
@@ -107,6 +103,30 @@ def test_shared_context_bounds_json_and_protojson_containers() -> None:
             maximum_nodes=10,
             maximum_bytes=64,
         )
+    with pytest.raises(ExampleValidationError, match="keys must be strings"):
+        context.require_bounded_json(
+            {1: "value"},
+            "document",
+            maximum_depth=2,
+            maximum_nodes=4,
+            maximum_bytes=64,
+        )
+    with pytest.raises(ExampleValidationError, match="invalid Unicode"):
+        context.require_bounded_json(
+            "\ud800",
+            "document",
+            maximum_depth=2,
+            maximum_nodes=4,
+            maximum_bytes=64,
+        )
+    with pytest.raises(ExampleValidationError, match="non-JSON value"):
+        context.require_bounded_json(
+            object(),
+            "document",
+            maximum_depth=2,
+            maximum_nodes=4,
+            maximum_bytes=64,
+        )
 
     protojson = Struct()
     protojson.fields["nested"].struct_value.fields[
@@ -115,6 +135,17 @@ def test_shared_context_bounds_json_and_protojson_containers() -> None:
     with pytest.raises(ExampleValidationError, match="proto nesting"):
         context.require_bounded_protojson_container(
             protojson,
+            maximum_depth=1,
+            maximum_entries=2,
+            nesting_message="proto nesting",
+            container_message="proto breadth",
+        )
+
+    protojson_list = ListValue()
+    protojson_list.values.add().list_value.values.add().number_value = 1
+    with pytest.raises(ExampleValidationError, match="proto nesting"):
+        context.require_bounded_protojson_container(
+            protojson_list,
             maximum_depth=1,
             maximum_entries=2,
             nesting_message="proto nesting",
@@ -138,6 +169,13 @@ def test_shared_context_bounds_canonical_json() -> None:
         context.canonicalize_json(
             {"value": "too large"},
             maximum_bytes=4,
+            limit_message="canonical limit",
+            invalid_message="invalid canonical value",
+        )
+    with pytest.raises(ExampleValidationError, match="invalid canonical"):
+        context.canonicalize_json(
+            float("nan"),
+            maximum_bytes=None,
             limit_message="canonical limit",
             invalid_message="invalid canonical value",
         )
@@ -169,6 +207,13 @@ def test_procedure_validators_do_not_reimplement_shared_mechanics() -> None:
 
 
 def test_procedure_validator_public_surfaces_are_explicit() -> None:
-    assert bootstrap.__all__
-    assert capability_assessment.__all__
-    assert manifest.__all__
+    validators = sorted(_SOURCE_ROOT.glob("*/v*/validation.py"))
+    assert validators
+
+    for path in validators:
+        relative = path.relative_to(_SOURCE_ROOT).with_suffix("")
+        module = importlib.import_module(
+            ".".join(("stateforge_protocol", "sfp", *relative.parts))
+        )
+        assert module.__all__, path
+        assert all(hasattr(module, name) for name in module.__all__), path

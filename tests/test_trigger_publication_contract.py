@@ -8,15 +8,19 @@ from pathlib import Path
 
 import pytest
 import rfc8785
+import yaml
 from google.protobuf import json_format
 from jsonschema import Draft202012Validator, ValidationError
+from tests.documentation import annotated_json_example
 
 from stateforge_protocol.sfp.manifest.v1 import manifest_pb2
 from stateforge_protocol.sfp.trigger_publication.v1 import (
     contract,
     trigger_publication_pb2,
+    validation,
 )
 
+_ROOT = Path(__file__).resolve().parents[1]
 _FIXTURES = Path(__file__).parent / "fixtures" / "trigger_publication"
 _SCHEMA = json.loads(
     files("stateforge_protocol.sfp.trigger_publication.v1")
@@ -657,3 +661,173 @@ def test_generation_outside_uint64_cannot_enter_wire_message() -> None:
         trigger_publication_pb2.TriggerSessionBinding(
             expected_endpoint_generation=2**64
         )
+
+
+def test_trigger_publication_documentation_matches_exported_limits() -> None:
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "triggers.md"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        f"| Agent-to-Provider stream envelope | "
+        f"{contract.MAX_REQUEST_BYTES // 1024} KiB serialized |"
+        in documentation
+    )
+    assert (
+        f"| Provider-to-Agent stream envelope | "
+        f"{contract.MAX_RESPONSE_BYTES // (1024 * 1024)} MiB serialized |"
+        in documentation
+    )
+    assert (
+        f"| Canonical payload JSON | "
+        f"{contract.MAX_CANONICAL_PAYLOAD_BYTES // (1024 * 1024)} MiB |"
+        in documentation
+    )
+    assert (
+        f"{contract.MAX_IN_FLIGHT_PUBLICATIONS:,} publications"
+        in documentation
+    )
+    assert "trigger_publication/v1/contract.py" in documentation
+    assert "trigger_publication/v1/validation.py" in documentation
+
+
+def test_trigger_publication_walkthrough_covers_every_scenario() -> None:
+    declaration = yaml.safe_load(
+        (_ROOT / "docs" / "v0.1.0" / "procedures" / "triggers.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    expected_markers = {
+        "success": "ACCEPTED_NEW",
+        "duplicate-replay": "ACCEPTED_DUPLICATE",
+        "lost-acknowledgement": "Replay the same publication",
+        "idempotency-conflict": "IDEMPOTENCY_CONFLICT",
+        "retryable-rejection": "AGENT_CAPACITY_EXHAUSTED",
+        "payload-rejected": "PAYLOAD_SCHEMA_VIOLATION",
+        "acknowledgement-before-open": "INVALID_ARGUMENT",
+        "stale-binding": "FAILED_PRECONDITION",
+        "active-stream-exists": "ALREADY_EXISTS",
+        "ready-mismatch": "Local FAILED_PRECONDITION",
+        "publication-before-ready": "Local INTERNAL",
+        "receive-window-exceeded": "Local RESOURCE_EXHAUSTED",
+        "invalid-acknowledgement": "INVALID_ARGUMENT",
+        "session-lost": "UNAVAILABLE",
+    }
+
+    assert set(declaration["scenarios"]) == set(expected_markers)
+    for scenario_id, marker in expected_markers.items():
+        serialized = json.dumps(declaration["scenarios"][scenario_id])
+        assert marker in serialized
+
+
+def test_trigger_publication_overview_tracks_delivery_responsibility() -> None:
+    declaration = yaml.safe_load(
+        (
+            _ROOT
+            / "docs"
+            / "v0.1.0"
+            / "procedures"
+            / "trigger-publication-overview.yaml"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert declaration["schema"] == "stateforge.docs/entity-flow/v1"
+    assert [entity["id"] for entity in declaration["entities"]] == [
+        "nginx",
+        "systemd",
+        "provider",
+        "agent",
+    ]
+    assert [step["id"] for step in declaration["steps"]] == [
+        "nginx-fails",
+        "provider-observes",
+        "retain-publication",
+        "publish-trigger",
+        "accept-durably",
+        "acknowledge",
+        "release-publication",
+    ]
+    assert declaration["steps"][3]["responsibility"]["entities"] == [
+        "provider"
+    ]
+    assert declaration["steps"][4]["responsibility"]["entities"] == ["agent"]
+    assert declaration["steps"][5]["transitions"] == [
+        {
+            "source": "agent",
+            "target": "provider",
+            "label": "ACCEPTED_NEW",
+            "tone": "success",
+        }
+    ]
+
+
+def test_documented_trigger_protojson_matches_the_contract() -> None:
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "triggers.md"
+    ).read_text(encoding="utf-8")
+    open_data = annotated_json_example(
+        documentation,
+        title="StreamTriggersRequest · open",
+    )
+    ready_data = annotated_json_example(
+        documentation,
+        title="StreamTriggersResponse · ready",
+    )
+    publication_data = annotated_json_example(
+        documentation,
+        title="StreamTriggersResponse · publication",
+    )
+    accepted_data = annotated_json_example(
+        documentation,
+        title="StreamTriggersRequest · accepted",
+    )
+    rejected_data = annotated_json_example(
+        documentation,
+        title="StreamTriggersRequest · rejected",
+    )
+
+    assert open_data == _read_json("open.json")
+    assert ready_data == _read_json("ready.json")
+    assert publication_data == _read_json("publication.json")
+    assert accepted_data == _read_json("acknowledgement-accepted-new.json")
+    assert rejected_data == _read_json("acknowledgement-rejected.json")
+
+    for data in (open_data, accepted_data, rejected_data):
+        _REQUEST_VALIDATOR.validate(data)
+    for data in (ready_data, publication_data):
+        _RESPONSE_VALIDATOR.validate(data)
+
+    open_message = json_format.ParseDict(
+        open_data,
+        trigger_publication_pb2.StreamTriggersRequest(),
+    )
+    ready_message = json_format.ParseDict(
+        ready_data,
+        trigger_publication_pb2.StreamTriggersResponse(),
+    )
+    publication_message = json_format.ParseDict(
+        publication_data,
+        trigger_publication_pb2.StreamTriggersResponse(),
+    )
+    accepted_message = json_format.ParseDict(
+        accepted_data,
+        trigger_publication_pb2.StreamTriggersRequest(),
+    )
+    rejected_message = json_format.ParseDict(
+        rejected_data,
+        trigger_publication_pb2.StreamTriggersRequest(),
+    )
+
+    validation.validate_stream_request(open_message)
+    validation.validate_stream_response(ready_message)
+    validation.validate_stream_open_exchange(
+        open_message.open,
+        ready_message.ready,
+    )
+    validation.validate_stream_response(publication_message)
+    validation.validate_stream_request(accepted_message)
+    validation.validate_publication_acknowledgement(
+        publication_message.publication,
+        accepted_message.acknowledgement,
+    )
+    validation.validate_stream_request(rejected_message)

@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1240" viewBox="0 0 1600 1240" fill="none">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0F172A" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow-provider" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#12A7C7"/>
+    </marker>
+    <marker id="arrow-agent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#3B82F6"/>
+    </marker>
+    <marker id="arrow-session" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#7C5CE7"/>
+    </marker>
+    <style>
+      .font { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+      .eyebrow { font-size: 20px; font-weight: 750; letter-spacing: 1.8px; fill: #3B82F6; }
+      .title { font-size: 52px; font-weight: 720; letter-spacing: -1px; fill: #111827; }
+      .subtitle { font-size: 26px; font-weight: 450; fill: #5B6B80; }
+      .actor { font-size: 30px; font-weight: 700; fill: #FFFFFF; }
+      .actor-detail { font-size: 16px; font-weight: 700; letter-spacing: 1.2px; fill: #DCEAFF; }
+      .stage { font-size: 18px; font-weight: 750; letter-spacing: 1.2px; }
+      .label { font-size: 29px; font-weight: 680; fill: #172033; }
+      .detail { font-size: 21px; font-weight: 500; fill: #53657D; }
+      .message { font-size: 23px; font-weight: 650; fill: #243247; }
+      .small { font-size: 17px; font-weight: 600; fill: #5B6B80; }
+      .number { font-size: 22px; font-weight: 800; fill: #FFFFFF; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1240" rx="32" fill="#F8FAFC"/>
+
+  <g class="font">
+    <text x="60" y="58" class="eyebrow">STATEFORGE PROTOCOL · SFP</text>
+    <text x="60" y="112" class="title">Protocol Flow</text>
+    <text x="60" y="151" class="subtitle">One local gRPC channel carrying the complete Provider session lifecycle</text>
+
+    <g filter="url(#shadow)">
+      <rect x="85" y="205" width="430" height="104" rx="22" fill="#0B7180"/>
+      <rect x="1085" y="205" width="430" height="104" rx="22" fill="#2456A6"/>
+    </g>
+    <text x="300" y="249" text-anchor="middle" class="actor">Provider Process</text>
+    <text x="300" y="279" text-anchor="middle" class="actor-detail">SFP SERVER · DECLARED CAPABILITIES</text>
+    <text x="1300" y="249" text-anchor="middle" class="actor">StateForge Agent</text>
+    <text x="1300" y="279" text-anchor="middle" class="actor-detail">SFP CLIENT · SESSION AUTHORITY</text>
+
+    <line x1="300" y1="309" x2="300" y2="1162" stroke="#8EA2BB" stroke-width="2" stroke-dasharray="9 10"/>
+    <line x1="1300" y1="309" x2="1300" y2="1162" stroke="#8EA2BB" stroke-width="2" stroke-dasharray="9 10"/>
+
+    <!-- 1. Endpoint discovery -->
+    <rect x="40" y="350" width="1520" height="122" rx="22" fill="#FFFFFF" stroke="#DDE5EE"/>
+    <circle cx="76" cy="380" r="20" fill="#12A7C7"/>
+    <text x="76" y="387" text-anchor="middle" class="number">1</text>
+    <text x="112" y="384" class="stage" fill="#0B7180">DISCOVER</text>
+    <line x1="318" y1="414" x2="1280" y2="414" stroke="#12A7C7" stroke-width="4" marker-end="url(#arrow-provider)"/>
+    <rect x="570" y="382" width="460" height="64" rx="16" fill="#E8F8FB" stroke="#A8E3ED"/>
+    <text x="800" y="408" text-anchor="middle" class="label">Endpoint descriptor</text>
+    <text x="800" y="432" text-anchor="middle" class="detail">Validate identity · open local channel</text>
+
+    <!-- 2. Bootstrap -->
+    <rect x="40" y="488" width="1520" height="142" rx="22" fill="#F4F7FF" stroke="#CEDCFA"/>
+    <circle cx="76" cy="518" r="20" fill="#3B82F6"/>
+    <text x="76" y="525" text-anchor="middle" class="number">2</text>
+    <text x="112" y="522" class="stage" fill="#2456A6">BOOTSTRAP</text>
+    <line x1="1280" y1="548" x2="320" y2="548" stroke="#3B82F6" stroke-width="4" marker-end="url(#arrow-agent)"/>
+    <line x1="320" y1="590" x2="1280" y2="590" stroke="#12A7C7" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-provider)"/>
+    <rect x="570" y="526" width="460" height="86" rx="16" fill="#FFFFFF" stroke="#C7D8FA"/>
+    <text x="800" y="558" text-anchor="middle" class="label">Negotiate and fence</text>
+    <text x="800" y="586" text-anchor="middle" class="detail">Endpoint identity · wire version · session</text>
+
+    <!-- 3. Manifest -->
+    <rect x="40" y="646" width="1520" height="142" rx="22" fill="#FFFFFF" stroke="#DDE5EE"/>
+    <circle cx="76" cy="676" r="20" fill="#C46A0A"/>
+    <text x="76" y="683" text-anchor="middle" class="number">3</text>
+    <text x="112" y="680" class="stage" fill="#A85400">DESCRIBE</text>
+    <line x1="1280" y1="706" x2="320" y2="706" stroke="#3B82F6" stroke-width="4" marker-end="url(#arrow-agent)"/>
+    <line x1="320" y1="748" x2="1280" y2="748" stroke="#12A7C7" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-provider)"/>
+    <rect x="570" y="684" width="460" height="86" rx="16" fill="#FFF5E8" stroke="#F1C58F"/>
+    <text x="800" y="716" text-anchor="middle" class="label">Provider Manifest</text>
+    <text x="800" y="744" text-anchor="middle" class="detail">Operations · triggers · typed schemas</text>
+
+    <!-- 4. Availability and capability -->
+    <rect x="40" y="804" width="1520" height="142" rx="22" fill="#F5FBF7" stroke="#BFE4CD"/>
+    <circle cx="76" cy="834" r="20" fill="#2BA766"/>
+    <text x="76" y="841" text-anchor="middle" class="number">4</text>
+    <text x="112" y="838" class="stage" fill="#176B3A">QUALIFY</text>
+    <line x1="1280" y1="864" x2="320" y2="864" stroke="#3B82F6" stroke-width="4" marker-end="url(#arrow-agent)"/>
+    <line x1="320" y1="906" x2="1280" y2="906" stroke="#2BA766" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-provider)"/>
+    <rect x="535" y="842" width="530" height="86" rx="16" fill="#FFFFFF" stroke="#B7DFC6"/>
+    <text x="800" y="874" text-anchor="middle" class="label">Health + Capability Assessment</text>
+    <text x="800" y="902" text-anchor="middle" class="detail">Process availability · contextual operation support</text>
+
+    <!-- 5. Operations and triggers -->
+    <rect x="40" y="962" width="1520" height="142" rx="22" fill="#F7F5FF" stroke="#D8D0FA"/>
+    <circle cx="76" cy="992" r="20" fill="#7C5CE7"/>
+    <text x="76" y="999" text-anchor="middle" class="number">5</text>
+    <text x="112" y="996" class="stage" fill="#5A43B8">OPERATE</text>
+    <line x1="1280" y1="1022" x2="320" y2="1022" stroke="#3B82F6" stroke-width="4" marker-end="url(#arrow-agent)"/>
+    <line x1="320" y1="1064" x2="1280" y2="1064" stroke="#7C5CE7" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrow-session)"/>
+    <rect x="588" y="1000" width="424" height="86" rx="16" fill="#FFFFFF" stroke="#D3CAFA"/>
+    <text x="800" y="1032" text-anchor="middle" class="label">Operations + Triggers</text>
+    <text x="800" y="1060" text-anchor="middle" class="detail">Admission → Provider · updates → Agent</text>
+
+    <!-- 6. Reconnection and recovery -->
+    <rect x="40" y="1120" width="1520" height="82" rx="22" fill="#ECE8FF" stroke="#C9C5FF"/>
+    <circle cx="76" cy="1150" r="20" fill="#5A43B8"/>
+    <text x="76" y="1157" text-anchor="middle" class="number">6</text>
+    <text x="112" y="1154" class="stage" fill="#5A43B8">RECOVER</text>
+    <line x1="1280" y1="1148" x2="320" y2="1148" stroke="#3B82F6" stroke-width="4" stroke-dasharray="12 8" marker-end="url(#arrow-agent)"/>
+    <line x1="320" y1="1172" x2="1280" y2="1172" stroke="#7C5CE7" stroke-width="4" stroke-dasharray="12 8" marker-end="url(#arrow-session)"/>
+    <rect x="520" y="1132" width="560" height="56" rx="15" fill="#FFFFFF" stroke="#C9C5FF"/>
+    <text x="800" y="1156" text-anchor="middle" class="message">New channel + new fenced session</text>
+    <text x="800" y="1178" text-anchor="middle" class="small">Reconcile retained state · reject stale messages</text>
+  </g>
+</svg>

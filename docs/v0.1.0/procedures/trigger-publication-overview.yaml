@@ -1,0 +1,166 @@
+schema: stateforge.docs/entity-flow/v1
+flow: trigger-publication
+title: From local service failure to durable trigger acceptance
+summary: A systemd Provider observes nginx.service and transfers an accepted publication to the Agent.
+autoplay: true
+entities:
+  - id: nginx
+    label: nginx.service
+    kind: Managed service
+    brand: service
+    accent: service
+    description: A local web-server unit managed by systemd.
+    state:
+      label: Unit state
+      value: active
+      tone: success
+  - id: systemd
+    label: systemd
+    kind: Service manager
+    brand: none
+    accent: systemd
+    description: Owns the authoritative local unit state.
+    state:
+      label: Observation
+      value: nginx.service is active
+      tone: success
+  - id: provider
+    label: systemd Provider
+    kind: StateForge Provider
+    brand: stateforge
+    accent: provider
+    description: Normalizes systemd state changes into declared triggers.
+    state:
+      label: Pending queue
+      value: Empty
+  - id: agent
+    label: StateForge Agent
+    kind: StateForge Agent
+    brand: stateforge
+    accent: agent
+    description: Validates and durably accepts trigger publications.
+    state:
+      label: Trigger record
+      value: Not accepted
+steps:
+  - id: nginx-fails
+    phase: Unit state changed
+    title: nginx.service stops
+    detail: systemd records the unit transition from active to failed.
+    active: [nginx, systemd]
+    states:
+      nginx:
+        label: Unit state
+        value: failed
+        tone: failure
+      systemd:
+        label: Observation
+        value: nginx.service failed
+        tone: failure
+    transitions:
+      - source: nginx
+        target: systemd
+        label: active → failed
+        tone: failure
+    responsibility:
+      entities: [systemd]
+      label: systemd owns the unit state; no trigger publication exists yet.
+  - id: provider-observes
+    phase: Provider observation
+    title: The Provider observes the failure
+    detail: The Systemd Provider normalizes the unit-state change into a declared trigger payload.
+    active: [systemd, provider]
+    states:
+      provider:
+        label: Observation
+        value: Failure normalized
+        tone: warning
+    transitions:
+      - source: systemd
+        target: provider
+        label: unit failed
+        tone: warning
+    responsibility:
+      entities: [provider]
+      label: The Provider owns the event as it creates a retained publication.
+  - id: retain-publication
+    phase: Publication retained
+    title: The Provider queues the publication
+    detail: The publication receives an immutable identity and remains retained until a terminal acknowledgement arrives.
+    active: [provider]
+    states:
+      provider:
+        label: Pending queue
+        value: 1 retained publication
+        tone: warning
+    transitions: []
+    responsibility:
+      entities: [provider]
+      label: The Provider is responsible for retrying this publication without changing its identity or content.
+  - id: publish-trigger
+    phase: Trigger publication
+    title: Publish to the Agent
+    detail: The Provider sends the publication while keeping its retained copy.
+    active: [provider, agent]
+    states:
+      agent:
+        label: Validation
+        value: Checking envelope and payload
+        tone: warning
+    transitions:
+      - source: provider
+        target: agent
+        label: TriggerPublication
+    responsibility:
+      entities: [provider]
+      label: Sending alone does not transfer responsibility to the Agent.
+  - id: accept-durably
+    phase: Durable acceptance
+    title: The Agent commits the trigger
+    detail: The Agent validates the active manifest declaration and durably records the publication before acknowledging it.
+    active: [agent]
+    states:
+      agent:
+        label: Trigger record
+        value: Accepted durably
+        tone: success
+    transitions: []
+    responsibility:
+      entities: [agent]
+      label: Durable acceptance transfers subsequent delivery responsibility to the Agent.
+  - id: acknowledge
+    phase: Terminal acknowledgement
+    title: Acknowledge the new trigger
+    detail: The Agent returns ACCEPTED_NEW for the committed publication identity.
+    active: [agent, provider]
+    states:
+      provider:
+        label: Pending queue
+        value: Awaiting terminal acknowledgement
+        tone: warning
+    transitions:
+      - source: agent
+        target: provider
+        label: ACCEPTED_NEW
+        tone: success
+    responsibility:
+      entities: [agent]
+      label: The Agent already owns delivery; the Provider retains its copy only until it receives the acknowledgement.
+  - id: release-publication
+    phase: Publication released
+    title: The Provider clears its pending copy
+    detail: The terminal acknowledgement lets the Provider remove the retained publication. It does not imply a policy or business outcome.
+    active: [provider, agent]
+    states:
+      provider:
+        label: Pending queue
+        value: Empty
+        tone: success
+      agent:
+        label: Trigger record
+        value: Delivery owned by Agent
+        tone: success
+    transitions: []
+    responsibility:
+      entities: [agent]
+      label: The Agent remains responsible for delivery beyond SFP.

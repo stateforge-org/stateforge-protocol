@@ -9,14 +9,20 @@ from pathlib import Path
 
 import pytest
 import rfc8785
+import yaml
 from google.protobuf import json_format
 from jsonschema import Draft202012Validator, ValidationError
+from tests.documentation import annotated_json_example
 
 from stateforge_protocol.sfp.operation_admission.v1 import (
     contract,
     operation_admission_pb2,
 )
+from stateforge_protocol.sfp.operation_admission.v1 import (
+    validation as admission_validation,
+)
 
+_ROOT = Path(__file__).parents[1]
 _FIXTURES = Path(__file__).parent / "fixtures" / "operation_admission"
 _SCHEMA = json.loads(
     files("stateforge_protocol.sfp.operation_admission.v1")
@@ -477,6 +483,7 @@ def test_error_detail_round_trips_for_every_documented_case(case) -> None:
         detail,
         operation_admission_pb2.OperationAdmissionErrorDetail(),
     )
+    admission_validation.validate_admission_error_detail(message)
     projected = json_format.MessageToDict(
         message,
         always_print_fields_with_no_presence=True,
@@ -496,6 +503,13 @@ def test_retry_after_is_forbidden_for_non_retryable_error() -> None:
 
     with pytest.raises(ValidationError):
         _ERROR_VALIDATOR.validate(detail)
+
+    message = json_format.ParseDict(
+        detail,
+        operation_admission_pb2.OperationAdmissionErrorDetail(),
+    )
+    with pytest.raises(admission_validation.OperationAdmissionValidationError):
+        admission_validation.validate_admission_error_detail(message)
 
 
 def test_scenarios_cover_required_idempotency_boundaries() -> None:
@@ -523,6 +537,149 @@ def test_scenarios_cover_required_idempotency_boundaries() -> None:
     assert (
         scenarios["lost_state_after_generation_change"]["dispatchCount"] == 0
     )
+
+
+def test_operation_admission_walkthrough_covers_every_scenario() -> None:
+    declaration = yaml.safe_load(
+        (
+            _ROOT
+            / "docs"
+            / "v0.1.0"
+            / "procedures"
+            / "operation-admission.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    expected_markers = {
+        "first-admission": "ACCEPTED_NEW",
+        "equivalent-retry": "RESOLVED_EXISTING",
+        "concurrent-duplicate": ("One ACCEPTED_NEW and one RESOLVED_EXISTING"),
+        "changed-content": "IDEMPOTENCY_CONFLICT",
+        "terminal-replay": "RESOLVED_EXISTING",
+        "expired-deadline": "OPERATION_DEADLINE_EXPIRED",
+        "unavailable-record": "OPERATION_RECORD_UNAVAILABLE",
+        "expired-record": "OPERATION_RECORD_EXPIRED",
+    }
+
+    assert set(declaration["scenarios"]) == set(expected_markers)
+    for scenario_id, marker in expected_markers.items():
+        serialized = json.dumps(declaration["scenarios"][scenario_id])
+        assert marker in serialized
+
+
+def test_operation_admission_overview_preserves_dispatch_boundary() -> None:
+    declaration = yaml.safe_load(
+        (
+            _ROOT
+            / "docs"
+            / "v0.1.0"
+            / "procedures"
+            / "operation-admission-overview.yaml"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert declaration["schema"] == "stateforge.docs/entity-flow/v1"
+    assert [entity["id"] for entity in declaration["entities"]] == [
+        "agent",
+        "provider",
+        "systemd",
+        "nginx",
+    ]
+    assert [step["id"] for step in declaration["steps"]] == [
+        "prepare-invocation",
+        "submit-admission",
+        "fingerprint-and-lookup",
+        "retain-admission",
+        "dispatch-provider",
+        "restart-requested",
+        "return-accepted",
+    ]
+    assert declaration["steps"][3]["responsibility"]["entities"] == [
+        "provider"
+    ]
+    assert declaration["steps"][4]["transitions"] == [
+        {
+            "source": "provider",
+            "target": "systemd",
+            "label": "restart unit",
+            "tone": "success",
+        }
+    ]
+    assert declaration["steps"][-1]["transitions"] == [
+        {
+            "source": "provider",
+            "target": "agent",
+            "label": "ACCEPTED_NEW",
+            "tone": "success",
+        }
+    ]
+
+
+def test_operation_admission_documentation_identifies_contract_ownership() -> (
+    None
+):
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "operation-admission.md"
+    ).read_text(encoding="utf-8")
+
+    assert "operation_admission.proto" in documentation
+    assert "operation_admission.schema.json" in documentation
+    assert "operation_admission/v1/contract.py" in documentation
+    assert "operation_admission/v1/validation.py" in documentation
+    assert "| Serialized request | 8 MiB |" in documentation
+    assert "| Serialized response | 1 MiB |" in documentation
+    assert "| Serialized structured error detail | 4 KiB |" in documentation
+
+
+def test_documented_operation_admission_protojson_matches_contract() -> None:
+    documentation = (
+        _ROOT / "docs" / "v0.1.0" / "procedures" / "operation-admission.md"
+    ).read_text(encoding="utf-8")
+    request_data = annotated_json_example(
+        documentation,
+        title="StartOperationRequest",
+    )
+    accepted_data = annotated_json_example(
+        documentation,
+        title="StartOperationResponse · accepted",
+    )
+    resolved_data = annotated_json_example(
+        documentation,
+        title="StartOperationResponse · resolved",
+    )
+    error_data = annotated_json_example(
+        documentation,
+        title="OperationAdmissionErrorDetail",
+    )
+
+    assert request_data == _read_json("request.json")
+    assert accepted_data == _read_json("response-accepted-new.json")
+    assert resolved_data == _read_json("response-resolved-existing.json")
+
+    request = json_format.ParseDict(
+        request_data,
+        operation_admission_pb2.StartOperationRequest(),
+    )
+    accepted = json_format.ParseDict(
+        accepted_data,
+        operation_admission_pb2.StartOperationResponse(),
+    )
+    resolved = json_format.ParseDict(
+        resolved_data,
+        operation_admission_pb2.StartOperationResponse(),
+    )
+    error = json_format.ParseDict(
+        error_data,
+        operation_admission_pb2.OperationAdmissionErrorDetail(),
+    )
+
+    admission_validation.validate_admission_exchange(request, accepted)
+    resolved_request = copy.deepcopy(request)
+    resolved_request.session_binding.expected_session_id = resolved.session_id
+    admission_validation.validate_admission_exchange(
+        resolved_request,
+        resolved,
+    )
+    admission_validation.validate_admission_error_detail(error)
 
 
 def test_generation_outside_uint64_cannot_enter_wire_message() -> None:

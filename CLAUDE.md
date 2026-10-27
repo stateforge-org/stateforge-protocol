@@ -8,8 +8,10 @@ agents reached through `AGENTS.md` or `CLAUDE.md`.
 
 Use `stateforge-python-development` for Python, packaging, tests, and docs;
 `stateforge-protocol-development` for SFP contracts or integrations; and
-`stateforge-pr-review` when drafting a PR description or assisting a review.
-Those engineering skills live under `.claude/skills/`.
+`stateforge-documentation` for public documentation structure, writing,
+versioning, visuals, and walkthroughs. Use `stateforge-pr-review` when drafting
+a PR description or assisting a review. These engineering skills live under
+`.claude/skills/`.
 
 ## Delivery discipline
 
