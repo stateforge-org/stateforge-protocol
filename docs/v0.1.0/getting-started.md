@@ -69,7 +69,7 @@ example on Linux or macOS. On Windows, use a Linux environment such as WSL.
 
 Start the minimal Provider-side Bootstrap server:
 
-```console title="Terminal 1 — Provider runtime"
+```console title="Terminal 1 - Provider runtime"
 python -m examples.bootstrap.server \
   unix:/tmp/stateforge-bootstrap.sock \
   7f7db7d8-68b4-4f71-9769-065b5c4f941c \
@@ -80,7 +80,7 @@ The server binds one local endpoint for the supplied Provider instance and
 endpoint generation. Leave it running, then open a second terminal with the
 same virtual environment activated:
 
-```console title="Terminal 2 — Agent runtime"
+```console title="Terminal 2 - Agent runtime"
 python -m examples.bootstrap.client \
   unix:/tmp/stateforge-bootstrap.sock \
   7f7db7d8-68b4-4f71-9769-065b5c4f941c \

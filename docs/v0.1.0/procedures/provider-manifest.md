@@ -548,13 +548,13 @@ Implementations enforce these limits before accepting a snapshot:
 Input, result, configuration, and trigger schemas are Draft 2020-12 documents
 carried in `google.protobuf.Struct`.
 
-| Area | Rule |
-| --- | --- |
-| Root | Explicitly declare `$schema` and `type: object`. Boolean subschemas are allowed below the root. |
-| References | Use only local fragment references that resolve inside the same document. Never retrieve a remote schema. |
-| Base URI | `$id` is prohibited, so nested content cannot change the reference base. |
-| JSON values | Reject duplicate object keys, NaN, infinity, invalid Unicode, non-JSON values, and numbers outside RFC 8785's interoperable domain. |
-| Content | Carry types, constraints, and safe static metadata—not configured values, credentials, customer data, or component bindings. |
+| Area | Rule                                                                                                                                                                         |
+| --- |------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Root | Explicitly declare `$schema` and `type: object`. Boolean subschemas are allowed below the root.                                                                              |
+| References | Use only local fragment references that resolve inside the same document. Never retrieve a remote schema.                                                                    |
+| Base URI | `$id` is prohibited, so nested content cannot change the reference base.                                                                                                     |
+| JSON values | Reject duplicate object keys, NaN, infinity, invalid Unicode, non-JSON values, and numbers outside RFC 8785's interoperable domain.                                          |
+| Content | Carry types, constraints, and safe static metadata, not configured values, credentials, customer data, or component bindings.                                                |
 | Secrets | Mark secret-bearing inputs with `writeOnly: true`. They cannot expose `default`, `examples`, `const`, or `enum` values, directly or through references and composed schemas. |
 
 ### What validation cannot prove

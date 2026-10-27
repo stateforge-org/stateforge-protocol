@@ -117,7 +117,7 @@ require adding a new component-specific message or enum to SFP.
 
 Core identifiers also carry a small Protocol-owned structural contract. This
 does not define styling or renderer properties; it guarantees that an accepted
-core tree—including a custom component's fallback—can be interpreted the same
+core tree, including a custom component's fallback, can be interpreted the same
 way by every conforming Control Plane.
 
 | Core family | Surfaces | Children | Binding and asset slots |
