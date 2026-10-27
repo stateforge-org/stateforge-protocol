@@ -101,7 +101,7 @@ render:
 | Category | Component identifiers |
 | --- | --- |
 | Layout | `layout.stack`, `layout.grid`, `layout.section`, `layout.tabs`, `layout.steps` |
-| Input | `input.form`, `input.field`, `input.object`, `input.array`, `input.key_value`, `input.code` |
+| Input | `input.form`, `input.field`, `input.object`, `input.array`, `input.key_value`, `input.code`, `input.secret` |
 | Content and structured data | `content.text`, `content.markdown`, `data.key_value`, `data.table`, `data.tree`, `data.code`, `data.diff`, `data.log` |
 | Status and visualization | `status.badge`, `status.progress`, `status.timeline`, `data.metric`, `data.chart`, `data.topology`, `data.artifacts` |
 | Media and actions | `media.image`, `action.operation_submit`, `action.operation_cancel` |
@@ -112,6 +112,33 @@ For example, the complete table identifier is
 
 These are identifiers, not protobuf message types. Adding a renderer does not
 require adding a new component-specific message or enum to SFP.
+
+### Portable core structure
+
+Core identifiers also carry a small Protocol-owned structural contract. This
+does not define styling or renderer properties; it guarantees that an accepted
+core tree—including a custom component's fallback—can be interpreted the same
+way by every conforming Control Plane.
+
+| Core family | Surfaces | Children | Binding and asset slots |
+| --- | --- | --- | --- |
+| Layout | All | One or more | No bindings or assets |
+| Form, object, array | Operation request or trigger policy | Optional nested controls | Required `schema`; optional public `value` |
+| Field, key/value, code input | Operation request or trigger policy | None | Required `schema`; optional public `value` |
+| Secret input | Operation request or trigger policy | None | Required `schema`; secret value remains private host state |
+| Text and Markdown | All | None | Optional `value` |
+| Key/value, tree, code, badge, progress, and metric | All | None | Required `value` |
+| Table, log, timeline, chart, and artifacts | All | None | Required `rows`, `entries`, `events`, `series`, or `items` respectively |
+| Diff | All | None | Required `before` and `after` |
+| Topology | All | None | Required `nodes` and `edges` |
+| Image | All | None | Required `source` asset |
+| Submit action | Operation request | None | Host-controlled action; no binding or asset |
+| Cancel action | Operation run | None | Host-controlled action; no binding or asset |
+
+A core component cannot declare a fallback. Custom components must declare a
+core-only fallback, and every node in that fallback is checked against this
+same structural registry. Renderer-specific `properties` remain owned by the
+Control Plane registry.
 
 ## Data bindings
 

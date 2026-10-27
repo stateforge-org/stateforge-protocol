@@ -8,6 +8,7 @@ import zlib
 from pathlib import Path
 
 import pytest
+from google.protobuf import struct_pb2
 from google.protobuf.json_format import MessageToDict, ParseDict
 
 from stateforge_protocol.sfp.manifest.v1 import contract, manifest_pb2
@@ -479,6 +480,108 @@ def test_core_component_catalog_is_explicit() -> None:
         _validate_presentation(response)
 
 
+def test_core_action_is_rejected_outside_its_operation_surface() -> None:
+    response = _presentation_response()
+    root = response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root
+    root.component_identifier = "stateforge.ui/action.operation_submit@1"
+
+    with pytest.raises(ManifestValidationError, match="unavailable"):
+        _validate_presentation(response)
+
+
+def test_core_leaf_component_rejects_children() -> None:
+    response = _presentation_response()
+    image = _provider_image(response)
+    child = image.children.add(
+        component_identifier="stateforge.ui/content.text@1"
+    )
+    child.properties.CopyFrom(struct_pb2.Struct())
+
+    with pytest.raises(ManifestValidationError, match="child contract"):
+        _validate_presentation(response)
+
+
+def test_core_component_requires_its_binding_slots() -> None:
+    response = _presentation_response()
+    event = next(iter(response.presentation.triggers.values()))
+    event.surfaces[contract.TRIGGER_EVENT_SURFACE].root.ClearField("bindings")
+
+    with pytest.raises(ManifestValidationError, match="required binding"):
+        _validate_presentation(response)
+
+
+def test_core_component_rejects_unknown_binding_slots() -> None:
+    response = _presentation_response()
+    image = _provider_image(response)
+    image.bindings[
+        "value"
+    ].source_identifier = contract.PROVIDER_MANIFEST_BINDING
+
+    with pytest.raises(ManifestValidationError, match="binding slot"):
+        _validate_presentation(response)
+
+
+def test_core_input_schema_slot_rejects_value_sources() -> None:
+    response = _presentation_response()
+    request = _operation_root(response, contract.OPERATION_REQUEST_SURFACE)
+    request.bindings[
+        "schema"
+    ].source_identifier = contract.OPERATION_REQUEST_PUBLIC_VALUE_BINDING
+
+    with pytest.raises(ManifestValidationError, match="component slot"):
+        _validate_presentation(response)
+
+
+def test_core_media_component_requires_its_asset_slot() -> None:
+    response = _presentation_response()
+    _provider_image(response).ClearField("asset_bindings")
+
+    with pytest.raises(ManifestValidationError, match="required asset"):
+        _validate_presentation(response)
+
+
+def test_core_component_cannot_declare_a_fallback() -> None:
+    response = _presentation_response()
+    root = response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root
+    root.fallback.component_identifier = "stateforge.ui/content.text@1"
+    root.fallback.properties.CopyFrom(struct_pb2.Struct())
+
+    with pytest.raises(ManifestValidationError, match="cannot declare"):
+        _validate_presentation(response)
+
+
+def test_secret_input_is_part_of_the_portable_core_catalog() -> None:
+    secret = contract.CORE_COMPONENT_CONTRACTS["stateforge.ui/input.secret@1"]
+
+    assert secret.required_bindings == frozenset({"schema"})
+    assert "value" not in secret.optional_bindings
+
+
+@pytest.mark.parametrize(
+    ("identifier", "required_bindings"),
+    [
+        ("stateforge.ui/data.table@1", {"rows"}),
+        ("stateforge.ui/data.diff@1", {"before", "after"}),
+        ("stateforge.ui/data.log@1", {"entries"}),
+        ("stateforge.ui/status.timeline@1", {"events"}),
+        ("stateforge.ui/data.chart@1", {"series"}),
+        ("stateforge.ui/data.topology@1", {"nodes", "edges"}),
+        ("stateforge.ui/data.artifacts@1", {"items"}),
+    ],
+)
+def test_core_data_components_have_semantic_binding_slots(
+    identifier: str,
+    required_bindings: set[str],
+) -> None:
+    component = contract.CORE_COMPONENT_CONTRACTS[identifier]
+
+    assert component.required_bindings == frozenset(required_bindings)
+
+
 def test_custom_component_requires_renderer_metadata() -> None:
     response = _presentation_response()
     del response.presentation.renderer_requirements["stateforge.git"]
@@ -546,7 +649,7 @@ def test_repetition_scope_is_available_to_component_bindings() -> None:
     )
     repeated.repeat.item_scope = "row"
     repeated.repeat.max_items = 100
-    repeated.bindings["item"].CopyFrom(
+    repeated.bindings["rows"].CopyFrom(
         manifest_pb2.DataBinding(
             source_identifier=contract.REPETITION_ITEM_BINDING,
             pointer="/name",
@@ -678,7 +781,17 @@ def test_asset_reference_must_resolve() -> None:
 
 def test_unreferenced_assets_are_rejected() -> None:
     response = _presentation_response()
-    _provider_image(response).ClearField("asset_bindings")
+    content = _png()
+    digest = "sha256:" + hashlib.sha256(content).hexdigest()
+    response.presentation.assets[digest].CopyFrom(
+        manifest_pb2.PresentationAsset(
+            media_type="image/png",
+            content=content,
+            width=1,
+            height=1,
+            alt_text="Unreferenced image",
+        )
+    )
 
     with pytest.raises(ManifestValidationError, match="unreferenced asset"):
         _validate_presentation(response)

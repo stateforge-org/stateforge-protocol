@@ -223,14 +223,13 @@ def _validate_component(
     if state.component_count > contract.MAX_PRESENTATION_COMPONENTS:
         raise error_type("presentation: component count limit exceeded")
 
-    _validate_component_identity(
+    core_contract = _validate_component_identity(
         node,
         core_only=core_only,
         state=state,
         requirements=requirements,
         error_type=error_type,
     )
-
     properties = cast(dict[str, Any], node["properties"])
     if (
         len(rfc8785.dumps(properties))
@@ -264,6 +263,13 @@ def _validate_component(
     state.asset_references.update(
         cast(dict[str, str], node["assetBindings"]).values()
     )
+    if core_contract is not None:
+        _validate_core_component_contract(
+            node,
+            surface_identifier=surface_identifier,
+            component_contract=core_contract,
+            error_type=error_type,
+        )
 
     _validate_optional_fallback(
         node,
@@ -296,12 +302,22 @@ def _validate_component_identity(
     state: _PresentationState,
     requirements: dict[str, dict[str, Any]],
     error_type: type[ValueError],
-) -> None:
+) -> contract.CoreComponentContract | None:
     identifier = cast(str, node["componentIdentifier"])
     namespace = _namespace(identifier)
     is_core = namespace == contract.CORE_COMPONENT_NAMESPACE
-    if is_core and identifier not in contract.CORE_COMPONENT_IDENTIFIERS:
-        raise error_type("presentation: unknown core component identifier")
+    if is_core:
+        try:
+            component_contract = contract.CORE_COMPONENT_CONTRACTS[identifier]
+        except KeyError:
+            raise error_type(
+                "presentation: unknown core component identifier"
+            ) from None
+        if "fallback" in node:
+            raise error_type(
+                "presentation: core component cannot declare a fallback"
+            )
+        return component_contract
     if core_only and not is_core:
         raise error_type(
             "presentation: custom component fallback must use core components"
@@ -316,6 +332,68 @@ def _validate_component_identity(
                 "presentation: custom component requires a core fallback"
             )
         state.custom_namespaces.add(namespace)
+    return None
+
+
+def _validate_core_component_contract(
+    node: dict[str, Any],
+    *,
+    surface_identifier: str,
+    component_contract: contract.CoreComponentContract,
+    error_type: type[ValueError],
+) -> None:
+    if surface_identifier not in component_contract.permitted_surfaces:
+        raise error_type(
+            "presentation: core component is unavailable on this surface"
+        )
+
+    child_count = len(cast(list[dict[str, Any]], node["children"]))
+    if not (
+        component_contract.minimum_children
+        <= child_count
+        <= component_contract.maximum_children
+    ):
+        raise error_type(
+            "presentation: core component child contract is violated"
+        )
+
+    bindings = cast(dict[str, dict[str, Any]], node["bindings"])
+    binding_names = set(bindings)
+    permitted_bindings = (
+        component_contract.required_bindings
+        | component_contract.optional_bindings
+    )
+    if not component_contract.required_bindings <= binding_names:
+        raise error_type(
+            "presentation: core component is missing a required binding"
+        )
+    if not binding_names <= permitted_bindings:
+        raise error_type(
+            "presentation: core component binding slot is not permitted"
+        )
+    for slot, permitted_sources in component_contract.binding_source_rules:
+        binding = bindings.get(slot)
+        if binding is not None and binding["sourceIdentifier"] not in (
+            permitted_sources
+        ):
+            raise error_type(
+                "presentation: binding source is invalid for core "
+                "component slot"
+            )
+
+    asset_bindings = cast(dict[str, str], node["assetBindings"])
+    asset_names = set(asset_bindings)
+    permitted_assets = (
+        component_contract.required_assets | component_contract.optional_assets
+    )
+    if not component_contract.required_assets <= asset_names:
+        raise error_type(
+            "presentation: core component is missing a required asset"
+        )
+    if not asset_names <= permitted_assets:
+        raise error_type(
+            "presentation: core component asset slot is not permitted"
+        )
 
 
 def _extend_repetition_scopes(
