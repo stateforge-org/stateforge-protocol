@@ -1,0 +1,240 @@
+{
+  "providerInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c",
+  "endpointGeneration": "4",
+  "manifestSchemaVersion": 1,
+  "manifest": {
+    "providerIdentity": "stateforge.git",
+    "implementationVersion": "1.0.0",
+    "displayName": "Git Provider",
+    "operations": {
+      "stateforge.git/reference.resolve@1": {
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "token": {
+              "type": "string",
+              "writeOnly": true
+            }
+          },
+          "required": [
+            "repository"
+          ],
+          "additionalProperties": false
+        },
+        "resultSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "commit": {
+              "type": "string"
+            },
+            "changed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "commit"
+          ],
+          "additionalProperties": false
+        },
+        "implements": []
+      }
+    },
+    "runtimeRequirements": {
+      "executable.git": {
+        "description": "Git executable available to the Provider",
+        "versionConstraint": ">=2.40"
+      }
+    },
+    "platforms": [
+      {
+        "operatingSystem": "linux",
+        "architecture": "x86_64"
+      }
+    ],
+    "configurationSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "repository"
+      ],
+      "additionalProperties": false
+    },
+    "triggers": {
+      "stateforge.git/reference.changed@1": {
+        "payloadSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "reference": {
+              "type": "string"
+            },
+            "previous": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "reference"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "manifestRevision": "sha256:c836c97c8f170ea22b7c9002aa6075d84746dab7bbe3c822f628fd1176fd3c56",
+  "sessionId": "manifest-session-A",
+  "presentation": {
+    "presentationSchemaVersion": 1,
+    "provider": {
+      "surfaces": {
+        "stateforge.ui/surface.provider.overview@1": {
+          "root": {
+            "componentIdentifier": "stateforge.ui/layout.stack@1",
+            "properties": {
+              "gap": "large"
+            },
+            "bindings": {},
+            "children": [
+              {
+                "componentIdentifier": "stateforge.ui/media.image@1",
+                "properties": {
+                  "fit": "contain"
+                },
+                "bindings": {},
+                "children": [],
+                "assetBindings": {
+                  "source": "sha256:8c5dec37f2aba701bd79272fc7fe4d34292623e531df7fd23b95cb3c96034741"
+                }
+              },
+              {
+                "componentIdentifier": "stateforge.ui/content.text@1",
+                "properties": {
+                  "title": "Git Provider",
+                  "body": "Inspect and resolve Git references."
+                },
+                "bindings": {},
+                "children": [],
+                "assetBindings": {}
+              }
+            ],
+            "assetBindings": {}
+          }
+        }
+      }
+    },
+    "operations": {
+      "stateforge.git/reference.resolve@1": {
+        "surfaces": {
+          "stateforge.ui/surface.operation.request@1": {
+            "root": {
+              "componentIdentifier": "stateforge.ui/input.form@1",
+              "properties": {
+                "submitLabel": "Resolve reference"
+              },
+              "bindings": {
+                "schema": {
+                  "sourceIdentifier": "stateforge.binding/operation.request.schema@1",
+                  "pointer": "",
+                  "scope": ""
+                },
+                "value": {
+                  "sourceIdentifier": "stateforge.binding/operation.request.public_value@1",
+                  "pointer": "",
+                  "scope": ""
+                }
+              },
+              "children": [],
+              "assetBindings": {}
+            }
+          },
+          "stateforge.ui/surface.operation.result@1": {
+            "root": {
+              "componentIdentifier": "example.git/data.commit_graph@1",
+              "properties": {},
+              "bindings": {
+                "result": {
+                  "sourceIdentifier": "stateforge.binding/operation.result.value@1",
+                  "pointer": "",
+                  "scope": ""
+                }
+              },
+              "children": [],
+              "assetBindings": {},
+              "fallback": {
+                "componentIdentifier": "stateforge.ui/data.tree@1",
+                "properties": {},
+                "bindings": {
+                  "value": {
+                    "sourceIdentifier": "stateforge.binding/operation.result.value@1",
+                    "pointer": "",
+                    "scope": ""
+                  }
+                },
+                "children": [],
+                "assetBindings": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "triggers": {
+      "stateforge.git/reference.changed@1": {
+        "surfaces": {
+          "stateforge.ui/surface.trigger.event@1": {
+            "root": {
+              "componentIdentifier": "stateforge.ui/data.key_value@1",
+              "properties": {},
+              "bindings": {
+                "value": {
+                  "sourceIdentifier": "stateforge.binding/trigger.payload.value@1",
+                  "pointer": "",
+                  "scope": ""
+                }
+              },
+              "children": [],
+              "assetBindings": {}
+            }
+          }
+        }
+      }
+    },
+    "assets": {
+      "sha256:8c5dec37f2aba701bd79272fc7fe4d34292623e531df7fd23b95cb3c96034741": {
+        "mediaType": "image/svg+xml",
+        "content": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZD0iTTIgMmgxMnYxMkgyeiIvPjwvc3ZnPg==",
+        "width": 16,
+        "height": 16,
+        "altText": "Git Provider mark"
+      }
+    },
+    "rendererRequirements": {
+      "example.git": {
+        "extensionIdentifier": "example.git/renderer@1",
+        "extensionVersion": "1.0.0",
+        "rendererApiVersion": "1.0.0",
+        "artifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "permissions": []
+      }
+    }
+  },
+  "presentationRevision": "sha256:df215c63eb41659f8d38649cf84bd9f9e7696aa9d08b88219f219361d1bc8d2d"
+}

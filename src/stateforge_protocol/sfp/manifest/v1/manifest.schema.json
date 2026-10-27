@@ -242,7 +242,7 @@
         },
         "versionConstraint": {
           "type": "string",
-          "minLength": 0,
+          "minItems": 0,
           "maxLength": 255
         }
       },
@@ -283,6 +283,325 @@
       },
       "required": [
         "payloadSchema"
+      ],
+      "additionalProperties": false
+    },
+    "jsonPointer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^(/([^~/]|~0|~1)*)+$(?![\\s\\S])"
+    },
+    "bindingPointer": {
+      "oneOf": [
+        {
+          "const": ""
+        },
+        {
+          "$ref": "#/$defs/jsonPointer"
+        }
+      ]
+    },
+    "presentationScope": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*(?![\\s\\S])"
+    },
+    "dataBinding": {
+      "type": "object",
+      "properties": {
+        "sourceIdentifier": {
+          "$ref": "#/$defs/identifier"
+        },
+        "pointer": {
+          "$ref": "#/$defs/bindingPointer"
+        },
+        "scope": {
+          "oneOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/presentationScope"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sourceIdentifier",
+        "pointer",
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "condition": {
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/dataBinding"
+        },
+        "operator": {
+          "enum": [
+            "CONDITION_OPERATOR_EXISTS",
+            "CONDITION_OPERATOR_NOT_EXISTS",
+            "CONDITION_OPERATOR_EQUALS",
+            "CONDITION_OPERATOR_NOT_EQUALS"
+          ]
+        },
+        "value": true
+      },
+      "required": [
+        "binding",
+        "operator"
+      ],
+      "additionalProperties": false
+    },
+    "repetition": {
+      "type": "object",
+      "properties": {
+        "collection": {
+          "$ref": "#/$defs/dataBinding"
+        },
+        "itemScope": {
+          "$ref": "#/$defs/presentationScope"
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        }
+      },
+      "required": [
+        "collection",
+        "itemScope",
+        "maxItems"
+      ],
+      "additionalProperties": false
+    },
+    "componentNode": {
+      "type": "object",
+      "properties": {
+        "componentIdentifier": {
+          "$ref": "#/$defs/identifier"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "bindings": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/presentationScope"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/dataBinding"
+          },
+          "minProperties": 0,
+          "maxProperties": 64
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/componentNode"
+          },
+          "minLength": 0,
+          "maxItems": 256
+        },
+        "fallback": {
+          "$ref": "#/$defs/componentNode"
+        },
+        "condition": {
+          "$ref": "#/$defs/condition"
+        },
+        "repeat": {
+          "$ref": "#/$defs/repetition"
+        },
+        "assetBindings": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/presentationScope"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/revision"
+          },
+          "minProperties": 0,
+          "maxProperties": 32
+        }
+      },
+      "required": [
+        "componentIdentifier",
+        "properties",
+        "bindings",
+        "children",
+        "assetBindings"
+      ],
+      "additionalProperties": false
+    },
+    "presentationSurface": {
+      "type": "object",
+      "properties": {
+        "root": {
+          "$ref": "#/$defs/componentNode"
+        }
+      },
+      "required": [
+        "root"
+      ],
+      "additionalProperties": false
+    },
+    "presentationTarget": {
+      "type": "object",
+      "properties": {
+        "surfaces": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/presentationSurface"
+          },
+          "minProperties": 1,
+          "maxProperties": 8
+        }
+      },
+      "required": [
+        "surfaces"
+      ],
+      "additionalProperties": false
+    },
+    "rendererRequirement": {
+      "type": "object",
+      "properties": {
+        "extensionIdentifier": {
+          "$ref": "#/$defs/identifier"
+        },
+        "extensionVersion": {
+          "$ref": "#/$defs/semver"
+        },
+        "rendererApiVersion": {
+          "$ref": "#/$defs/semver"
+        },
+        "artifactDigest": {
+          "$ref": "#/$defs/revision"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "minItems": 0,
+          "maxItems": 32,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "extensionIdentifier",
+        "extensionVersion",
+        "rendererApiVersion",
+        "artifactDigest",
+        "permissions"
+      ],
+      "additionalProperties": false
+    },
+    "presentationAsset": {
+      "type": "object",
+      "properties": {
+        "mediaType": {
+          "enum": [
+            "image/png",
+            "image/svg+xml"
+          ]
+        },
+        "content": {
+          "type": "string",
+          "minLength": 4,
+          "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\\s\\S])"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192
+        },
+        "altText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "required": [
+        "mediaType",
+        "content",
+        "width",
+        "height",
+        "altText"
+      ],
+      "additionalProperties": false
+    },
+    "providerPresentation": {
+      "type": "object",
+      "properties": {
+        "presentationSchemaVersion": {
+          "const": 1
+        },
+        "provider": {
+          "$ref": "#/$defs/presentationTarget"
+        },
+        "operations": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/presentationTarget"
+          },
+          "minProperties": 0,
+          "maxProperties": 1024
+        },
+        "triggers": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/presentationTarget"
+          },
+          "minProperties": 0,
+          "maxProperties": 1024
+        },
+        "assets": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/revision"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/presentationAsset"
+          },
+          "minProperties": 0,
+          "maxProperties": 64
+        },
+        "rendererRequirements": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/dottedIdentifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/rendererRequirement"
+          },
+          "minProperties": 0,
+          "maxProperties": 64
+        }
+      },
+      "required": [
+        "presentationSchemaVersion",
+        "operations",
+        "triggers",
+        "assets",
+        "rendererRequirements"
       ],
       "additionalProperties": false
     },
@@ -410,6 +729,23 @@
         },
         "sessionId": {
           "$ref": "#/$defs/sessionId"
+        },
+        "presentation": {
+          "type": "object",
+          "required": [
+            "presentationSchemaVersion"
+          ],
+          "properties": {
+            "presentationSchemaVersion": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            }
+          },
+          "additionalProperties": true
+        },
+        "presentationRevision": {
+          "$ref": "#/$defs/revision"
         }
       },
       "required": [
@@ -418,9 +754,35 @@
         "manifestSchemaVersion",
         "manifestRevision",
         "manifest",
-        "sessionId"
+      "sessionId"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "presentation"
+            ]
+          },
+          "then": {
+        "required": [
+          "presentationRevision"
+        ],
+            "properties": {
+              "presentationRevision": {
+                "$ref": "#/$defs/revision"
+              }
+            }
+          },
+        "else": {
+          "not": {
+            "required": [
+              "presentationRevision"
+            ]
+            }
+          }
+        }
+      ]
     },
     "sessionId": {
       "type": "string",

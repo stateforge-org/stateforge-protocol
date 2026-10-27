@@ -8,6 +8,7 @@ from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 import builtins as _builtins
 import sys
 import typing as _typing
@@ -18,6 +19,30 @@ else:
     from typing_extensions import TypeAlias as _TypeAlias, Never as _Never
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class _ConditionOperator:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _ConditionOperatorEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_ConditionOperator.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    CONDITION_OPERATOR_UNSPECIFIED: _ConditionOperator.ValueType  # 0
+    CONDITION_OPERATOR_EXISTS: _ConditionOperator.ValueType  # 1
+    CONDITION_OPERATOR_NOT_EXISTS: _ConditionOperator.ValueType  # 2
+    CONDITION_OPERATOR_EQUALS: _ConditionOperator.ValueType  # 3
+    CONDITION_OPERATOR_NOT_EQUALS: _ConditionOperator.ValueType  # 4
+
+class ConditionOperator(_ConditionOperator, metaclass=_ConditionOperatorEnumTypeWrapper):
+    """ConditionOperator controls whether a node is rendered. Equality compares
+    JSON values exactly after resolving the binding.
+    """
+
+CONDITION_OPERATOR_UNSPECIFIED: ConditionOperator.ValueType  # 0
+CONDITION_OPERATOR_EXISTS: ConditionOperator.ValueType  # 1
+CONDITION_OPERATOR_NOT_EXISTS: ConditionOperator.ValueType  # 2
+CONDITION_OPERATOR_EQUALS: ConditionOperator.ValueType  # 3
+CONDITION_OPERATOR_NOT_EQUALS: ConditionOperator.ValueType  # 4
+Global___ConditionOperator: _TypeAlias = ConditionOperator  # noqa: Y015
 
 @_typing.final
 class GetManifestRequest(_message.Message):
@@ -77,6 +102,8 @@ class GetManifestResponse(_message.Message):
     MANIFEST_REVISION_FIELD_NUMBER: _builtins.int
     MANIFEST_FIELD_NUMBER: _builtins.int
     SESSION_ID_FIELD_NUMBER: _builtins.int
+    PRESENTATION_FIELD_NUMBER: _builtins.int
+    PRESENTATION_REVISION_FIELD_NUMBER: _builtins.int
     provider_instance_id: _builtins.str
     """Must equal the request's expected identity and the negotiated session."""
     endpoint_generation: _builtins.int
@@ -94,9 +121,22 @@ class GetManifestResponse(_message.Message):
     The Agent must match it to both the request and its current session before
     accepting or reusing a cached declaration. Not part of manifest_revision.
     """
+    presentation_revision: _builtins.str
+    """Present exactly when presentation is present. "sha256:" plus 64 lowercase
+    hex digits over the canonical presentation preimage defined by this
+    package. Session ID and endpoint generation are excluded.
+    """
     @_builtins.property
     def manifest(self) -> Global___ProviderManifest:
         """Required. At most 1 MiB of canonical JSON for the revision preimage."""
+
+    @_builtins.property
+    def presentation(self) -> Global___ProviderPresentation:
+        """Optional declarative presentation snapshot. Operational JSON Schemas
+        remain sufficient to render every declared capability when this field is
+        absent, unsupported or rejected. Presentation never changes execution
+        semantics and is not part of manifest_revision.
+        """
 
     def __init__(
         self,
@@ -107,12 +147,16 @@ class GetManifestResponse(_message.Message):
         manifest_revision: _builtins.str = ...,
         manifest: Global___ProviderManifest | None = ...,
         session_id: _builtins.str = ...,
+        presentation: Global___ProviderPresentation | None = ...,
+        presentation_revision: _builtins.str | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["manifest", b"manifest"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_presentation_revision", b"_presentation_revision", "manifest", b"manifest", "presentation", b"presentation", "presentation_revision", b"presentation_revision"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["endpoint_generation", b"endpoint_generation", "manifest", b"manifest", "manifest_revision", b"manifest_revision", "manifest_schema_version", b"manifest_schema_version", "provider_instance_id", b"provider_instance_id", "session_id", b"session_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_presentation_revision", b"_presentation_revision", "endpoint_generation", b"endpoint_generation", "manifest", b"manifest", "manifest_revision", b"manifest_revision", "manifest_schema_version", b"manifest_schema_version", "presentation", b"presentation", "presentation_revision", b"presentation_revision", "provider_instance_id", b"provider_instance_id", "session_id", b"session_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
+    _WhichOneofReturnType__presentation_revision: _TypeAlias = _typing.Literal["presentation_revision"]  # noqa: Y015
+    _WhichOneofArgType__presentation_revision: _TypeAlias = _typing.Literal["_presentation_revision", b"_presentation_revision"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__presentation_revision) -> _WhichOneofReturnType__presentation_revision | None: ...
 
 Global___GetManifestResponse: _TypeAlias = GetManifestResponse  # noqa: Y015
 
@@ -373,3 +417,472 @@ class TriggerDeclaration(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___TriggerDeclaration: _TypeAlias = TriggerDeclaration  # noqa: Y015
+
+@_typing.final
+class ProviderPresentation(_message.Message):
+    """ProviderPresentation is an optional, independently revised visual overlay
+    on an accepted ProviderManifest. Maps use the exact operation and trigger
+    identifiers declared by that manifest. Presentation cannot add, remove or
+    redefine capabilities or their JSON Schemas.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class OperationsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___PresentationTarget: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___PresentationTarget | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+    @_typing.final
+    class TriggersEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___PresentationTarget: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___PresentationTarget | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+    @_typing.final
+    class AssetsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___PresentationAsset: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___PresentationAsset | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+    @_typing.final
+    class RendererRequirementsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___RendererRequirement: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___RendererRequirement | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+    PRESENTATION_SCHEMA_VERSION_FIELD_NUMBER: _builtins.int
+    PROVIDER_FIELD_NUMBER: _builtins.int
+    OPERATIONS_FIELD_NUMBER: _builtins.int
+    TRIGGERS_FIELD_NUMBER: _builtins.int
+    ASSETS_FIELD_NUMBER: _builtins.int
+    RENDERER_REQUIREMENTS_FIELD_NUMBER: _builtins.int
+    presentation_schema_version: _builtins.int
+    """Presentation document version. Version 1 is defined by this package."""
+    @_builtins.property
+    def provider(self) -> Global___PresentationTarget:
+        """Optional Provider-level surfaces."""
+
+    @_builtins.property
+    def operations(self) -> _containers.MessageMap[_builtins.str, Global___PresentationTarget]:
+        """Optional surfaces keyed by declared operation identifier."""
+
+    @_builtins.property
+    def triggers(self) -> _containers.MessageMap[_builtins.str, Global___PresentationTarget]:
+        """Optional surfaces keyed by declared trigger identifier."""
+
+    @_builtins.property
+    def assets(self) -> _containers.MessageMap[_builtins.str, Global___PresentationAsset]:
+        """Embedded content-addressed visuals keyed by their sha256 digest."""
+
+    @_builtins.property
+    def renderer_requirements(self) -> _containers.MessageMap[_builtins.str, Global___RendererRequirement]:
+        """Renderer metadata keyed by the custom component namespace it serves.
+        Every stateforge.* namespace is reserved and cannot require an extension.
+        """
+
+    def __init__(
+        self,
+        *,
+        presentation_schema_version: _builtins.int = ...,
+        provider: Global___PresentationTarget | None = ...,
+        operations: _abc.Mapping[_builtins.str, Global___PresentationTarget] | None = ...,
+        triggers: _abc.Mapping[_builtins.str, Global___PresentationTarget] | None = ...,
+        assets: _abc.Mapping[_builtins.str, Global___PresentationAsset] | None = ...,
+        renderer_requirements: _abc.Mapping[_builtins.str, Global___RendererRequirement] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["provider", b"provider"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["assets", b"assets", "operations", b"operations", "presentation_schema_version", b"presentation_schema_version", "provider", b"provider", "renderer_requirements", b"renderer_requirements", "triggers", b"triggers"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ProviderPresentation: _TypeAlias = ProviderPresentation  # noqa: Y015
+
+@_typing.final
+class PresentationTarget(_message.Message):
+    """PresentationTarget owns the surfaces declared for one Provider, operation or
+    trigger. Keys are versioned surface identifiers defined by this contract.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class SurfacesEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___PresentationSurface: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___PresentationSurface | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+    SURFACES_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def surfaces(self) -> _containers.MessageMap[_builtins.str, Global___PresentationSurface]: ...
+    def __init__(
+        self,
+        *,
+        surfaces: _abc.Mapping[_builtins.str, Global___PresentationSurface] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["surfaces", b"surfaces"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___PresentationTarget: _TypeAlias = PresentationTarget  # noqa: Y015
+
+@_typing.final
+class PresentationSurface(_message.Message):
+    """PresentationSurface is one bounded declarative component tree."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ROOT_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def root(self) -> Global___ComponentNode: ...
+    def __init__(
+        self,
+        *,
+        root: Global___ComponentNode | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["root", b"root"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["root", b"root"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___PresentationSurface: _TypeAlias = PresentationSurface  # noqa: Y015
+
+@_typing.final
+class ComponentNode(_message.Message):
+    """ComponentNode selects a renderer by identifier and supplies only declarative
+    data. Properties are interpreted by the Control Plane renderer registry, not
+    by SFP. Custom components require renderer metadata and a core-only fallback.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class BindingsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___DataBinding: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___DataBinding | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+    @_typing.final
+    class AssetBindingsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+    COMPONENT_IDENTIFIER_FIELD_NUMBER: _builtins.int
+    PROPERTIES_FIELD_NUMBER: _builtins.int
+    BINDINGS_FIELD_NUMBER: _builtins.int
+    CHILDREN_FIELD_NUMBER: _builtins.int
+    FALLBACK_FIELD_NUMBER: _builtins.int
+    CONDITION_FIELD_NUMBER: _builtins.int
+    REPEAT_FIELD_NUMBER: _builtins.int
+    ASSET_BINDINGS_FIELD_NUMBER: _builtins.int
+    component_identifier: _builtins.str
+    @_builtins.property
+    def properties(self) -> _struct_pb2.Struct: ...
+    @_builtins.property
+    def bindings(self) -> _containers.MessageMap[_builtins.str, Global___DataBinding]: ...
+    @_builtins.property
+    def children(self) -> _containers.RepeatedCompositeFieldContainer[Global___ComponentNode]: ...
+    @_builtins.property
+    def fallback(self) -> Global___ComponentNode: ...
+    @_builtins.property
+    def condition(self) -> Global___Condition: ...
+    @_builtins.property
+    def repeat(self) -> Global___Repetition: ...
+    @_builtins.property
+    def asset_bindings(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """Renderer-defined slot name to embedded asset digest."""
+
+    def __init__(
+        self,
+        *,
+        component_identifier: _builtins.str = ...,
+        properties: _struct_pb2.Struct | None = ...,
+        bindings: _abc.Mapping[_builtins.str, Global___DataBinding] | None = ...,
+        children: _abc.Iterable[Global___ComponentNode] | None = ...,
+        fallback: Global___ComponentNode | None = ...,
+        condition: Global___Condition | None = ...,
+        repeat: Global___Repetition | None = ...,
+        asset_bindings: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["condition", b"condition", "fallback", b"fallback", "properties", b"properties", "repeat", b"repeat"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["asset_bindings", b"asset_bindings", "bindings", b"bindings", "children", b"children", "component_identifier", b"component_identifier", "condition", b"condition", "fallback", b"fallback", "properties", b"properties", "repeat", b"repeat"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ComponentNode: _TypeAlias = ComponentNode  # noqa: Y015
+
+@_typing.final
+class DataBinding(_message.Message):
+    """DataBinding points at immutable data supplied by the Control Plane for the
+    current surface. Empty pointer selects the complete source document. Scope is
+    empty except for bindings to a named repetition item.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SOURCE_IDENTIFIER_FIELD_NUMBER: _builtins.int
+    POINTER_FIELD_NUMBER: _builtins.int
+    SCOPE_FIELD_NUMBER: _builtins.int
+    source_identifier: _builtins.str
+    pointer: _builtins.str
+    scope: _builtins.str
+    def __init__(
+        self,
+        *,
+        source_identifier: _builtins.str = ...,
+        pointer: _builtins.str = ...,
+        scope: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["pointer", b"pointer", "scope", b"scope", "source_identifier", b"source_identifier"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___DataBinding: _TypeAlias = DataBinding  # noqa: Y015
+
+@_typing.final
+class Condition(_message.Message):
+    """Condition is optional. EXISTS and NOT_EXISTS omit value; equality operators
+    require value, including an explicitly supplied JSON null.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    BINDING_FIELD_NUMBER: _builtins.int
+    OPERATOR_FIELD_NUMBER: _builtins.int
+    VALUE_FIELD_NUMBER: _builtins.int
+    operator: Global___ConditionOperator.ValueType
+    @_builtins.property
+    def binding(self) -> Global___DataBinding: ...
+    @_builtins.property
+    def value(self) -> _struct_pb2.Value: ...
+    def __init__(
+        self,
+        *,
+        binding: Global___DataBinding | None = ...,
+        operator: Global___ConditionOperator.ValueType = ...,
+        value: _struct_pb2.Value | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["binding", b"binding", "value", b"value"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["binding", b"binding", "operator", b"operator", "value", b"value"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___Condition: _TypeAlias = Condition  # noqa: Y015
+
+@_typing.final
+class Repetition(_message.Message):
+    """Repetition renders a node once per item in one bound collection. max_items is
+    a required positive safety ceiling; item_scope names the item for descendant
+    bindings.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    COLLECTION_FIELD_NUMBER: _builtins.int
+    ITEM_SCOPE_FIELD_NUMBER: _builtins.int
+    MAX_ITEMS_FIELD_NUMBER: _builtins.int
+    item_scope: _builtins.str
+    max_items: _builtins.int
+    @_builtins.property
+    def collection(self) -> Global___DataBinding: ...
+    def __init__(
+        self,
+        *,
+        collection: Global___DataBinding | None = ...,
+        item_scope: _builtins.str = ...,
+        max_items: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["collection", b"collection"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["collection", b"collection", "item_scope", b"item_scope", "max_items", b"max_items"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___Repetition: _TypeAlias = Repetition  # noqa: Y015
+
+@_typing.final
+class RendererRequirement(_message.Message):
+    """RendererRequirement identifies a separately distributed renderer extension.
+    SFP transports metadata only: no executable bytes, URL or install command is
+    carried by this message. Permissions are versioned identifiers understood by
+    the Control Plane extension host.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    EXTENSION_IDENTIFIER_FIELD_NUMBER: _builtins.int
+    EXTENSION_VERSION_FIELD_NUMBER: _builtins.int
+    RENDERER_API_VERSION_FIELD_NUMBER: _builtins.int
+    ARTIFACT_DIGEST_FIELD_NUMBER: _builtins.int
+    PERMISSIONS_FIELD_NUMBER: _builtins.int
+    extension_identifier: _builtins.str
+    extension_version: _builtins.str
+    renderer_api_version: _builtins.str
+    artifact_digest: _builtins.str
+    @_builtins.property
+    def permissions(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        extension_identifier: _builtins.str = ...,
+        extension_version: _builtins.str = ...,
+        renderer_api_version: _builtins.str = ...,
+        artifact_digest: _builtins.str = ...,
+        permissions: _abc.Iterable[_builtins.str] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["artifact_digest", b"artifact_digest", "extension_identifier", b"extension_identifier", "extension_version", b"extension_version", "permissions", b"permissions", "renderer_api_version", b"renderer_api_version"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___RendererRequirement: _TypeAlias = RendererRequirement  # noqa: Y015
+
+@_typing.final
+class PresentationAsset(_message.Message):
+    """PresentationAsset is embedded, content-addressed media. The map key is the
+    sha256 digest of content. Remote URLs and filesystem paths have no wire field.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    MEDIA_TYPE_FIELD_NUMBER: _builtins.int
+    CONTENT_FIELD_NUMBER: _builtins.int
+    WIDTH_FIELD_NUMBER: _builtins.int
+    HEIGHT_FIELD_NUMBER: _builtins.int
+    ALT_TEXT_FIELD_NUMBER: _builtins.int
+    media_type: _builtins.str
+    content: _builtins.bytes
+    width: _builtins.int
+    height: _builtins.int
+    alt_text: _builtins.str
+    def __init__(
+        self,
+        *,
+        media_type: _builtins.str = ...,
+        content: _builtins.bytes = ...,
+        width: _builtins.int = ...,
+        height: _builtins.int = ...,
+        alt_text: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["alt_text", b"alt_text", "content", b"content", "height", b"height", "media_type", b"media_type", "width", b"width"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___PresentationAsset: _TypeAlias = PresentationAsset  # noqa: Y015

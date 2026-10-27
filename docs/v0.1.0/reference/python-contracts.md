@@ -112,7 +112,7 @@ The same pattern applies to each procedure:
 | Procedure | Message validation | Correlation and derived values |
 | --- | --- | --- |
 | Bootstrap | `validate_handshake_request`, `validate_handshake_response` | `validate_protocol_version` |
-| Provider Manifest | `validate_manifest_document`, `validate_manifest_response` | `compute_manifest_revision`, `validate_manifest_key` |
+| Provider Manifest | `validate_manifest_document`, `validate_presentation_document`, `validate_manifest_response`, `validate_manifest_exchange` | Independent manifest/presentation revision and cache-key helpers; `PresentationValidationStatus` for safe fallback |
 | Capability Assessment | `validate_assess_capabilities_request`, `validate_assess_capabilities_response` | `validate_assessment_exchange` |
 | Operation Admission | Request, response, record, and error-detail validators | `validate_admission_exchange`, `canonical_invocation`, `compute_request_fingerprint` |
 | Operation Lifecycle | Watch, Cancel, snapshot, and error-detail validators | Watch/Cancel exchange, transition, and terminal-replay validators |
@@ -125,6 +125,32 @@ contract without echoing business payloads or secret configuration.
 Endpoint Discovery is a filesystem contract rather than a protobuf procedure.
 Its public `contract` module owns `EndpointDescriptor`, `parse_descriptor`,
 filename derivation, permissions, size bounds, and generation validation.
+
+### Manifest and presentation acceptance
+
+`validate_manifest_exchange` always validates the operational manifest first.
+Its result reports whether the optional presentation snapshot was accepted,
+absent, unsupported, or invalid without making presentation a prerequisite for
+using the declared operations and triggers.
+
+```python
+from stateforge_protocol.sfp.manifest.v1 import validation
+
+exchange = validation.validate_manifest_exchange(response)
+manifest_bytes = exchange.manifest_document
+
+if (
+    exchange.presentation_status
+    is validation.PresentationValidationStatus.ACCEPTED
+):
+    presentation_bytes = exchange.presentation_document
+else:
+    presentation_bytes = None  # Render from the authoritative JSON Schemas.
+```
+
+Cache the two snapshots independently. A presentation cache key includes the
+accepted `manifest_revision`, so an overlay can never move to a different
+operational declaration by revision alone.
 
 ## Contract constants
 

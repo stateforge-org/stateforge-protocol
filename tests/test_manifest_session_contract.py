@@ -58,7 +58,7 @@ def _round_trip(document, definition):
     )
 
 
-def test_envelope_additions_preserve_existing_field_numbers():
+def test_manifest_envelope_field_layout_is_exact():
     for message, expected in [
         (
             manifest_pb2.GetManifestRequest,
@@ -78,6 +78,8 @@ def test_envelope_additions_preserve_existing_field_numbers():
                 "manifest_revision": 4,
                 "manifest": 5,
                 "session_id": 6,
+                "presentation": 7,
+                "presentation_revision": 8,
             },
         ),
     ]:
@@ -149,9 +151,7 @@ def test_invalid_session_shapes_are_rejected(definition, field, value):
         ("getManifestResponse", "sessionId"),
     ],
 )
-def test_missing_or_defaulted_session_is_not_a_legacy_bypass(
-    definition, field
-):
+def test_missing_or_defaulted_session_is_invalid(definition, field):
     document = _fixture(definition)
     del document[field]
     with pytest.raises(ValidationError, match="required property"):
@@ -216,7 +216,7 @@ def test_agent_rejects_wrong_or_superseded_response_session(case):
     assert matches == case["accept"]
 
 
-def test_session_changes_preserve_exact_canonical_preimage_and_golden():
+def test_session_changes_do_not_change_canonical_manifest_revision():
     response = _fixture("getManifestResponse")
     for session_id in ("manifest-session-A", "manifest-session-B"):
         response["sessionId"] = session_id

@@ -52,6 +52,15 @@ message GetManifestResponse {
   // The Agent must match it to both the request and its current session before
   // accepting or reusing a cached declaration. Not part of manifest_revision.
   string session_id = 6;
+  // Optional declarative presentation snapshot. Operational JSON Schemas
+  // remain sufficient to render every declared capability when this field is
+  // absent, unsupported or rejected. Presentation never changes execution
+  // semantics and is not part of manifest_revision.
+  ProviderPresentation presentation = 7;
+  // Present exactly when presentation is present. "sha256:" plus 64 lowercase
+  // hex digits over the canonical presentation preimage defined by this
+  // package. Session ID and endpoint generation are excluded.
+  optional string presentation_revision = 8;
 }
 
 // ProviderManifest describes implementation-wide declarations, not configured
@@ -118,4 +127,108 @@ message PlatformCompatibility {
 message TriggerDeclaration {
   // Required Draft 2020-12 object schema, never an event instance.
   google.protobuf.Struct payload_schema = 1;
+}
+
+// ProviderPresentation is an optional, independently revised visual overlay
+// on an accepted ProviderManifest. Maps use the exact operation and trigger
+// identifiers declared by that manifest. Presentation cannot add, remove or
+// redefine capabilities or their JSON Schemas.
+message ProviderPresentation {
+  // Presentation document version. Version 1 is defined by this package.
+  uint32 presentation_schema_version = 1;
+  // Optional Provider-level surfaces.
+  PresentationTarget provider = 2;
+  // Optional surfaces keyed by declared operation identifier.
+  map<string, PresentationTarget> operations = 3;
+  // Optional surfaces keyed by declared trigger identifier.
+  map<string, PresentationTarget> triggers = 4;
+  // Embedded content-addressed visuals keyed by their sha256 digest.
+  map<string, PresentationAsset> assets = 5;
+  // Renderer metadata keyed by the custom component namespace it serves.
+  // Every stateforge.* namespace is reserved and cannot require an extension.
+  map<string, RendererRequirement> renderer_requirements = 6;
+}
+
+// PresentationTarget owns the surfaces declared for one Provider, operation or
+// trigger. Keys are versioned surface identifiers defined by this contract.
+message PresentationTarget {
+  map<string, PresentationSurface> surfaces = 1;
+}
+
+// PresentationSurface is one bounded declarative component tree.
+message PresentationSurface {
+  ComponentNode root = 1;
+}
+
+// ComponentNode selects a renderer by identifier and supplies only declarative
+// data. Properties are interpreted by the Control Plane renderer registry, not
+// by SFP. Custom components require renderer metadata and a core-only fallback.
+message ComponentNode {
+  string component_identifier = 1;
+  google.protobuf.Struct properties = 2;
+  map<string, DataBinding> bindings = 3;
+  repeated ComponentNode children = 4;
+  ComponentNode fallback = 5;
+  Condition condition = 6;
+  Repetition repeat = 7;
+  // Renderer-defined slot name to embedded asset digest.
+  map<string, string> asset_bindings = 8;
+}
+
+// DataBinding points at immutable data supplied by the Control Plane for the
+// current surface. Empty pointer selects the complete source document. Scope is
+// empty except for bindings to a named repetition item.
+message DataBinding {
+  string source_identifier = 1;
+  string pointer = 2;
+  string scope = 3;
+}
+
+// ConditionOperator controls whether a node is rendered. Equality compares
+// JSON values exactly after resolving the binding.
+enum ConditionOperator {
+  CONDITION_OPERATOR_UNSPECIFIED = 0;
+  CONDITION_OPERATOR_EXISTS = 1;
+  CONDITION_OPERATOR_NOT_EXISTS = 2;
+  CONDITION_OPERATOR_EQUALS = 3;
+  CONDITION_OPERATOR_NOT_EQUALS = 4;
+}
+
+// Condition is optional. EXISTS and NOT_EXISTS omit value; equality operators
+// require value, including an explicitly supplied JSON null.
+message Condition {
+  DataBinding binding = 1;
+  ConditionOperator operator = 2;
+  google.protobuf.Value value = 3;
+}
+
+// Repetition renders a node once per item in one bound collection. max_items is
+// a required positive safety ceiling; item_scope names the item for descendant
+// bindings.
+message Repetition {
+  DataBinding collection = 1;
+  string item_scope = 2;
+  uint32 max_items = 3;
+}
+
+// RendererRequirement identifies a separately distributed renderer extension.
+// SFP transports metadata only: no executable bytes, URL or install command is
+// carried by this message. Permissions are versioned identifiers understood by
+// the Control Plane extension host.
+message RendererRequirement {
+  string extension_identifier = 1;
+  string extension_version = 2;
+  string renderer_api_version = 3;
+  string artifact_digest = 4;
+  repeated string permissions = 5;
+}
+
+// PresentationAsset is embedded, content-addressed media. The map key is the
+// sha256 digest of content. Remote URLs and filesystem paths have no wire field.
+message PresentationAsset {
+  string media_type = 1;
+  bytes content = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  string alt_text = 5;
 }

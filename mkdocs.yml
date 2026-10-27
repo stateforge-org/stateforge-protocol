@@ -23,7 +23,9 @@ nav:
               - Procedure map: v0.1.0/procedures/index.md
               - Endpoint discovery and channel establishment: v0.1.0/procedures/endpoint-discovery.md
               - Handshake and version negotiation: v0.1.0/bootstrap.md
-              - Provider manifest exchange: v0.1.0/procedures/provider-manifest.md
+              - Provider manifest exchange:
+                  - Contract and exchange: v0.1.0/procedures/provider-manifest.md
+                  - Provider presentation: v0.1.0/procedures/provider-presentation.md
               - Health and availability monitoring: v0.1.0/procedures/health.md
               - Capability assessment: v0.1.0/procedures/capability-assessment.md
               - Trigger publication and acknowledgement: v0.1.0/procedures/triggers.md

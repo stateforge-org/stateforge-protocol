@@ -24,7 +24,8 @@ flowchart LR
     <h3>The contract is internally consistent</h3>
     <p>
       Protobuf sources, generated bindings, schemas, fixtures, validators,
-      documentation, and compatibility checks agree before packaging begins.
+      documentation, descriptor checks, and conformance fixtures agree before
+      packaging begins.
     </p>
   </article>
   <article class="sf-docs-card">
@@ -79,9 +80,9 @@ installation. No downstream job rebuilds the package.
 
 | Gate | What runs | What it proves |
 | --- | --- | --- |
-| Source contracts | Dependency-lock check, Actionlint, Zizmor, Buf lint and format, deterministic generation, Buf compatibility, the complete test suite with coverage, Ruff, mypy, and strict documentation build | The source tree, generated outputs, automation, and documented contract agree |
+| Source contracts | Dependency-lock check, Actionlint, Zizmor, Buf lint and format, deterministic generation, the complete test suite with coverage, Ruff, mypy, and strict documentation build | The source tree, generated outputs, automation, and documented contract agree, including Provider presentation overlays, revisions, assets, and fallback |
 | Distribution build | One wheel and one source distribution, followed by metadata, checksum, and provenance generation | The candidate has one attributable artifact identity |
-| Installed package | Wheel and source-distribution installation in isolated virtual environments with the checkout removed from Python import resolution | The package contains its generated modules, public contracts, schemas, typing marker, and conformance fixtures |
+| Installed package | Wheel and source-distribution installation in isolated virtual environments with the checkout removed from Python import resolution | The package contains its generated modules, public contracts, schemas, typing marker, Provider presentation fixture, and conformance fixtures |
 | Agent consumer | Exact wheel installation, package-origin verification, Protocol-ownership audit, and the complete Agent quality suite | The Agent consumes this candidate through public Protocol APIs |
 | Provider consumer | Exact wheel installation, package-origin verification, Protocol-ownership audit, and the complete Provider quality suite | StateForge Provider Python consumes this candidate through public Protocol APIs |
 
