@@ -148,11 +148,11 @@ only; an existing terminal operation still resolves to the same admission
 record, while its retained terminal outcome is read through the operation
 lifecycle procedure.
 
-Provider presentation is not an admission input. Labels, visual groups, field
-order, widgets, displays, and assets may help a user construct an invocation,
-but only the accepted operation identifier and authoritative `input_schema`
-govern validation. `presentation_revision` is not part of the invocation or
-its canonical request fingerprint.
+Provider presentation is not an admission input. An operation request surface
+may help a user construct an invocation, but only the accepted operation
+identifier and authoritative `input_schema` govern validation.
+`presentation_revision` is not part of the invocation or its canonical request
+fingerprint.
 
 ## Request model
 

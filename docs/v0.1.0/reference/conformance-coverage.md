@@ -68,7 +68,7 @@ documentation.
 | [`endpoint-discovery`](../procedures/endpoint-discovery.md) | `sfp.endpoint_discovery.v1.contract` | Descriptor parsing, canonical serialization, filename, identity, generation, socket path, permissions, and size limits |
 | [`bootstrap`](../bootstrap.md) | `sfp.bootstrap.v1.contract` and `validation` | Handshake request and response validity, identity correlation, version selection, generation fencing, and session bounds |
 | [`health`](../procedures/health.md) | `sfp.health_contract` with `grpc.health.v1` | Standard service identity, Provider-wide Watch key, lifecycle states, eligibility inputs, failure scenarios, and diagnostic bounds |
-| [`manifest`](../procedures/provider-manifest.md) | `sfp.manifest.v1.contract` and `validation` | Declaration shape, embedded schemas, identifiers, session binding, independent manifest/presentation revisions, schema-addressed overlays, optional groups, safe assets, fallback, and invalid documents |
+| [`manifest`](../procedures/provider-manifest.md) | `sfp.manifest.v1.contract` and `validation` | Declaration shape, embedded schemas, identifiers, session binding, independent revisions, bounded component trees, surface bindings, renderer requirements, core fallback, safe assets, and invalid documents |
 | [`capability-assessment`](../procedures/capability-assessment.md) | `sfp.capability_assessment.v1.contract` and `validation` | Request and response validity, session and manifest correlation, mixed support findings, invalid invariants, and requirement states |
 
 ### Exchange and recover

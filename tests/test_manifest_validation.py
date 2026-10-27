@@ -116,7 +116,8 @@ def _replace_provider_icon(
     width: int,
     height: int,
 ) -> str:
-    old_digest = response.presentation.provider.icon_asset_digest
+    image = _provider_image(response)
+    old_digest = image.asset_bindings["source"]
     del response.presentation.assets[old_digest]
     digest = "sha256:" + hashlib.sha256(content).hexdigest()
     response.presentation.assets[digest].CopyFrom(
@@ -128,8 +129,27 @@ def _replace_provider_icon(
             alt_text="Provider icon",
         )
     )
-    response.presentation.provider.icon_asset_digest = digest
+    image.asset_bindings["source"] = digest
     return digest
+
+
+def _provider_image(
+    response: manifest_pb2.GetManifestResponse,
+) -> manifest_pb2.ComponentNode:
+    return response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root.children[0]
+
+
+def _operation_root(
+    response: manifest_pb2.GetManifestResponse,
+    surface: str,
+) -> manifest_pb2.ComponentNode:
+    return (
+        response.presentation.operations["stateforge.git/reference.resolve@1"]
+        .surfaces[surface]
+        .root
+    )
 
 
 def _schema(**overrides):
@@ -196,6 +216,7 @@ def test_empty_presentation_overlay_is_valid() -> None:
     response.presentation.ClearField("operations")
     response.presentation.ClearField("triggers")
     response.presentation.ClearField("assets")
+    response.presentation.ClearField("renderer_requirements")
     _refresh_presentation_revision(response)
 
     exchange = validate_manifest_exchange(response)
@@ -207,16 +228,16 @@ def test_empty_presentation_overlay_is_valid() -> None:
         "assets": {},
         "operations": {},
         "presentationSchemaVersion": 1,
+        "rendererRequirements": {},
         "triggers": {},
     }
 
 
 def test_invalid_presentation_falls_back_without_rejecting_manifest() -> None:
     response = _presentation_response()
-    operation = response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ]
-    operation.input.field_order[0] = "/properties/not-declared"
+    _operation_root(response, contract.OPERATION_REQUEST_SURFACE).bindings[
+        "schema"
+    ].source_identifier = contract.PROVIDER_RUNTIME_BINDING
     _refresh_presentation_revision(response)
 
     exchange = validate_manifest_exchange(response)
@@ -283,7 +304,9 @@ def test_presentation_revision_is_isolated_and_bound_to_manifest() -> None:
     original_manifest_revision = response.manifest_revision
     original_presentation_revision = response.presentation_revision
 
-    response.presentation.provider.summary = "A different summary."
+    response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root.properties.update({"gap": "compact"})
     _refresh_presentation_revision(response)
 
     assert response.manifest_revision == original_manifest_revision
@@ -379,319 +402,219 @@ def test_public_presentation_validator_projects_its_own_message() -> None:
     )
 
 
-def test_capability_groups_are_optional() -> None:
-    response = _presentation_response()
-    response.presentation.provider.ClearField("groups")
-    for view in response.presentation.operations.values():
-        view.group_id = ""
-    for view in response.presentation.triggers.values():
-        view.group_id = ""
-    _refresh_presentation_revision(response)
-
-    exchange = validate_manifest_exchange(response)
-
-    assert (
-        exchange.presentation_status is PresentationValidationStatus.ACCEPTED
-    )
-
-
 @pytest.mark.parametrize("collection", ["operations", "triggers"])
-def test_views_cannot_name_undeclared_capabilities(collection: str) -> None:
+def test_targets_cannot_name_undeclared_capabilities(collection: str) -> None:
     response = _presentation_response()
-    views = getattr(response.presentation, collection)
-    declared_identifier = next(iter(views))
-    views["example.invalid/not_declared@1"].CopyFrom(
-        views[declared_identifier]
+    targets = getattr(response.presentation, collection)
+    declared_identifier = next(iter(targets))
+    targets["example.invalid/not_declared@1"].CopyFrom(
+        targets[declared_identifier]
     )
 
     with pytest.raises(
         ManifestValidationError,
-        match=f"{collection[:-1]} view does not name a declared",
+        match=f"{collection[:-1]} target does not name a declared",
     ):
         _validate_presentation(response)
 
 
-def test_view_group_reference_must_resolve() -> None:
+def test_surface_must_belong_to_its_target_kind() -> None:
     response = _presentation_response()
-    response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ].group_id = "missing"
-
-    with pytest.raises(ManifestValidationError, match="group reference"):
-        _validate_presentation(response)
-
-
-def test_capability_group_ids_must_be_unique() -> None:
-    response = _presentation_response()
-    duplicate = response.presentation.provider.groups.add()
-    duplicate.CopyFrom(response.presentation.provider.groups[0])
-
-    with pytest.raises(ManifestValidationError, match="group IDs"):
-        _validate_presentation(response)
-
-
-def test_schema_view_pointer_must_resolve_in_its_own_schema() -> None:
-    response = _presentation_response()
-    operation = response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ]
-    operation.input.field_order[0] = "/properties/commit"
-
-    with pytest.raises(ManifestValidationError, match="does not resolve"):
-        _validate_presentation(response)
-
-
-def test_schema_view_pointer_must_name_a_field() -> None:
-    response = _presentation_response()
-    operation = response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ]
-    operation.input.field_order[0] = "/properties"
-
-    with pytest.raises(ManifestValidationError, match="schema field"):
-        _validate_presentation(response)
-
-
-def test_field_may_belong_to_only_one_visual_group() -> None:
-    response = _presentation_response()
-    groups = response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ].input.groups
-    duplicate = groups.add(
-        id="more-credentials",
-        label="More credentials",
-        description="Duplicate placement.",
+    target = response.presentation.provider
+    target.surfaces[contract.OPERATION_REQUEST_SURFACE].CopyFrom(
+        target.surfaces[contract.PROVIDER_OVERVIEW_SURFACE]
     )
-    duplicate.fields.append("/properties/token")
 
-    with pytest.raises(ManifestValidationError, match="at most one"):
+    with pytest.raises(ManifestValidationError, match="provider targets"):
         _validate_presentation(response)
 
 
-def test_field_group_ids_must_be_unique() -> None:
+def test_surface_binding_source_must_be_available() -> None:
     response = _presentation_response()
-    groups = response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ].input.groups
-    duplicate = groups.add(
-        id="credentials",
-        label="More credentials",
-        description="Duplicate identifier.",
+    _operation_root(response, contract.OPERATION_REQUEST_SURFACE).bindings[
+        "schema"
+    ].source_identifier = contract.OPERATION_RESULT_VALUE_BINDING
+
+    with pytest.raises(ManifestValidationError, match="unavailable"):
+        _validate_presentation(response)
+
+
+def test_core_component_catalog_is_explicit() -> None:
+    response = _presentation_response()
+    response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root.component_identifier = "stateforge.ui/layout.unknown@1"
+
+    with pytest.raises(ManifestValidationError, match="unknown core"):
+        _validate_presentation(response)
+
+
+def test_custom_component_requires_renderer_metadata() -> None:
+    response = _presentation_response()
+    del response.presentation.renderer_requirements["stateforge.git"]
+
+    with pytest.raises(ManifestValidationError, match="renderer requirement"):
+        _validate_presentation(response)
+
+
+def test_custom_component_requires_core_fallback() -> None:
+    response = _presentation_response()
+    _operation_root(response, contract.OPERATION_RESULT_SURFACE).ClearField(
+        "fallback"
     )
-    duplicate.fields.append("/properties/repository")
 
-    with pytest.raises(ManifestValidationError, match="group IDs"):
+    with pytest.raises(ManifestValidationError, match="core fallback"):
         _validate_presentation(response)
 
 
-def test_schema_view_follows_a_local_field_reference() -> None:
+def test_custom_component_fallback_cannot_require_an_extension() -> None:
     response = _presentation_response()
-    schema = response.manifest.operations[
-        "stateforge.git/reference.resolve@1"
-    ].input_schema
-    schema.update(
-        {
-            "$defs": {"repository": {"type": "string"}},
-            "properties": {
-                "repository": {"$ref": "#/$defs/repository"},
-                "depth": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 10,
-                },
-                "token": {"type": "string", "writeOnly": True},
-            },
-        }
+    _operation_root(
+        response, contract.OPERATION_RESULT_SURFACE
+    ).fallback.component_identifier = "stateforge.git/data.commit_graph@1"
+
+    with pytest.raises(ManifestValidationError, match="core components"):
+        _validate_presentation(response)
+
+
+def test_renderer_requirements_cannot_be_unreferenced() -> None:
+    response = _presentation_response()
+    response.presentation.renderer_requirements["example.widget"].CopyFrom(
+        response.presentation.renderer_requirements["stateforge.git"]
+    )
+    requirement = response.presentation.renderer_requirements["example.widget"]
+    requirement.extension_identifier = "example.widget/renderer@1"
+
+    with pytest.raises(ManifestValidationError, match="exactly match"):
+        _validate_presentation(response)
+
+
+def test_renderer_extension_must_share_component_namespace() -> None:
+    response = _presentation_response()
+    response.presentation.renderer_requirements[
+        "stateforge.git"
+    ].extension_identifier = "example.widget/renderer@1"
+
+    with pytest.raises(ManifestValidationError, match="namespace"):
+        _validate_presentation(response)
+
+
+def test_repetition_scope_is_available_to_component_bindings() -> None:
+    response = _presentation_response()
+    root = response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root
+    repeated = root.children.add(
+        component_identifier="stateforge.ui/data.table@1"
+    )
+    repeated.properties.update({"title": "Runtime items"})
+    repeated.repeat.collection.CopyFrom(
+        manifest_pb2.DataBinding(
+            source_identifier=contract.PROVIDER_RUNTIME_BINDING,
+            pointer="/items",
+        )
+    )
+    repeated.repeat.item_scope = "row"
+    repeated.repeat.max_items = 100
+    repeated.bindings["item"].CopyFrom(
+        manifest_pb2.DataBinding(
+            source_identifier=contract.REPETITION_ITEM_BINDING,
+            pointer="/name",
+            scope="row",
+        )
     )
 
     _validate_presentation(response)
 
 
+def test_repetition_item_binding_requires_an_active_scope() -> None:
+    response = _presentation_response()
+    root = response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root
+    root.bindings["item"].CopyFrom(
+        manifest_pb2.DataBinding(
+            source_identifier=contract.REPETITION_ITEM_BINDING,
+            scope="missing",
+        )
+    )
+
+    with pytest.raises(ManifestValidationError, match="active scope"):
+        _validate_presentation(response)
+
+
+def test_non_repetition_binding_cannot_claim_a_scope() -> None:
+    response = _presentation_response()
+    _operation_root(response, contract.OPERATION_REQUEST_SURFACE).bindings[
+        "schema"
+    ].scope = "row"
+
+    with pytest.raises(ManifestValidationError, match="may name a scope"):
+        _validate_presentation(response)
+
+
 @pytest.mark.parametrize(
-    ("reference", "message"),
+    ("operator", "with_value", "message"),
     [
-        ("https://example.invalid/schema", "reference is invalid"),
-        ("#/properties/repository", "cyclic field schema reference"),
-        ("#/$defs/not-a-schema", "must name a schema"),
+        (
+            manifest_pb2.CONDITION_OPERATOR_EXISTS,
+            True,
+            "cannot declare a value",
+        ),
+        (
+            manifest_pb2.CONDITION_OPERATOR_EQUALS,
+            False,
+            "requires a value",
+        ),
     ],
 )
-def test_schema_view_rejects_invalid_field_references(
-    reference: str,
+def test_condition_value_presence_matches_operator(
+    operator: int,
+    with_value: bool,
     message: str,
 ) -> None:
     response = _presentation_response()
-    schema = response.manifest.operations[
-        "stateforge.git/reference.resolve@1"
-    ].input_schema
-    schema.update(
-        {
-            "$defs": {"not-a-schema": "value"},
-            "properties": {
-                "repository": {"$ref": reference},
-                "depth": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 10,
-                },
-                "token": {"type": "string", "writeOnly": True},
-            },
-        }
+    root = response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root
+    root.condition.binding.CopyFrom(
+        manifest_pb2.DataBinding(
+            source_identifier=contract.PROVIDER_RUNTIME_BINDING,
+            pointer="/available",
+        )
     )
+    root.condition.operator = operator
+    if with_value:
+        root.condition.value.bool_value = True
 
     with pytest.raises(ManifestValidationError, match=message):
         _validate_presentation(response)
 
 
-def test_schema_view_resolves_fields_nested_in_schema_arrays() -> None:
+def test_component_properties_have_an_independent_byte_limit() -> None:
     response = _presentation_response()
-    schema = response.manifest.operations[
-        "stateforge.git/reference.resolve@1"
-    ].input_schema
-    schema.Clear()
-    schema.update(
-        {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "allOf": [{"properties": {"repository": {"type": "string"}}}],
-        }
+    response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root.properties.update(
+        {"content": "x" * contract.MAX_COMPONENT_PROPERTIES_BYTES}
     )
-    view = response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ].input
-    field = manifest_pb2.FieldView()
-    field.CopyFrom(view.fields["/properties/repository"])
-    view.ClearField("field_order")
-    view.field_order.append("/allOf/0/properties/repository")
-    view.ClearField("groups")
-    view.ClearField("fields")
-    view.fields["/allOf/0/properties/repository"].CopyFrom(field)
 
-    _validate_presentation(response)
-
-
-@pytest.mark.parametrize(
-    ("field", "widget", "message"),
-    [
-        ("repository", manifest_pb2.INPUT_WIDGET_NUMBER, "schema type"),
-        ("repository", manifest_pb2.INPUT_WIDGET_SECRET, "write-only"),
-        ("repository", manifest_pb2.INPUT_WIDGET_SELECT, "schema enum"),
-        ("depth", manifest_pb2.INPUT_WIDGET_DATE_TIME, "schema type"),
-    ],
-)
-def test_input_widgets_must_match_authoritative_schema(
-    field: str,
-    widget: int,
-    message: str,
-) -> None:
-    response = _presentation_response()
-    view = response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ].input.fields[f"/properties/{field}"]
-    view.widget = widget
-
-    with pytest.raises(ManifestValidationError, match=message):
+    with pytest.raises(ManifestValidationError, match="properties limit"):
         _validate_presentation(response)
 
 
-def test_slider_requires_authoritative_bounds() -> None:
+def test_component_tree_depth_is_bounded() -> None:
     response = _presentation_response()
-    depth = (
-        response.manifest.operations["stateforge.git/reference.resolve@1"]
-        .input_schema.fields["properties"]
-        .struct_value.fields["depth"]
-        .struct_value
-    )
-    del depth.fields["minimum"]
+    node = response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root
+    for depth in range(contract.MAX_PRESENTATION_COMPONENT_DEPTH):
+        node = node.children.add(
+            component_identifier="stateforge.ui/layout.section@1"
+        )
+        node.properties.update({"depth": depth})
 
-    with pytest.raises(ManifestValidationError, match="minimum and maximum"):
-        _validate_presentation(response)
-
-
-@pytest.mark.parametrize(
-    ("schema", "widget", "display"),
-    [
-        ({"type": "boolean"}, manifest_pb2.INPUT_WIDGET_CHECKBOX, 0),
-        (
-            {"type": "string", "enum": ["main", "develop"]},
-            manifest_pb2.INPUT_WIDGET_SELECT,
-            0,
-        ),
-        (
-            {"type": "string", "enum": ["main", "develop"]},
-            manifest_pb2.INPUT_WIDGET_RADIO,
-            0,
-        ),
-        (
-            {"type": "string", "format": "date-time"},
-            manifest_pb2.INPUT_WIDGET_DATE_TIME,
-            manifest_pb2.DISPLAY_STYLE_DATE_TIME,
-        ),
-        (
-            {"type": ["object", "null"]},
-            manifest_pb2.INPUT_WIDGET_JSON,
-            manifest_pb2.DISPLAY_STYLE_JSON,
-        ),
-    ],
-)
-def test_supported_field_preferences_follow_the_schema(
-    schema: dict[str, object],
-    widget: int,
-    display: int,
-) -> None:
-    response = _presentation_response()
-    field_schema = (
-        response.manifest.operations["stateforge.git/reference.resolve@1"]
-        .input_schema.fields["properties"]
-        .struct_value.fields["repository"]
-        .struct_value
-    )
-    field_schema.Clear()
-    field_schema.update(schema)
-    field_view = response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ].input.fields["/properties/repository"]
-    field_view.widget = widget
-    field_view.display = display
-
-    _validate_presentation(response)
-
-
-@pytest.mark.parametrize("preference", ["widget", "placeholder"])
-def test_output_fields_cannot_declare_input_preferences(
-    preference: str,
-) -> None:
-    response = _presentation_response()
-    view = response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ].result.fields["/properties/commit"]
-    if preference == "widget":
-        view.widget = manifest_pb2.INPUT_WIDGET_TEXT
-    else:
-        view.placeholder = "not permitted"
-
-    with pytest.raises(ManifestValidationError, match="output fields"):
-        _validate_presentation(response)
-
-
-@pytest.mark.parametrize(
-    ("field", "display"),
-    [
-        ("commit", manifest_pb2.DISPLAY_STYLE_METRIC),
-        ("changed", manifest_pb2.DISPLAY_STYLE_CODE),
-        ("changed", manifest_pb2.DISPLAY_STYLE_TABLE),
-    ],
-)
-def test_display_preferences_must_match_authoritative_schema(
-    field: str,
-    display: int,
-) -> None:
-    response = _presentation_response()
-    view = response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ].result.fields[f"/properties/{field}"]
-    view.display = display
-
-    with pytest.raises(ManifestValidationError, match="schema type"):
+    with pytest.raises(ManifestValidationError, match="depth limit"):
         _validate_presentation(response)
 
 
@@ -716,7 +639,7 @@ def test_bounded_static_png_asset_is_accepted() -> None:
 def test_asset_reference_must_resolve() -> None:
     response = _presentation_response()
     del response.presentation.assets[
-        response.presentation.provider.icon_asset_digest
+        _provider_image(response).asset_bindings["source"]
     ]
 
     with pytest.raises(ManifestValidationError, match="reference is missing"):
@@ -725,7 +648,7 @@ def test_asset_reference_must_resolve() -> None:
 
 def test_unreferenced_assets_are_rejected() -> None:
     response = _presentation_response()
-    response.presentation.provider.icon_asset_digest = ""
+    _provider_image(response).ClearField("asset_bindings")
 
     with pytest.raises(ManifestValidationError, match="unreferenced asset"):
         _validate_presentation(response)
@@ -733,7 +656,7 @@ def test_unreferenced_assets_are_rejected() -> None:
 
 def test_asset_digest_must_match_exact_bytes() -> None:
     response = _presentation_response()
-    digest = response.presentation.provider.icon_asset_digest
+    digest = _provider_image(response).asset_bindings["source"]
     response.presentation.assets[digest].content += b"changed"
 
     with pytest.raises(ManifestValidationError, match="digest mismatch"):
@@ -773,15 +696,16 @@ def test_aggregate_asset_size_limit_is_enforced() -> None:
             )
         )
         references.append(digest)
-    response.presentation.provider.icon_asset_digest = references[0]
-    response.presentation.provider.banner_asset_digest = references[1]
-    response.presentation.provider.groups[0].icon_asset_digest = references[2]
-    response.presentation.operations[
-        "stateforge.git/reference.resolve@1"
-    ].icon_asset_digest = references[3]
-    response.presentation.triggers[
-        "stateforge.git/reference.changed@1"
-    ].icon_asset_digest = references[4]
+    root = response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root
+    root.ClearField("children")
+    for index, digest in enumerate(references):
+        image = root.children.add(
+            component_identifier="stateforge.ui/media.image@1"
+        )
+        image.properties.update({"index": index})
+        image.asset_bindings["source"] = digest
 
     with pytest.raises(ManifestValidationError, match="aggregate asset"):
         _validate_presentation(response)
@@ -899,7 +823,7 @@ def test_svg_executable_or_external_content_is_rejected_without_echo(
 
 def test_media_allowlist_is_enforced() -> None:
     response = _presentation_response()
-    digest = response.presentation.provider.icon_asset_digest
+    digest = _provider_image(response).asset_bindings["source"]
     response.presentation.assets[digest].media_type = "text/html"
 
     with pytest.raises(ManifestValidationError, match="enum constraint"):

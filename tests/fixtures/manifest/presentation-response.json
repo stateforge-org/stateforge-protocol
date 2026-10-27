@@ -104,91 +104,93 @@
   "presentation": {
     "presentationSchemaVersion": 1,
     "provider": {
-      "summary": "Inspect and resolve Git references.",
-      "description": "A local Provider for Git repository state.",
-      "iconAssetDigest": "sha256:8c5dec37f2aba701bd79272fc7fe4d34292623e531df7fd23b95cb3c96034741",
-      "bannerAssetDigest": "",
-      "groups": [
-        {
-          "id": "repository",
-          "label": "Repository",
-          "description": "Repository inspection and reference operations.",
-          "iconAssetDigest": ""
+      "surfaces": {
+        "stateforge.ui/surface.provider.overview@1": {
+          "root": {
+            "componentIdentifier": "stateforge.ui/layout.stack@1",
+            "properties": {
+              "gap": "large"
+            },
+            "bindings": {},
+            "children": [
+              {
+                "componentIdentifier": "stateforge.ui/media.image@1",
+                "properties": {
+                  "fit": "contain"
+                },
+                "bindings": {},
+                "children": [],
+                "assetBindings": {
+                  "source": "sha256:8c5dec37f2aba701bd79272fc7fe4d34292623e531df7fd23b95cb3c96034741"
+                }
+              },
+              {
+                "componentIdentifier": "stateforge.ui/content.text@1",
+                "properties": {
+                  "title": "Git Provider",
+                  "body": "Inspect and resolve Git references."
+                },
+                "bindings": {},
+                "children": [],
+                "assetBindings": {}
+              }
+            ],
+            "assetBindings": {}
+          }
         }
-      ]
+      }
     },
     "operations": {
       "stateforge.git/reference.resolve@1": {
-        "label": "Resolve reference",
-        "summary": "Resolve a Git reference to a commit.",
-        "description": "Reads a repository reference without changing it.",
-        "iconAssetDigest": "",
-        "groupId": "repository",
-        "input": {
-          "fieldOrder": [
-            "/properties/repository",
-            "/properties/depth",
-            "/properties/token"
-          ],
-          "groups": [
-            {
-              "id": "credentials",
-              "label": "Credentials",
-              "description": "Optional credentials for repository access.",
-              "fields": [
-                "/properties/token"
-              ]
+        "surfaces": {
+          "stateforge.ui/surface.operation.request@1": {
+            "root": {
+              "componentIdentifier": "stateforge.ui/input.form@1",
+              "properties": {
+                "submitLabel": "Resolve reference"
+              },
+              "bindings": {
+                "schema": {
+                  "sourceIdentifier": "stateforge.binding/operation.request.schema@1",
+                  "pointer": "",
+                  "scope": ""
+                },
+                "value": {
+                  "sourceIdentifier": "stateforge.binding/operation.request.value@1",
+                  "pointer": "",
+                  "scope": ""
+                }
+              },
+              "children": [],
+              "assetBindings": {}
             }
-          ],
-          "fields": {
-            "/properties/repository": {
-              "label": "Repository",
-              "helpText": "Repository path or canonical name.",
-              "placeholder": "owner/repository",
-              "unit": "",
-              "widget": "INPUT_WIDGET_TEXT",
-              "display": "DISPLAY_STYLE_UNSPECIFIED"
-            },
-            "/properties/depth": {
-              "label": "Depth",
-              "helpText": "Maximum history depth.",
-              "placeholder": "",
-              "unit": "commits",
-              "widget": "INPUT_WIDGET_SLIDER",
-              "display": "DISPLAY_STYLE_METRIC"
-            },
-            "/properties/token": {
-              "label": "Access token",
-              "helpText": "Used only for this request.",
-              "placeholder": "",
-              "unit": "",
-              "widget": "INPUT_WIDGET_SECRET",
-              "display": "DISPLAY_STYLE_UNSPECIFIED"
-            }
-          }
-        },
-        "result": {
-          "fieldOrder": [
-            "/properties/commit",
-            "/properties/changed"
-          ],
-          "groups": [],
-          "fields": {
-            "/properties/commit": {
-              "label": "Commit",
-              "helpText": "Resolved commit identifier.",
-              "placeholder": "",
-              "unit": "",
-              "widget": "INPUT_WIDGET_UNSPECIFIED",
-              "display": "DISPLAY_STYLE_CODE"
-            },
-            "/properties/changed": {
-              "label": "Changed",
-              "helpText": "Whether the reference changed.",
-              "placeholder": "",
-              "unit": "",
-              "widget": "INPUT_WIDGET_UNSPECIFIED",
-              "display": "DISPLAY_STYLE_BADGE"
+          },
+          "stateforge.ui/surface.operation.result@1": {
+            "root": {
+              "componentIdentifier": "stateforge.git/data.commit_graph@1",
+              "properties": {},
+              "bindings": {
+                "result": {
+                  "sourceIdentifier": "stateforge.binding/operation.result.value@1",
+                  "pointer": "",
+                  "scope": ""
+                }
+              },
+              "children": [],
+              "assetBindings": {},
+              "fallback": {
+                "componentIdentifier": "stateforge.ui/data.tree@1",
+                "properties": {},
+                "bindings": {
+                  "value": {
+                    "sourceIdentifier": "stateforge.binding/operation.result.value@1",
+                    "pointer": "",
+                    "scope": ""
+                  }
+                },
+                "children": [],
+                "assetBindings": {}
+              }
             }
           }
         }
@@ -196,33 +198,20 @@
     },
     "triggers": {
       "stateforge.git/reference.changed@1": {
-        "label": "Reference changed",
-        "summary": "A repository reference moved.",
-        "description": "Published after a tracked reference changes.",
-        "iconAssetDigest": "",
-        "groupId": "repository",
-        "payload": {
-          "fieldOrder": [
-            "/properties/reference",
-            "/properties/previous"
-          ],
-          "groups": [],
-          "fields": {
-            "/properties/reference": {
-              "label": "Reference",
-              "helpText": "Current reference value.",
-              "placeholder": "",
-              "unit": "",
-              "widget": "INPUT_WIDGET_UNSPECIFIED",
-              "display": "DISPLAY_STYLE_CODE"
-            },
-            "/properties/previous": {
-              "label": "Previous",
-              "helpText": "Previous reference value.",
-              "placeholder": "",
-              "unit": "",
-              "widget": "INPUT_WIDGET_UNSPECIFIED",
-              "display": "DISPLAY_STYLE_CODE"
+        "surfaces": {
+          "stateforge.ui/surface.trigger.event@1": {
+            "root": {
+              "componentIdentifier": "stateforge.ui/data.key_value@1",
+              "properties": {},
+              "bindings": {
+                "value": {
+                  "sourceIdentifier": "stateforge.binding/trigger.payload.value@1",
+                  "pointer": "",
+                  "scope": ""
+                }
+              },
+              "children": [],
+              "assetBindings": {}
             }
           }
         }
@@ -236,7 +225,16 @@
         "height": 16,
         "altText": "Git Provider mark"
       }
+    },
+    "rendererRequirements": {
+      "stateforge.git": {
+        "extensionIdentifier": "stateforge.git/renderer@1",
+        "extensionVersion": "1.0.0",
+        "rendererApiVersion": "1.0.0",
+        "artifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "permissions": []
+      }
     }
   },
-  "presentationRevision": "sha256:1cbd5452404898672d31afa2f98172f08b4976edb6e7bfb4f576524d70beaf0c"
+  "presentationRevision": "sha256:d8064d4842d3210e5750618cdccaaa7c71140ba029819add565d9fa06a0e8e55"
 }

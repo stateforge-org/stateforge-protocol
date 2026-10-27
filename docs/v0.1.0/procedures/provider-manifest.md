@@ -148,7 +148,7 @@ revisioned declaration snapshot.
     | Response | `manifest_schema_version` | Highest manifest schema version supported by both peers. |
     | Response | `manifest` | Complete Provider declaration for the selected schema. |
     | Response | `manifest_revision` | Deterministic SHA-256 revision of the accepted declaration snapshot. |
-    | Response | `presentation` | Optional Provider, operation, trigger, field, group, and embedded-asset presentation overlay. |
+    | Response | `presentation` | Optional Provider, operation, and trigger surfaces described by bounded component trees, renderer requirements, and embedded assets. |
     | Response | `presentation_revision` | Independent SHA-256 revision bound to this manifest; present exactly when `presentation` is present. |
 
 === "Example request"
@@ -281,20 +281,21 @@ apply.
 
 ## Presentation snapshot
 
-The operational manifest already contains everything a renderer needs to build
-a correct default interface. Its JSON Schemas define fields, types, required
-values, validation, and secret-bearing inputs. The optional `presentation`
-snapshot improves that interface without changing any of those facts.
+The operational manifest already contains everything needed to build a correct
+default interface. Its JSON Schemas define fields, types, required values,
+validation, and secret-bearing inputs. The optional `presentation` snapshot
+selects versioned renderer components and binds them to defined data sources
+without changing any of those facts.
 
 The presentation and its revision are present as a pair. The Agent validates
 the operational manifest first and can use it even when presentation is
 absent or rejected. A valid presentation is revised independently and bound
 to the accepted `manifest_revision`.
 
-The [Provider presentation guide](provider-presentation.md) explains what each
-view means, where it appears in a future Control Plane, how schema-derived
-defaults and presentation hints compose, and how embedded assets remain safe.
-The wire fields, validation pipeline, and limits remain defined on this page.
+The [Provider presentation guide](provider-presentation.md) explains surfaces,
+the generic component tree, core renderers, custom renderer metadata and
+fallback, data bindings, and embedded assets. The wire fields, validation
+pipeline, and limits remain defined on this page.
 
 ## Declaration model
 

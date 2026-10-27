@@ -30,6 +30,7 @@ from stateforge_protocol.sfp.capability_assessment.v1 import (
 from stateforge_protocol.sfp.endpoint_discovery.v1 import (
     contract as endpoint_discovery_contract,
 )
+from stateforge_protocol.sfp.manifest.v1 import contract as manifest_contract
 from stateforge_protocol.sfp.manifest.v1 import manifest_pb2
 from stateforge_protocol.sfp.manifest.v1 import (
     validation as manifest_validation,
@@ -228,7 +229,9 @@ def _verify_manifest_validation(fixture_root: Path) -> int:
     ):
         raise ValueError("Installed Provider presentation was not accepted")
 
-    presented.presentation.provider.summary = "Tampered presentation"
+    presented.presentation.provider.surfaces[
+        manifest_contract.PROVIDER_OVERVIEW_SURFACE
+    ].root.properties.update({"tampered": True})
     rejected = manifest_validation.validate_manifest_exchange(presented)
     if (
         rejected.presentation_status

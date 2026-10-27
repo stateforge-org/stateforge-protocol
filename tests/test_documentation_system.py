@@ -47,7 +47,7 @@ def test_protocol_uses_the_shared_documentation_presentation() -> None:
     assert configuration.extra["annotate"]["json"] == [".s2"]
 
 
-def test_provider_presentation_guide_maps_views_to_surfaces() -> None:
+def test_provider_presentation_guide_maps_components_to_surfaces() -> None:
     page = (
         ROOT / "docs/v0.1.0/procedures/provider-presentation.md"
     ).read_text(encoding="utf-8")
@@ -78,26 +78,28 @@ def test_provider_presentation_guide_maps_views_to_surfaces() -> None:
             },
         ]
     } in procedure_navigation
-    for view in (
-        "`ProviderView`",
-        "`CapabilityGroup`",
-        "`OperationView`",
-        "`TriggerView`",
-        "`SchemaView`",
-        "`FieldGroup`",
-        "`FieldView`",
+    for contract_type in (
+        "`PresentationTarget`",
+        "`PresentationSurface`",
+        "`ComponentNode`",
+        "`DataBinding`",
+        "`RendererRequirement`",
         "`PresentationAsset`",
     ):
-        assert view in page
+        assert contract_type in page
     for surface in (
-        "Provider page",
-        "Policy builder",
-        "Operation input",
-        "Results and events",
+        "surface.provider.overview@1",
+        "surface.operation.request@1",
+        "surface.operation.run@1",
+        "surface.operation.result@1",
+        "surface.trigger.policy@1",
+        "surface.trigger.event@1",
+        "surface.evidence@1",
     ):
         assert surface in page
-    assert "schema-derived interface" in page
+    assert "schema-derived interface" in page.lower()
     assert "active Control Plane skin" in page
+    assert "No second SFP presentation RPC" in page
     assert "SF-AOP" in page
 
 

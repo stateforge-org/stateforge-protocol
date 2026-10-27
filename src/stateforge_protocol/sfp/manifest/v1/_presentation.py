@@ -6,10 +6,10 @@ import hashlib
 import re
 import struct
 import zlib
-from collections.abc import Iterable
 from typing import Any, Final, Never, cast
-from urllib.parse import unquote
 from xml.etree import ElementTree
+
+import rfc8785
 
 from stateforge_protocol.sfp.manifest.v1 import contract, manifest_pb2
 
@@ -80,9 +80,6 @@ _SAFE_SVG_ATTRIBUTES: Final = frozenset(
         "y2",
     }
 )
-_SCALAR_TYPES: Final = frozenset({"boolean", "integer", "number", "string"})
-_NUMBER_TYPES: Final = frozenset({"integer", "number"})
-_JSON_TYPES: Final = frozenset({"array", "object"})
 _PNG_SIGNATURE: Final = b"\x89PNG\r\n\x1a\n"
 _PNG_CHUNK_OVERHEAD: Final = 12
 _PNG_IHDR_BYTES: Final = 13
@@ -98,315 +95,376 @@ def validate_presentation_semantics(
     *,
     error_type: type[ValueError],
 ) -> None:
-    """Validate references, schema overlays and assets for presentation v1."""
+    """Validate a bounded component tree and all of its references."""
     operations = cast(dict[str, dict[str, Any]], manifest["operations"])
     triggers = cast(dict[str, dict[str, Any]], manifest["triggers"])
-    operation_views = cast(
+    operation_targets = cast(
         dict[str, dict[str, Any]], presentation["operations"]
     )
-    trigger_views = cast(dict[str, dict[str, Any]], presentation["triggers"])
+    trigger_targets = cast(dict[str, dict[str, Any]], presentation["triggers"])
+    requirements = cast(
+        dict[str, dict[str, Any]], presentation["rendererRequirements"]
+    )
 
-    if not operation_views.keys() <= operations.keys():
+    if not operation_targets.keys() <= operations.keys():
         raise error_type(
-            "presentation: operation view does not name a declared operation"
+            "presentation: operation target does not name a declared operation"
         )
-    if not trigger_views.keys() <= triggers.keys():
+    if not trigger_targets.keys() <= triggers.keys():
         raise error_type(
-            "presentation: trigger view does not name a declared trigger"
+            "presentation: trigger target does not name a declared trigger"
+        )
+    if contract.CORE_COMPONENT_NAMESPACE in requirements:
+        raise error_type(
+            "presentation: core components cannot require an extension"
         )
 
-    group_ids = _validate_capability_groups(presentation, error_type)
-    for identifier, view in operation_views.items():
-        _validate_group_reference(view, group_ids, error_type)
-        declaration = operations[identifier]
-        if "input" in view:
-            _validate_schema_view(
-                cast(dict[str, Any], view["input"]),
-                cast(dict[str, Any], declaration["inputSchema"]),
-                input_scope=True,
-                error_type=error_type,
-            )
-        if "result" in view:
-            _validate_schema_view(
-                cast(dict[str, Any], view["result"]),
-                cast(dict[str, Any], declaration["resultSchema"]),
-                input_scope=False,
-                error_type=error_type,
-            )
-    for identifier, view in trigger_views.items():
-        _validate_group_reference(view, group_ids, error_type)
-        if "payload" in view:
-            declaration = triggers[identifier]
-            _validate_schema_view(
-                cast(dict[str, Any], view["payload"]),
-                cast(dict[str, Any], declaration["payloadSchema"]),
-                input_scope=False,
-                error_type=error_type,
-            )
-
-    _validate_assets(presentation, message, error_type)
-
-
-def _validate_capability_groups(
-    presentation: dict[str, Any], error_type: type[ValueError]
-) -> frozenset[str]:
+    state = _PresentationState()
     provider = presentation.get("provider")
-    if provider is None:
-        return frozenset()
-    groups = cast(dict[str, Any], provider)["groups"]
-    identifiers = [cast(dict[str, Any], group)["id"] for group in groups]
-    if len(identifiers) != len(set(identifiers)):
-        raise error_type("presentation: capability group IDs must be unique")
-    return frozenset(cast(Iterable[str], identifiers))
-
-
-def _validate_group_reference(
-    view: dict[str, Any],
-    group_ids: frozenset[str],
-    error_type: type[ValueError],
-) -> None:
-    group_id = view["groupId"]
-    if group_id and group_id not in group_ids:
-        raise error_type("presentation: capability group reference is missing")
-
-
-def _validate_schema_view(
-    view: dict[str, Any],
-    schema: dict[str, Any],
-    *,
-    input_scope: bool,
-    error_type: type[ValueError],
-) -> None:
-    pointers = list(cast(list[str], view["fieldOrder"]))
-    field_views = cast(dict[str, dict[str, Any]], view["fields"])
-    pointers.extend(field_views)
-    grouped: list[str] = []
-    group_ids: list[str] = []
-    for group in cast(list[dict[str, Any]], view["groups"]):
-        group_ids.append(cast(str, group["id"]))
-        grouped.extend(cast(list[str], group["fields"]))
-    if len(group_ids) != len(set(group_ids)):
-        raise error_type("presentation: field group IDs must be unique")
-    if len(grouped) != len(set(grouped)):
-        raise error_type(
-            "presentation: a field may belong to at most one field group"
+    if isinstance(provider, dict):
+        _validate_target(
+            provider,
+            target_kind="provider",
+            permitted_surfaces=contract.PROVIDER_SURFACES,
+            state=state,
+            requirements=requirements,
+            error_type=error_type,
         )
-    pointers.extend(grouped)
-
-    property_nodes = _property_schema_nodes(schema)
-    resolved: dict[str, dict[str, Any]] = {}
-    for pointer in set(pointers):
-        target = _resolve_json_pointer(schema, pointer, error_type)
-        if not isinstance(target, dict) or id(target) not in property_nodes:
-            raise error_type(
-                "presentation: JSON Pointer must name a schema field"
-            )
-        resolved[pointer] = target
-
-    for pointer, field_view in field_views.items():
-        target = _follow_local_reference(resolved[pointer], schema, error_type)
-        _validate_field_preferences(
-            field_view,
+    for target in operation_targets.values():
+        _validate_target(
             target,
-            input_scope=input_scope,
+            target_kind="operation",
+            permitted_surfaces=contract.OPERATION_SURFACES,
+            state=state,
+            requirements=requirements,
+            error_type=error_type,
+        )
+    for target in trigger_targets.values():
+        _validate_target(
+            target,
+            target_kind="trigger",
+            permitted_surfaces=contract.TRIGGER_SURFACES,
+            state=state,
+            requirements=requirements,
+            error_type=error_type,
+        )
+
+    if requirements.keys() != state.custom_namespaces:
+        raise error_type(
+            "presentation: renderer requirements must exactly match custom "
+            "component namespaces"
+        )
+    for namespace, requirement in requirements.items():
+        if (
+            _namespace(cast(str, requirement["extensionIdentifier"]))
+            != namespace
+        ):
+            raise error_type(
+                "presentation: renderer extension namespace must match its "
+                "component namespace"
+            )
+
+    _validate_assets(message, state.asset_references, error_type)
+
+
+class _PresentationState:
+    """Track document-wide component and reference budgets."""
+
+    def __init__(self) -> None:
+        self.component_count = 0
+        self.custom_namespaces: set[str] = set()
+        self.asset_references: set[str] = set()
+
+
+def _validate_target(
+    target: dict[str, Any],
+    *,
+    target_kind: str,
+    permitted_surfaces: frozenset[str],
+    state: _PresentationState,
+    requirements: dict[str, dict[str, Any]],
+    error_type: type[ValueError],
+) -> None:
+    surfaces = cast(dict[str, dict[str, Any]], target["surfaces"])
+    unsupported = surfaces.keys() - permitted_surfaces
+    if unsupported:
+        raise error_type(
+            f"presentation: surface is not valid for {target_kind} targets"
+        )
+    for surface_identifier, surface in surfaces.items():
+        _validate_component(
+            cast(dict[str, Any], surface["root"]),
+            surface_identifier=surface_identifier,
+            target_kind=target_kind,
+            scopes=frozenset(),
+            depth=1,
+            core_only=False,
+            state=state,
+            requirements=requirements,
             error_type=error_type,
         )
 
 
-def _property_schema_nodes(schema: dict[str, Any]) -> set[int]:
-    nodes: set[int] = set()
-    pending: list[object] = [schema]
-    seen: set[int] = set()
-    while pending:
-        current = pending.pop()
-        if isinstance(current, dict):
-            identity = id(current)
-            if identity in seen:
-                continue
-            seen.add(identity)
-            properties = current.get("properties")
-            if isinstance(properties, dict):
-                nodes.update(
-                    id(value)
-                    for value in properties.values()
-                    if isinstance(value, dict)
-                )
-            pending.extend(current.values())
-        elif isinstance(current, list):
-            pending.extend(current)
-    return nodes
-
-
-def _resolve_json_pointer(
-    document: object, pointer: str, error_type: type[ValueError]
-) -> object:
-    current = document
-    for raw_token in pointer.split("/")[1:]:
-        token = raw_token.replace("~1", "/").replace("~0", "~")
-        if isinstance(current, dict) and token in current:
-            current = current[token]
-        elif isinstance(current, list) and token.isdigit():
-            index = int(token)
-            if index >= len(current):
-                raise error_type("presentation: JSON Pointer does not resolve")
-            current = current[index]
-        else:
-            raise error_type("presentation: JSON Pointer does not resolve")
-    return current
-
-
-def _follow_local_reference(
-    schema: dict[str, Any],
-    root: dict[str, Any],
-    error_type: type[ValueError],
-) -> dict[str, Any]:
-    current = schema
-    seen: set[int] = set()
-    while "$ref" in current:
-        identity = id(current)
-        if identity in seen:
-            raise error_type("presentation: cyclic field schema reference")
-        seen.add(identity)
-        reference = current["$ref"]
-        if not isinstance(reference, str) or not reference.startswith("#"):
-            raise error_type("presentation: field schema reference is invalid")
-        fragment = unquote(reference[1:])
-        target = (
-            root
-            if not fragment
-            else _resolve_json_pointer(root, fragment, error_type)
-        )
-        if not isinstance(target, dict):
-            raise error_type(
-                "presentation: field schema reference must name a schema"
-            )
-        current = target
-    return current
-
-
-def _validate_field_preferences(
-    view: dict[str, Any],
-    schema: dict[str, Any],
+def _validate_component(
+    node: dict[str, Any],
     *,
-    input_scope: bool,
+    surface_identifier: str,
+    target_kind: str,
+    scopes: frozenset[str],
+    depth: int,
+    core_only: bool,
+    state: _PresentationState,
+    requirements: dict[str, dict[str, Any]],
     error_type: type[ValueError],
 ) -> None:
-    widget = cast(str, view["widget"])
-    display = cast(str, view["display"])
-    if not input_scope and (
-        widget != "INPUT_WIDGET_UNSPECIFIED" or view["placeholder"]
+    if depth > contract.MAX_PRESENTATION_COMPONENT_DEPTH:
+        raise error_type("presentation: component depth limit exceeded")
+    state.component_count += 1
+    if state.component_count > contract.MAX_PRESENTATION_COMPONENTS:
+        raise error_type("presentation: component count limit exceeded")
+
+    _validate_component_identity(
+        node,
+        core_only=core_only,
+        state=state,
+        requirements=requirements,
+        error_type=error_type,
+    )
+
+    properties = cast(dict[str, Any], node["properties"])
+    if (
+        len(rfc8785.dumps(properties))
+        > contract.MAX_COMPONENT_PROPERTIES_BYTES
+    ):
+        raise error_type("presentation: component properties limit exceeded")
+
+    current_scopes = _extend_repetition_scopes(
+        node,
+        surface_identifier=surface_identifier,
+        target_kind=target_kind,
+        scopes=scopes,
+        error_type=error_type,
+    )
+
+    for binding in cast(dict[str, dict[str, Any]], node["bindings"]).values():
+        _validate_binding(
+            binding,
+            surface_identifier=surface_identifier,
+            target_kind=target_kind,
+            scopes=current_scopes,
+            error_type=error_type,
+        )
+    _validate_optional_condition(
+        node,
+        surface_identifier=surface_identifier,
+        target_kind=target_kind,
+        scopes=current_scopes,
+        error_type=error_type,
+    )
+    state.asset_references.update(
+        cast(dict[str, str], node["assetBindings"]).values()
+    )
+
+    _validate_optional_fallback(
+        node,
+        surface_identifier=surface_identifier,
+        target_kind=target_kind,
+        scopes=current_scopes,
+        depth=depth,
+        state=state,
+        requirements=requirements,
+        error_type=error_type,
+    )
+    for child in cast(list[dict[str, Any]], node["children"]):
+        _validate_component(
+            child,
+            surface_identifier=surface_identifier,
+            target_kind=target_kind,
+            scopes=current_scopes,
+            depth=depth + 1,
+            core_only=core_only,
+            state=state,
+            requirements=requirements,
+            error_type=error_type,
+        )
+
+
+def _validate_component_identity(
+    node: dict[str, Any],
+    *,
+    core_only: bool,
+    state: _PresentationState,
+    requirements: dict[str, dict[str, Any]],
+    error_type: type[ValueError],
+) -> None:
+    identifier = cast(str, node["componentIdentifier"])
+    namespace = _namespace(identifier)
+    is_core = namespace == contract.CORE_COMPONENT_NAMESPACE
+    if is_core and identifier not in contract.CORE_COMPONENT_IDENTIFIERS:
+        raise error_type("presentation: unknown core component identifier")
+    if core_only and not is_core:
+        raise error_type(
+            "presentation: custom component fallback must use core components"
+        )
+    if not is_core:
+        if namespace not in requirements:
+            raise error_type(
+                "presentation: custom component has no renderer requirement"
+            )
+        if "fallback" not in node:
+            raise error_type(
+                "presentation: custom component requires a core fallback"
+            )
+        state.custom_namespaces.add(namespace)
+
+
+def _extend_repetition_scopes(
+    node: dict[str, Any],
+    *,
+    surface_identifier: str,
+    target_kind: str,
+    scopes: frozenset[str],
+    error_type: type[ValueError],
+) -> frozenset[str]:
+    repeat = node.get("repeat")
+    if not isinstance(repeat, dict):
+        return scopes
+    _validate_binding(
+        cast(dict[str, Any], repeat["collection"]),
+        surface_identifier=surface_identifier,
+        target_kind=target_kind,
+        scopes=scopes,
+        error_type=error_type,
+    )
+    item_scope = cast(str, repeat["itemScope"])
+    if item_scope in scopes:
+        raise error_type("presentation: repetition scopes must be unique")
+    return scopes | {item_scope}
+
+
+def _validate_optional_condition(
+    node: dict[str, Any],
+    *,
+    surface_identifier: str,
+    target_kind: str,
+    scopes: frozenset[str],
+    error_type: type[ValueError],
+) -> None:
+    condition = node.get("condition")
+    if isinstance(condition, dict):
+        _validate_condition(
+            condition,
+            surface_identifier=surface_identifier,
+            target_kind=target_kind,
+            scopes=scopes,
+            error_type=error_type,
+        )
+
+
+def _validate_optional_fallback(
+    node: dict[str, Any],
+    *,
+    surface_identifier: str,
+    target_kind: str,
+    scopes: frozenset[str],
+    depth: int,
+    state: _PresentationState,
+    requirements: dict[str, dict[str, Any]],
+    error_type: type[ValueError],
+) -> None:
+    fallback = node.get("fallback")
+    if isinstance(fallback, dict):
+        _validate_component(
+            fallback,
+            surface_identifier=surface_identifier,
+            target_kind=target_kind,
+            scopes=scopes,
+            depth=depth + 1,
+            core_only=True,
+            state=state,
+            requirements=requirements,
+            error_type=error_type,
+        )
+
+
+def _validate_condition(
+    condition: dict[str, Any],
+    *,
+    surface_identifier: str,
+    target_kind: str,
+    scopes: frozenset[str],
+    error_type: type[ValueError],
+) -> None:
+    _validate_binding(
+        cast(dict[str, Any], condition["binding"]),
+        surface_identifier=surface_identifier,
+        target_kind=target_kind,
+        scopes=scopes,
+        error_type=error_type,
+    )
+    operator = cast(str, condition["operator"])
+    has_value = "value" in condition
+    if (
+        operator
+        in {
+            "CONDITION_OPERATOR_EXISTS",
+            "CONDITION_OPERATOR_NOT_EXISTS",
+        }
+        and has_value
     ):
         raise error_type(
-            "presentation: output fields cannot declare input preferences"
+            "presentation: existence condition cannot declare a value"
         )
-    types = _schema_types(schema)
-    _validate_widget(widget, schema, types, error_type)
-    _validate_display(display, schema, types, error_type)
-
-
-def _validate_widget(
-    widget: str,
-    schema: dict[str, Any],
-    types: frozenset[str],
-    error_type: type[ValueError],
-) -> None:
-    """Require one input widget to match its field schema."""
-    if widget == "INPUT_WIDGET_UNSPECIFIED":
-        return
-    elif widget in {"INPUT_WIDGET_TEXT", "INPUT_WIDGET_MULTILINE"}:
-        _require_types(types, {"string"}, "input widget", error_type)
-    elif widget == "INPUT_WIDGET_SECRET":
-        _require_types(types, {"string"}, "input widget", error_type)
-        if schema.get("writeOnly") is not True:
-            raise error_type(
-                "presentation: secret widget requires a write-only field"
-            )
-    elif widget == "INPUT_WIDGET_NUMBER":
-        _require_types(types, _NUMBER_TYPES, "input widget", error_type)
-    elif widget == "INPUT_WIDGET_SLIDER":
-        _require_types(types, _NUMBER_TYPES, "input widget", error_type)
-        if "minimum" not in schema or "maximum" not in schema:
-            raise error_type(
-                "presentation: slider requires schema minimum and maximum"
-            )
-    elif widget == "INPUT_WIDGET_CHECKBOX":
-        _require_types(types, {"boolean"}, "input widget", error_type)
-    elif widget in {"INPUT_WIDGET_SELECT", "INPUT_WIDGET_RADIO"}:
-        if not isinstance(schema.get("enum"), list) or not schema["enum"]:
-            raise error_type(
-                "presentation: choice widget requires a nonempty schema enum"
-            )
-    elif widget == "INPUT_WIDGET_DATE_TIME":
-        _require_date_time(schema, types, "input widget", error_type)
-    elif widget == "INPUT_WIDGET_JSON":
-        _require_types(types, _JSON_TYPES, "input widget", error_type)
-
-
-def _validate_display(
-    display: str,
-    schema: dict[str, Any],
-    types: frozenset[str],
-    error_type: type[ValueError],
-) -> None:
-    """Require one display style to match its field schema."""
-    if display == "DISPLAY_STYLE_UNSPECIFIED":
-        return
-    if display == "DISPLAY_STYLE_TEXT":
-        _require_types(types, _SCALAR_TYPES, "display style", error_type)
-    elif display == "DISPLAY_STYLE_CODE":
-        _require_types(types, {"string"}, "display style", error_type)
-    elif display == "DISPLAY_STYLE_JSON":
-        _require_types(types, _JSON_TYPES, "display style", error_type)
-    elif display == "DISPLAY_STYLE_TABLE":
-        _require_types(types, {"array"}, "display style", error_type)
-    elif display == "DISPLAY_STYLE_BADGE":
-        _require_types(types, _SCALAR_TYPES, "display style", error_type)
-    elif display == "DISPLAY_STYLE_METRIC":
-        _require_types(types, _NUMBER_TYPES, "display style", error_type)
-    elif display == "DISPLAY_STYLE_DATE_TIME":
-        _require_date_time(schema, types, "display style", error_type)
-
-
-def _schema_types(schema: dict[str, Any]) -> frozenset[str]:
-    declared = schema.get("type")
-    if isinstance(declared, str):
-        return frozenset({declared})
-    if isinstance(declared, list) and all(
-        isinstance(value, str) for value in declared
+    if (
+        operator
+        in {
+            "CONDITION_OPERATOR_EQUALS",
+            "CONDITION_OPERATOR_NOT_EQUALS",
+        }
+        and not has_value
     ):
-        return frozenset(declared) - {"null"}
-    return frozenset()
+        raise error_type("presentation: equality condition requires a value")
 
 
-def _require_types(
-    actual: frozenset[str],
-    permitted: Iterable[str],
-    preference: str,
+def _validate_binding(
+    binding: dict[str, Any],
+    *,
+    surface_identifier: str,
+    target_kind: str,
+    scopes: frozenset[str],
     error_type: type[ValueError],
 ) -> None:
-    allowed = frozenset(permitted)
-    if not actual or not actual <= allowed:
+    source = cast(str, binding["sourceIdentifier"])
+    scope = cast(str, binding["scope"])
+    if source == contract.REPETITION_ITEM_BINDING:
+        if not scope or scope not in scopes:
+            raise error_type(
+                "presentation: repetition item binding has no active scope"
+            )
+        return
+    if scope:
         raise error_type(
-            f"presentation: {preference} is incompatible with schema type"
+            "presentation: only repetition item bindings may name a scope"
+        )
+    allowed = set(contract.SURFACE_BINDING_SOURCES[surface_identifier])
+    if surface_identifier == contract.EVIDENCE_SURFACE:
+        if target_kind == "operation":
+            allowed.discard(contract.TRIGGER_PAYLOAD_VALUE_BINDING)
+        elif target_kind == "trigger":
+            allowed.discard(contract.OPERATION_EVIDENCE_BINDING)
+    if source not in allowed:
+        raise error_type(
+            "presentation: binding source is unavailable on this surface"
         )
 
 
-def _require_date_time(
-    schema: dict[str, Any],
-    types: frozenset[str],
-    preference: str,
-    error_type: type[ValueError],
-) -> None:
-    _require_types(types, {"string"}, preference, error_type)
-    if schema.get("format") not in {"date", "date-time", "time"}:
-        raise error_type(
-            f"presentation: {preference} requires a date or time format"
-        )
+def _namespace(identifier: str) -> str:
+    return identifier.split("/", 1)[0]
 
 
 def _validate_assets(
-    presentation: dict[str, Any],
     message: manifest_pb2.ProviderPresentation,
+    references: set[str],
     error_type: type[ValueError],
 ) -> None:
     assets = message.assets
@@ -424,31 +482,10 @@ def _validate_assets(
             raise error_type("presentation: asset digest mismatch")
         _validate_asset_content(asset, error_type)
 
-    references = _asset_references(presentation)
     if not references <= assets.keys():
         raise error_type("presentation: asset reference is missing")
     if assets.keys() - references:
         raise error_type("presentation: unreferenced asset is not permitted")
-
-
-def _asset_references(presentation: dict[str, Any]) -> set[str]:
-    references: set[str] = set()
-    provider = presentation.get("provider")
-    if isinstance(provider, dict):
-        _add_asset_reference(references, provider.get("iconAssetDigest"))
-        _add_asset_reference(references, provider.get("bannerAssetDigest"))
-        for group in cast(list[dict[str, Any]], provider["groups"]):
-            _add_asset_reference(references, group.get("iconAssetDigest"))
-    for collection in ("operations", "triggers"):
-        views = cast(dict[str, dict[str, Any]], presentation[collection])
-        for view in views.values():
-            _add_asset_reference(references, view.get("iconAssetDigest"))
-    return references
-
-
-def _add_asset_reference(references: set[str], value: object) -> None:
-    if isinstance(value, str) and value:
-        references.add(value)
 
 
 def _validate_asset_content(

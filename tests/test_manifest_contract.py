@@ -76,7 +76,15 @@ def test_versioned_contract_exposes_normative_limits() -> None:
         "MAX_PLATFORMS": 256,
         "MAX_PROFILE_CLAIMS_PER_OPERATION": 64,
         "PRESENTATION_SCHEMA_VERSION": 1,
-        "MAX_CAPABILITY_GROUPS": 64,
+        "MAX_PRESENTATION_SURFACES_PER_TARGET": 8,
+        "MAX_PRESENTATION_COMPONENTS": 4_096,
+        "MAX_PRESENTATION_COMPONENT_DEPTH": 16,
+        "MAX_COMPONENT_CHILDREN": 256,
+        "MAX_COMPONENT_BINDINGS": 64,
+        "MAX_COMPONENT_ASSET_BINDINGS": 32,
+        "MAX_RENDERER_REQUIREMENTS": 64,
+        "MAX_RENDERER_PERMISSIONS": 32,
+        "MAX_REPETITION_ITEMS": 1_024,
         "MAX_PRESENTATION_ASSETS": 64,
         "MAX_PRESENTATION_ASSET_BYTES": 256 * 1024,
         "MAX_PRESENTATION_ASSET_TOTAL_BYTES": 1 * 1024 * 1024,
@@ -129,8 +137,30 @@ def test_versioned_contract_limits_match_packaged_schema() -> None:
         == contract.MAX_PRESENTATION_ASSETS
     )
     assert (
-        definitions["providerView"]["properties"]["groups"]["maxItems"]
-        == contract.MAX_CAPABILITY_GROUPS
+        definitions["presentationTarget"]["properties"]["surfaces"][
+            "maxProperties"
+        ]
+        == contract.MAX_PRESENTATION_SURFACES_PER_TARGET
+    )
+    component = definitions["componentNode"]["properties"]
+    assert component["children"]["maxItems"] == contract.MAX_COMPONENT_CHILDREN
+    assert (
+        component["bindings"]["maxProperties"]
+        == contract.MAX_COMPONENT_BINDINGS
+    )
+    assert (
+        component["assetBindings"]["maxProperties"]
+        == contract.MAX_COMPONENT_ASSET_BINDINGS
+    )
+    assert (
+        presentation["rendererRequirements"]["maxProperties"]
+        == contract.MAX_RENDERER_REQUIREMENTS
+    )
+    assert (
+        definitions["rendererRequirement"]["properties"]["permissions"][
+            "maxItems"
+        ]
+        == contract.MAX_RENDERER_PERMISSIONS
     )
     assert (
         set(
@@ -290,23 +320,34 @@ def test_presentation_is_outside_the_operational_manifest() -> None:
 
 
 def test_presentation_contract_cannot_hide_or_redefine_fields() -> None:
-    field_view = manifest_pb2.FieldView.DESCRIPTOR.fields_by_name
-    schema_view = manifest_pb2.SchemaView.DESCRIPTOR.fields_by_name
+    component = manifest_pb2.ComponentNode.DESCRIPTOR.fields_by_name
+    renderer = manifest_pb2.RendererRequirement.DESCRIPTOR.fields_by_name
     forbidden = {
         "hidden",
         "required",
         "schema",
         "default",
-        "value",
         "html",
         "css",
         "javascript",
         "url",
         "path",
+        "executable",
+        "install_command",
     }
 
-    assert not forbidden & set(field_view)
-    assert not forbidden & set(schema_view)
+    assert set(component) == {
+        "component_identifier",
+        "properties",
+        "bindings",
+        "children",
+        "fallback",
+        "condition",
+        "repeat",
+        "asset_bindings",
+    }
+    assert not forbidden & set(component)
+    assert not forbidden & set(renderer)
 
 
 def test_presentation_is_not_part_of_operation_or_trigger_messages() -> None:
@@ -354,7 +395,9 @@ def test_presentation_changes_do_not_change_business_fingerprints() -> None:
         json.loads((_FIXTURES / "presentation-response.json").read_text()),
         manifest_pb2.GetManifestResponse(),
     )
-    manifest_response.presentation.provider.summary = "Changed presentation"
+    manifest_response.presentation.provider.surfaces[
+        contract.PROVIDER_OVERVIEW_SURFACE
+    ].root.properties.update({"gap": "changed"})
 
     assert (
         admission_validation.compute_request_fingerprint(operation)
@@ -369,11 +412,10 @@ def test_presentation_changes_do_not_change_business_fingerprints() -> None:
 @pytest.mark.parametrize(
     ("target", "field", "value"),
     [
-        ("field", "hidden", True),
-        ("field", "required", False),
-        ("field", "schema", {"type": "string"}),
-        ("field", "html", "<strong>unsafe</strong>"),
-        ("field", "javascript", "alert(1)"),
+        ("component", "hidden", True),
+        ("component", "javascript", "alert(1)"),
+        ("renderer", "url", "https://example.invalid/renderer"),
+        ("renderer", "executable", "payload"),
         ("asset", "url", "https://example.invalid/icon.svg"),
         ("asset", "path", "../../etc/passwd"),
     ],
@@ -386,9 +428,13 @@ def test_presentation_protojson_rejects_executable_or_semantic_fields(
     document = json.loads(
         (_FIXTURES / "presentation-response.json").read_text()
     )["presentation"]
-    if target == "field":
-        view = next(iter(document["operations"].values()))
-        selected = next(iter(view["input"]["fields"].values()))
+    if target == "component":
+        operation = next(iter(document["operations"].values()))
+        selected = operation["surfaces"][contract.OPERATION_RESULT_SURFACE][
+            "root"
+        ]
+    elif target == "renderer":
+        selected = next(iter(document["rendererRequirements"].values()))
     else:
         selected = next(iter(document["assets"].values()))
     selected[field] = value

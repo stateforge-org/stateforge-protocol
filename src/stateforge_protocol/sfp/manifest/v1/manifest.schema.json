@@ -242,7 +242,7 @@
         },
         "versionConstraint": {
           "type": "string",
-          "minLength": 0,
+          "minItems": 0,
           "maxLength": 255
         }
       },
@@ -286,333 +286,220 @@
       ],
       "additionalProperties": false
     },
-    "presentationGroupId": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 64,
-      "pattern": "^[a-z][a-z0-9_-]*(?![\\s\\S])"
-    },
     "jsonPointer": {
       "type": "string",
       "minLength": 1,
       "maxLength": 2048,
       "pattern": "^(/([^~/]|~0|~1)*)+$(?![\\s\\S])"
     },
-    "presentationText": {
+    "bindingPointer": {
+      "oneOf": [
+        {
+          "const": ""
+        },
+        {
+          "$ref": "#/$defs/jsonPointer"
+        }
+      ]
+    },
+    "presentationScope": {
       "type": "string",
-      "minLength": 0,
-      "maxLength": 4096
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*(?![\\s\\S])"
     },
-    "capabilityGroup": {
+    "dataBinding": {
       "type": "object",
       "properties": {
-        "id": {
-          "$ref": "#/$defs/presentationGroupId"
+        "sourceIdentifier": {
+          "$ref": "#/$defs/identifier"
         },
-        "label": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 255
+        "pointer": {
+          "$ref": "#/$defs/bindingPointer"
         },
-        "description": {
-          "$ref": "#/$defs/presentationText"
-        },
-        "iconAssetDigest": {
+        "scope": {
           "oneOf": [
             {
               "const": ""
             },
             {
-              "$ref": "#/$defs/revision"
+              "$ref": "#/$defs/presentationScope"
             }
           ]
         }
       },
       "required": [
-        "id",
-        "label",
-        "description",
-        "iconAssetDigest"
+        "sourceIdentifier",
+        "pointer",
+        "scope"
       ],
       "additionalProperties": false
     },
-    "providerView": {
+    "condition": {
       "type": "object",
       "properties": {
-        "summary": {
-          "type": "string",
-          "minLength": 0,
-          "maxLength": 512
+        "binding": {
+          "$ref": "#/$defs/dataBinding"
         },
-        "description": {
-          "$ref": "#/$defs/presentationText"
-        },
-        "iconAssetDigest": {
-          "oneOf": [
-            {
-              "const": ""
-            },
-            {
-              "$ref": "#/$defs/revision"
-            }
-          ]
-        },
-        "bannerAssetDigest": {
-          "oneOf": [
-            {
-              "const": ""
-            },
-            {
-              "$ref": "#/$defs/revision"
-            }
-          ]
-        },
-        "groups": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/capabilityGroup"
-          },
-          "minItems": 0,
-          "maxItems": 64
-        }
-      },
-      "required": [
-        "summary",
-        "description",
-        "iconAssetDigest",
-        "bannerAssetDigest",
-        "groups"
-      ],
-      "additionalProperties": false
-    },
-    "fieldGroup": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/presentationGroupId"
-        },
-        "label": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 255
-        },
-        "description": {
-          "$ref": "#/$defs/presentationText"
-        },
-        "fields": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/jsonPointer"
-          },
-          "minItems": 1,
-          "maxItems": 256,
-          "uniqueItems": true
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "description",
-        "fields"
-      ],
-      "additionalProperties": false
-    },
-    "fieldView": {
-      "type": "object",
-      "properties": {
-        "label": {
-          "type": "string",
-          "minLength": 0,
-          "maxLength": 255
-        },
-        "helpText": {
-          "$ref": "#/$defs/presentationText"
-        },
-        "placeholder": {
-          "type": "string",
-          "minLength": 0,
-          "maxLength": 512
-        },
-        "unit": {
-          "type": "string",
-          "minLength": 0,
-          "maxLength": 64
-        },
-        "widget": {
+        "operator": {
           "enum": [
-            "INPUT_WIDGET_UNSPECIFIED",
-            "INPUT_WIDGET_TEXT",
-            "INPUT_WIDGET_MULTILINE",
-            "INPUT_WIDGET_SECRET",
-            "INPUT_WIDGET_NUMBER",
-            "INPUT_WIDGET_SLIDER",
-            "INPUT_WIDGET_CHECKBOX",
-            "INPUT_WIDGET_SELECT",
-            "INPUT_WIDGET_RADIO",
-            "INPUT_WIDGET_DATE_TIME",
-            "INPUT_WIDGET_JSON"
+            "CONDITION_OPERATOR_EXISTS",
+            "CONDITION_OPERATOR_NOT_EXISTS",
+            "CONDITION_OPERATOR_EQUALS",
+            "CONDITION_OPERATOR_NOT_EQUALS"
           ]
         },
-        "display": {
-          "enum": [
-            "DISPLAY_STYLE_UNSPECIFIED",
-            "DISPLAY_STYLE_TEXT",
-            "DISPLAY_STYLE_CODE",
-            "DISPLAY_STYLE_JSON",
-            "DISPLAY_STYLE_TABLE",
-            "DISPLAY_STYLE_BADGE",
-            "DISPLAY_STYLE_METRIC",
-            "DISPLAY_STYLE_DATE_TIME"
-          ]
-        }
+        "value": true
       },
       "required": [
-        "label",
-        "helpText",
-        "placeholder",
-        "unit",
-        "widget",
-        "display"
+        "binding",
+        "operator"
       ],
       "additionalProperties": false
     },
-    "schemaView": {
+    "repetition": {
       "type": "object",
       "properties": {
-        "fieldOrder": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/jsonPointer"
-          },
-          "minItems": 0,
-          "maxItems": 1024,
-          "uniqueItems": true
+        "collection": {
+          "$ref": "#/$defs/dataBinding"
         },
-        "groups": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/fieldGroup"
-          },
-          "minItems": 0,
-          "maxItems": 64
+        "itemScope": {
+          "$ref": "#/$defs/presentationScope"
         },
-        "fields": {
+        "maxItems": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        }
+      },
+      "required": [
+        "collection",
+        "itemScope",
+        "maxItems"
+      ],
+      "additionalProperties": false
+    },
+    "componentNode": {
+      "type": "object",
+      "properties": {
+        "componentIdentifier": {
+          "$ref": "#/$defs/identifier"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "bindings": {
           "type": "object",
           "propertyNames": {
-            "$ref": "#/$defs/jsonPointer"
+            "$ref": "#/$defs/presentationScope"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/fieldView"
+            "$ref": "#/$defs/dataBinding"
           },
           "minProperties": 0,
-          "maxProperties": 1024
+          "maxProperties": 64
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/componentNode"
+          },
+          "minLength": 0,
+          "maxItems": 256
+        },
+        "fallback": {
+          "$ref": "#/$defs/componentNode"
+        },
+        "condition": {
+          "$ref": "#/$defs/condition"
+        },
+        "repeat": {
+          "$ref": "#/$defs/repetition"
+        },
+        "assetBindings": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/presentationScope"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/revision"
+          },
+          "minProperties": 0,
+          "maxProperties": 32
         }
       },
       "required": [
-        "fieldOrder",
-        "groups",
-        "fields"
+        "componentIdentifier",
+        "properties",
+        "bindings",
+        "children",
+        "assetBindings"
       ],
       "additionalProperties": false
     },
-    "operationView": {
+    "presentationSurface": {
       "type": "object",
       "properties": {
-        "label": {
-          "type": "string",
-          "minLength": 0,
-          "maxLength": 255
-        },
-        "summary": {
-          "type": "string",
-          "minLength": 0,
-          "maxLength": 512
-        },
-        "description": {
-          "$ref": "#/$defs/presentationText"
-        },
-        "iconAssetDigest": {
-          "oneOf": [
-            {
-              "const": ""
-            },
-            {
-              "$ref": "#/$defs/revision"
-            }
-          ]
-        },
-        "groupId": {
-          "oneOf": [
-            {
-              "const": ""
-            },
-            {
-              "$ref": "#/$defs/presentationGroupId"
-            }
-          ]
-        },
-        "input": {
-          "$ref": "#/$defs/schemaView"
-        },
-        "result": {
-          "$ref": "#/$defs/schemaView"
+        "root": {
+          "$ref": "#/$defs/componentNode"
         }
       },
       "required": [
-        "label",
-        "summary",
-        "description",
-        "iconAssetDigest",
-        "groupId"
+        "root"
       ],
       "additionalProperties": false
     },
-    "triggerView": {
+    "presentationTarget": {
       "type": "object",
       "properties": {
-        "label": {
-          "type": "string",
-          "minLength": 0,
-          "maxLength": 255
-        },
-        "summary": {
-          "type": "string",
-          "minLength": 0,
-          "maxLength": 512
-        },
-        "description": {
-          "$ref": "#/$defs/presentationText"
-        },
-        "iconAssetDigest": {
-          "oneOf": [
-            {
-              "const": ""
-            },
-            {
-              "$ref": "#/$defs/revision"
-            }
-          ]
-        },
-        "groupId": {
-          "oneOf": [
-            {
-              "const": ""
-            },
-            {
-              "$ref": "#/$defs/presentationGroupId"
-            }
-          ]
-        },
-        "payload": {
-          "$ref": "#/$defs/schemaView"
+        "surfaces": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/presentationSurface"
+          },
+          "minProperties": 1,
+          "maxProperties": 8
         }
       },
       "required": [
-        "label",
-        "summary",
-        "description",
-        "iconAssetDigest",
-        "groupId"
+        "surfaces"
+      ],
+      "additionalProperties": false
+    },
+    "rendererRequirement": {
+      "type": "object",
+      "properties": {
+        "extensionIdentifier": {
+          "$ref": "#/$defs/identifier"
+        },
+        "extensionVersion": {
+          "$ref": "#/$defs/semver"
+        },
+        "rendererApiVersion": {
+          "$ref": "#/$defs/semver"
+        },
+        "artifactDigest": {
+          "$ref": "#/$defs/revision"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "minItems": 0,
+          "maxItems": 32,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "extensionIdentifier",
+        "extensionVersion",
+        "rendererApiVersion",
+        "artifactDigest",
+        "permissions"
       ],
       "additionalProperties": false
     },
@@ -662,7 +549,7 @@
           "const": 1
         },
         "provider": {
-          "$ref": "#/$defs/providerView"
+          "$ref": "#/$defs/presentationTarget"
         },
         "operations": {
           "type": "object",
@@ -670,7 +557,7 @@
             "$ref": "#/$defs/identifier"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/operationView"
+            "$ref": "#/$defs/presentationTarget"
           },
           "minProperties": 0,
           "maxProperties": 1024
@@ -681,7 +568,7 @@
             "$ref": "#/$defs/identifier"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/triggerView"
+            "$ref": "#/$defs/presentationTarget"
           },
           "minProperties": 0,
           "maxProperties": 1024
@@ -696,13 +583,25 @@
           },
           "minProperties": 0,
           "maxProperties": 64
+        },
+        "rendererRequirements": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/dottedIdentifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/rendererRequirement"
+          },
+          "minProperties": 0,
+          "maxProperties": 64
         }
       },
       "required": [
         "presentationSchemaVersion",
         "operations",
         "triggers",
-        "assets"
+        "assets",
+        "rendererRequirements"
       ],
       "additionalProperties": false
     },

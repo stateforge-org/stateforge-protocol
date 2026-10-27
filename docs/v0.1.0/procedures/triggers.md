@@ -233,9 +233,9 @@ publication has no separate schema-version field and cannot negotiate a schema
 independently.
 
 Provider presentation does not participate in publication or acknowledgement.
-Its labels, visual groups, field order, displays, and assets may improve how a
-consumer renders a declared trigger, but the trigger identifier and
-authoritative `payload_schema` remain the complete wire contract.
+Trigger policy and event surfaces may improve how a consumer configures or
+renders a declared trigger, but the trigger identifier and authoritative
+`payload_schema` remain the complete wire contract.
 `presentation_revision` is not part of the stream binding or publication
 content fingerprint.
 

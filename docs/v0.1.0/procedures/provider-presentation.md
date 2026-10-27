@@ -1,240 +1,294 @@
 # Provider presentation
 
-A Provider presentation is an optional visual overlay for an accepted
-[Provider manifest](provider-manifest.md). It gives a Control Plane useful
-labels, explanations, grouping, render preferences, and Provider-owned visuals
-without replacing the operation and trigger schemas that define the real
-contract.
+A Provider presentation is an optional, independently revised interface
+declaration attached to an accepted [Provider manifest](provider-manifest.md).
+It tells a Control Plane which surfaces a Provider offers and describes each
+surface as a bounded tree of renderer components.
 
-When a presentation is absent or rejected, the same manifest still produces a
-complete schema-derived interface. Presentation improves that interface; it is
-never required to understand or execute a capability.
+Presentation does not change an operation, trigger, schema, authorization
+decision, or runtime value. If it is absent, unsupported, or invalid, the
+operational manifest remains usable and the Control Plane can render directly
+from its JSON Schemas.
 
-!!! note "Illustrative Control Plane surfaces"
-
-    The previews on this page show how a Control Plane can apply the contract.
-    The Protocol defines the meaning of each view. The Control Plane and its
-    active skin decide exact layout, spacing, typography, and interaction.
-
-## From declaration to interface
+## From manifest to interface
 
 ```mermaid
 flowchart LR
-    Manifest["ProviderManifest<br/>capabilities + JSON Schemas"] --> Model["Schema-derived<br/>rendering model"]
-    Presentation["ProviderPresentation<br/>labels + grouping + assets"] --> Validate{"Presentation<br/>valid?"}
-    Validate -->|Yes| Model
-    Validate -.->|No| Default["Use schema defaults"]
-    Default --> Model
-    Skin["Control Plane skin<br/>visual language"] --> Render["Rendered surfaces"]
-    Model --> Render
-    Render --> Provider["Provider page"]
-    Render --> Builder["Policy builder"]
-    Render --> Input["Operation input"]
-    Render --> Result["Results and events"]
+    Manifest["ProviderManifest<br/>capabilities + JSON Schemas"] --> Sources["Control Plane data sources"]
+    Presentation["ProviderPresentation<br/>surfaces + component trees"] --> Validate{"SFP presentation<br/>valid?"}
+    Validate -->|yes| Registry["Control Plane<br/>renderer registry"]
+    Validate -.->|no| Defaults["Schema-derived interface"]
+    Sources --> Registry
+    Assets["Embedded PNG / SVG assets"] --> Registry
+    Extensions["Installed renderer extensions"] --> Registry
+    Registry --> Render["Rendered Provider, operation,<br/>trigger, and evidence surfaces"]
+    Defaults --> Render
 ```
 
-The inputs have separate responsibilities:
-
-| Input | What it contributes |
+| Layer | Owns |
 | --- | --- |
-| Operational manifest | Provider identity, capability identifiers, JSON Schemas, required fields, validation, and secret semantics |
-| Provider presentation | Human-facing descriptions, grouping, field order, compatible widgets and displays, and embedded visuals |
-| Control Plane skin | Colors, type, spacing, component styling, and the overall product experience |
+| Operational manifest | Capability identifiers, JSON Schemas, requirements, and execution semantics |
+| SFP presentation contract | Surface identifiers, component-tree structure, bindings, conditions, repetition, extension metadata, safe assets, and limits |
+| Control Plane renderer registry | The property schema and rendering behavior for each component identifier |
+| Control Plane skin | Typography, color, spacing, framing, and product-wide visual language |
 
-The presentation does not contain a page template. It supplies structured
-meaning that any conforming Control Plane can render in its own visual system.
+SFP carries declarative data only. It never carries HTML, CSS, JavaScript,
+executable renderer bytes, an installation command, or a remote asset URL.
 
-## Views and their Control Plane surfaces
+## Presentation targets and surfaces
 
-| View | Primary Control Plane surface | What it contributes |
+A `ProviderPresentation` can attach a `PresentationTarget` to the Provider
+itself and to any operation or trigger declared by the same manifest. Operation
+and trigger map keys must match exact manifest identifiers.
+
+Each target contains one or more named surfaces:
+
+| Target | Surface identifier | Intended use |
 | --- | --- | --- |
-| `ProviderView` | Provider detail page and capability browser | Summary, description, icon, banner, and optional capability groups |
-| `CapabilityGroup` | Sections within the Provider's capability browser | Label, description, icon, and a stable group ID referenced by operations and triggers |
-| `OperationView` | Operation cards, policy steps, input forms, and result panels | Operation text and icon plus separate input and result schema views |
-| `TriggerView` | Trigger cards, policy conditions, and event inspection | Trigger text and icon plus a payload schema view |
-| `SchemaView` | A form, result, or payload layout | Field order, optional field groups, and field-level presentation hints |
-| `FieldGroup` | A labeled section within one schema-derived surface | A visual grouping of JSON Pointer-addressed fields |
-| `FieldView` | One field in a form, result, or payload | Label, help, placeholder, unit, input widget, or read-only display style |
-| `PresentationAsset` | Provider, group, operation, or trigger visuals | Embedded PNG or sanitized SVG content addressed by its SHA-256 digest |
+| Provider | `stateforge.ui/surface.provider.overview@1` | Provider identity, status, capabilities, and summary information |
+| Operation | `stateforge.ui/surface.operation.request@1` | Construct and review an operation request |
+| Operation | `stateforge.ui/surface.operation.run@1` | Follow an admitted operation while it runs |
+| Operation | `stateforge.ui/surface.operation.result@1` | Inspect a terminal operation result |
+| Trigger | `stateforge.ui/surface.trigger.policy@1` | Configure how a trigger participates in policy |
+| Trigger | `stateforge.ui/surface.trigger.event@1` | Inspect one published trigger event |
+| Operation or trigger | `stateforge.ui/surface.evidence@1` | Inspect evidence and audit material associated with that target |
 
-## Provider view
+Groups are optional. A Provider author creates visual grouping with ordinary
+layout components such as a section, grid, tabs, or steps; the Protocol does
+not impose a separate grouping model.
 
-`ProviderView` describes the integration as a whole. The Control Plane combines
-it with `ProviderManifest.display_name` and the manifest's declared operations
-and triggers. It does not create a second Provider identity or a custom page.
+## The generic component tree
 
-<div class="sf-presentation-preview" aria-label="Illustrative Provider page">
-  <div class="sf-presentation-preview__label">ILLUSTRATIVE PROVIDER PAGE</div>
-  <div class="sf-presentation-provider">
-    <div class="sf-presentation-provider__icon" aria-hidden="true">GP</div>
-    <div>
-      <strong>Git Provider</strong>
-      <p>Inspect and resolve Git references.</p>
-    </div>
-  </div>
-  <div class="sf-presentation-section">
-    <span>Repository</span>
-    <p>Repository inspection and reference operations.</p>
-    <div class="sf-presentation-capabilities">
-      <div><small>OPERATION</small><strong>Resolve reference</strong></div>
-      <div><small>TRIGGER</small><strong>Reference changed</strong></div>
-    </div>
-  </div>
-</div>
-
-| Preview element | Contract source |
-| --- | --- |
-| `Git Provider` | `ProviderManifest.display_name` |
-| Introductory copy | `ProviderView.summary` and `description` |
-| Provider mark or banner | `icon_asset_digest` and `banner_asset_digest` |
-| `Repository` section | One `CapabilityGroup` |
-| Cards inside the section | Declared operations and triggers whose views reference the group's ID |
-
-Groups are optional. An operation or trigger with an empty `group_id` remains
-visible as an ungrouped capability. A group never owns or duplicates the
-capabilities placed inside it.
-
-## Operation view
-
-One `OperationView` follows an operation across the places where a user works
-with it:
-
-1. its label, summary, description, and icon identify the operation in a
-   capability browser or policy builder;
-2. its `input` view refines the schema-derived form used to configure an
-   invocation; and
-3. its `result` view refines how a terminal result is read.
-
-<div class="sf-presentation-preview" aria-label="Illustrative operation surfaces">
-  <div class="sf-presentation-preview__label">ONE OPERATION · THREE SURFACES</div>
-  <div class="sf-presentation-columns">
-    <section>
-      <small>POLICY STEP</small>
-      <h3>Resolve reference</h3>
-      <p>Resolve a Git reference to a commit.</p>
-    </section>
-    <section>
-      <small>INPUT</small>
-      <label>Repository <input value="owner/repository" readonly></label>
-      <label>Depth <span class="sf-presentation-meter">5 commits</span></label>
-      <div class="sf-presentation-subsection">Credentials</div>
-      <label>Access token <input value="••••••••" readonly></label>
-    </section>
-    <section>
-      <small>RESULT</small>
-      <dl>
-        <div><dt>Commit</dt><dd><code>a83f0c1</code></dd></div>
-        <div><dt>Changed</dt><dd><span class="sf-presentation-badge">Yes</span></dd></div>
-      </dl>
-    </section>
-  </div>
-</div>
-
-The operation's authoritative `input_schema` still decides that `repository`
-is required, `depth` is numeric, and `token` is `writeOnly`. Presentation can
-choose a text control, bounded slider, and secret input only because those
-choices agree with the schema. The result view can render a commit as code and
-`changed` as a badge, but it cannot change either result value or type.
-
-## Trigger view
-
-`TriggerView` identifies a declared trigger wherever it can be selected and
-controls how an observed payload is presented. It does not define trigger
-delivery, acknowledgement, filtering, or policy semantics.
-
-<div class="sf-presentation-preview" aria-label="Illustrative trigger surfaces">
-  <div class="sf-presentation-preview__label">TRIGGER SELECTION AND EVENT</div>
-  <div class="sf-presentation-columns sf-presentation-columns--two">
-    <section>
-      <small>POLICY CONDITION</small>
-      <h3>Reference changed</h3>
-      <p>A repository reference moved.</p>
-    </section>
-    <section>
-      <small>EVENT PAYLOAD</small>
-      <dl>
-        <div><dt>Reference</dt><dd><code>refs/heads/main</code></dd></div>
-        <div><dt>Previous</dt><dd><code>7da91b4</code></dd></div>
-      </dl>
-    </section>
-  </div>
-</div>
-
-The trigger's `payload_schema` remains authoritative. The payload `SchemaView`
-may order, label, group, and format its fields; it cannot add trigger inputs or
-alter the event.
-
-## Schema and field views
-
-Every `SchemaView` is scoped to exactly one operation input, operation result,
-or trigger payload schema. It uses JSON Pointer to address fields in that
-schema.
+Every `PresentationSurface` has one root `ComponentNode`. A node selects a
+renderer by versioned string identifier and supplies only the data needed to
+configure it.
 
 ```mermaid
-flowchart LR
-    Schema["Authoritative JSON Schema"] --> Fields["All schema fields remain visible"]
-    Order["field_order"] --> Layout["Rendering model"]
-    Groups["FieldGroup entries"] --> Layout
-    Hints["FieldView entries"] --> Layout
-    Fields --> Layout
-    Layout --> Surface["Form, result, or payload"]
+flowchart TD
+    Surface["PresentationSurface"] --> Root["ComponentNode root"]
+    Root --> ID["component_identifier"]
+    Root --> Props["properties"]
+    Root --> Bindings["bindings"]
+    Root --> Children["children"]
+    Root --> Assets["asset_bindings"]
+    Root -. optional .-> Condition["condition"]
+    Root -. optional .-> Repeat["repeat"]
+    Root -. custom only .-> Fallback["core fallback"]
 ```
 
-| Presentation value | Rendering effect | Contract boundary |
-| --- | --- | --- |
-| `field_order` | Establishes the preferred order for listed fields | Omitted fields still render from the schema |
-| `FieldGroup` | Places fields into a labeled visual section | A field belongs to at most one group |
-| `label` and `help_text` | Replaces generated copy with author-provided wording | Does not change the field's JSON name or meaning |
-| `placeholder` | Adds an input prompt | Valid only on operation input fields |
-| `unit` | Adds a human-readable unit beside a value | Does not transform or scale the value |
-| `widget` | Suggests a compatible input control | Must agree with type, `enum`, format, bounds, and `writeOnly` semantics |
-| `display` | Suggests a compatible read-only renderer | Must agree with the result or payload field type |
+| Node field | Meaning |
+| --- | --- |
+| `component_identifier` | Versioned identifier resolved by the Control Plane renderer registry |
+| `properties` | Renderer-specific static configuration; SFP treats it as inert JSON |
+| `bindings` | Named inputs resolved from the data sources available to the current surface |
+| `children` | Ordered child components |
+| `asset_bindings` | Renderer slot names mapped to embedded asset digests |
+| `condition` | Optional declarative existence or equality test controlling visibility |
+| `repeat` | Optional bounded repetition over a collection binding |
+| `fallback` | Required core-only tree used when a custom renderer is unavailable |
 
-There is no presentation field for hiding a schema field, changing
-requiredness, supplying defaults, or redefining validation.
+The Protocol validates the identifier and tree, bounds the document, verifies
+references, and constrains which data sources exist on each surface. It does
+not interpret component properties. The Control Plane validates those
+properties against the renderer definition registered for the component
+identifier.
 
-## Assets and skins
+## Core component catalog
 
-Presentation assets give a Provider ownership of its visual identity without
-giving it executable access to the Control Plane. The snapshot can embed
-bounded PNG and sanitized SVG assets. Every asset is content-addressed and
-every reference must resolve.
+SFP 1.0 defines a compact core catalog that every conforming Control Plane can
+render:
 
-The asset supplies the visual content. The active Control Plane skin decides
-how it is framed: size, spacing, background, border, and placement remain part
-of the host experience. Presentation contains no HTML, CSS, JavaScript, remote
-URL, or filesystem path.
+| Category | Component identifiers |
+| --- | --- |
+| Layout | `layout.stack`, `layout.grid`, `layout.section`, `layout.tabs`, `layout.steps` |
+| Input | `input.form`, `input.field`, `input.object`, `input.array`, `input.key_value`, `input.code` |
+| Content and structured data | `content.text`, `content.markdown`, `data.key_value`, `data.table`, `data.tree`, `data.code`, `data.diff`, `data.log` |
+| Status and visualization | `status.badge`, `status.progress`, `status.timeline`, `data.metric`, `data.chart`, `data.topology`, `data.artifacts` |
+| Media and actions | `media.image`, `action.operation_submit`, `action.operation_cancel` |
 
-## Acceptance and fallback
+Each value above uses the `stateforge.ui` namespace and `@1` major version.
+For example, the complete table identifier is
+`stateforge.ui/data.table@1`.
+
+These are identifiers, not protobuf message types. Adding a renderer does not
+require adding a new component-specific message or enum to SFP.
+
+## Data bindings
+
+A `DataBinding` selects one Control Plane-provided source and optionally a
+JSON Pointer within it. An empty pointer selects the complete source. The
+sources available depend on the surface, preventing a Provider from referring
+to data that does not exist in that rendering context.
+
+Examples include:
+
+| Surface | Representative binding sources |
+| --- | --- |
+| Provider overview | Provider manifest and Provider runtime state |
+| Operation request | Request schema and current request value |
+| Operation run | Admitted request and live operation state |
+| Operation result | Request, result schema, result value, and operation evidence |
+| Trigger policy | Trigger payload schema |
+| Trigger event | Payload schema and published payload value |
+| Evidence | Operation evidence or trigger value plus audit data |
+
+A repetition creates a named item scope. Descendants can bind to
+`stateforge.binding/repetition.item@1` only by naming an active scope. Each
+repetition also declares a positive `max_items` ceiling.
+
+Conditions support `EXISTS`, `NOT_EXISTS`, `EQUALS`, and `NOT_EQUALS`.
+Existence conditions omit a comparison value; equality conditions require one,
+including an explicitly supplied JSON `null`.
+
+## Core example
+
+The manifest fixture uses a core form for the operation request:
+
+```json
+{
+  "componentIdentifier": "stateforge.ui/input.form@1",
+  "properties": {
+    "submitLabel": "Resolve reference"
+  },
+  "bindings": {
+    "schema": {
+      "sourceIdentifier": "stateforge.binding/operation.request.schema@1",
+      "pointer": "",
+      "scope": ""
+    },
+    "value": {
+      "sourceIdentifier": "stateforge.binding/operation.request.value@1",
+      "pointer": "",
+      "scope": ""
+    }
+  },
+  "children": [],
+  "assetBindings": {}
+}
+```
+
+The operation input JSON Schema remains authoritative. The renderer can produce
+an appropriate form because the schema and current value arrive through
+bindings; the presentation cannot relax validation, disclose a `writeOnly`
+value, or manufacture an operation field.
+
+## Custom components and renderer extensions
+
+A Provider may use its own component identifier, such as
+`stateforge.git/data.commit_graph@1`. A custom node has two additional
+requirements:
+
+1. its namespace has one matching `RendererRequirement`; and
+2. the node includes a fallback tree composed only of core
+   `stateforge.ui` components.
+
+```json
+{
+  "componentIdentifier": "stateforge.git/data.commit_graph@1",
+  "properties": {},
+  "bindings": {
+    "result": {
+      "sourceIdentifier": "stateforge.binding/operation.result.value@1",
+      "pointer": "",
+      "scope": ""
+    }
+  },
+  "children": [],
+  "assetBindings": {},
+  "fallback": {
+    "componentIdentifier": "stateforge.ui/data.tree@1",
+    "properties": {},
+    "bindings": {
+      "value": {
+        "sourceIdentifier": "stateforge.binding/operation.result.value@1",
+        "pointer": "",
+        "scope": ""
+      }
+    },
+    "children": [],
+    "assetBindings": {}
+  }
+}
+```
+
+The matching requirement carries identity and compatibility metadata:
+
+```json
+{
+  "stateforge.git": {
+    "extensionIdentifier": "stateforge.git/renderer@1",
+    "extensionVersion": "1.0.0",
+    "rendererApiVersion": "1.0.0",
+    "artifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "permissions": []
+  }
+}
+```
+
+The renderer artifact is distributed separately from SFP. The Control Plane
+uses the metadata to locate an already trusted or separately acquired bundle,
+checks compatibility and permissions in its extension host, and registers the
+component identifiers exposed by that bundle. SFP never downloads or executes
+it.
+
+If the extension is missing, incompatible, disabled, or rejected, the Control
+Plane renders the core fallback. This preserves a functional interface without
+limiting advanced Provider authors to the built-in catalog.
+
+## Embedded assets
+
+`PresentationAsset` carries bounded, content-addressed PNG or sanitized SVG
+media. Nodes refer to assets through named `asset_bindings`. Every digest must
+match the exact bytes, every reference must resolve, and unreferenced assets
+are rejected.
+
+Assets provide Provider-owned icons and visuals. The active Control Plane skin
+still controls their framing, size, background, and placement.
+
+## Validation and fallback
 
 The Agent accepts the operational manifest before considering presentation.
-It then evaluates the optional snapshot as a separate unit:
+The presentation is then evaluated independently:
 
-| Presentation state | Rendering behavior |
+| Presentation state | Result |
 | --- | --- |
-| Absent | Build every surface from the manifest's JSON Schemas. |
-| Supported and valid | Apply the complete presentation overlay to the schema-derived model. |
-| Unsupported schema version | Ignore the presentation and use schema-derived rendering. |
-| Invalid reference, preference, asset, or revision | Ignore the presentation and use schema-derived rendering. |
+| Absent | Keep the manifest and render from its JSON Schemas. |
+| Supported and valid | Cache the component tree and its independent revision. |
+| Unsupported schema version | Keep the manifest and ignore presentation. |
+| Invalid tree, source, extension metadata, asset, or revision | Keep the manifest and discard the complete presentation snapshot. |
 
-An invalid field hint does not make an operation invalid. The complete
-presentation snapshot is discarded, and the operational manifest remains
-available.
+The Protocol enforces limits for tree depth, total component count, children,
+bindings, properties, repetition, extensions, permissions, assets, and
+canonical bytes. Partial acceptance is not allowed.
 
-`manifest_revision` never includes presentation. The separate
-`presentation_revision` is bound to the accepted manifest revision, so an
-overlay cannot be reused with a different capability declaration.
+`manifest_revision` excludes presentation. `presentation_revision` hashes the
+complete presentation and is bound to the accepted manifest revision, so a
+presentation cannot be reused with a different capability declaration.
 
-## How presentation reaches the Control Plane
+## How it reaches the Control Plane
 
-Within SFP, the Provider includes `ProviderPresentation` in the existing
+The Provider returns `ProviderPresentation` through the existing
 `ManifestService.GetManifest` response. The Agent validates and caches the
-accepted operational and presentation snapshots independently.
+manifest and presentation independently.
 
-The Agent-to-Control-Plane transport for that accepted snapshot will be
-defined by SF-AOP. When a Control Plane receives the pair, it can reproduce the
-same schema-derived model, apply the validated overlay, and render it through
-its active skin. SFP does not introduce a second presentation RPC.
+A future SF-AOP contract will transport the accepted snapshots to the Control
+Plane. No second SFP presentation RPC is introduced. Once received, the
+Control Plane resolves component identifiers through its renderer registry,
+binds the current runtime data, applies its active skin, and renders the
+surface.
 
-For exact wire fields, revision construction, size limits, and public Python
-validators, return to [Provider manifest exchange](provider-manifest.md).
+For the exact service envelope, revision construction, limits, and public
+Python validators, return to
+[Provider manifest exchange](provider-manifest.md).
+
+## Using the Python contract
+
+| Module | Responsibility |
+| --- | --- |
+| [`contract.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/contract.py) | Owns the supported surface identifiers, core component catalog, binding-source identifiers, renderer metadata limits, and component-tree bounds. |
+| [`validation.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/validation.py) | Exposes complete Manifest Exchange validation, independent presentation acceptance, presentation revision calculation, and presentation fallback. |
+
+Provider and Agent implementations should import these canonical definitions
+instead of duplicating component identifiers, source identifiers, or limits.
+Renderer-specific property schemas belong to the Control Plane renderer
+registry and are deliberately not defined by these Protocol modules.
