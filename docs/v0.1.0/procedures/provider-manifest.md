@@ -88,8 +88,8 @@ python -m pip install stateforge-protocol grpcio
 | Source | Responsibility |
 | --- | --- |
 | [`manifest.proto`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/proto/stateforge_protocol/sfp/manifest/v1/manifest.proto) | Owns messages, field numbers, and the unary `ManifestService.GetManifest` RPC. |
-| [`contract.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/contract.py) | Owns the canonical service identity and request, response, declaration, schema, and revision resource limits. |
-| [`validation.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/validation.py) | Owns packaged-schema validation, embedded-schema inspection, bounded canonicalization, revision calculation and verification, and cache-key validation. |
+| [`contract.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/contract.py) | Owns the canonical service identity and the limits for declarations, presentation overlays, assets, schemas, and revisions. |
+| [`validation.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/validation.py) | Owns complete exchange validation, independent manifest and presentation acceptance, embedded-schema inspection, canonical revisions, and cache keys. |
 | [`manifest.schema.json`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/manifest.schema.json) | Defines the request and response ProtoJSON projections and manifest schema-1 structure. |
 
 ### Python API surface
@@ -101,9 +101,11 @@ python -m pip install stateforge-protocol grpcio
 | Server interface and registration | `manifest_pb2_grpc.ManifestServiceServicer` and `add_ManifestServiceServicer_to_server` |
 | Service identity and resource limits | `stateforge_protocol.sfp.manifest.v1.contract` |
 | Complete response validation | `validation.validate_manifest_response` |
+| Operational and presentation snapshot validation | `validation.validate_manifest_exchange` |
 | Declaration and embedded-schema validation | `validation.validate_manifest_document` and `validation.validate_schema` |
-| Deterministic revision | `validation.compute_manifest_revision` |
-| Cache-key validation | `validation.validate_manifest_key` |
+| Presentation overlay validation | `validation.validate_presentation_document` |
+| Deterministic revisions | `validation.compute_manifest_revision` and `validation.compute_presentation_revision` |
+| Cache-key validation | `validation.validate_manifest_key` and `validation.validate_presentation_key` |
 
 Import the complete public surface from the versioned package:
 
@@ -146,6 +148,8 @@ revisioned declaration snapshot.
     | Response | `manifest_schema_version` | Highest manifest schema version supported by both peers. |
     | Response | `manifest` | Complete Provider declaration for the selected schema. |
     | Response | `manifest_revision` | Deterministic SHA-256 revision of the accepted declaration snapshot. |
+    | Response | `presentation` | Optional Provider, operation, trigger, field, group, and embedded-asset presentation overlay. |
+    | Response | `presentation_revision` | Independent SHA-256 revision bound to this manifest; present exactly when `presentation` is present. |
 
 === "Example request"
 
@@ -251,9 +255,8 @@ different response fences.
 ### Session binding
 
 `GetManifestRequest.expected_session_id` uses field **4** and
-`GetManifestResponse.session_id` uses field **6**. Existing field numbers and
-meanings are preserved. Both are required opaque strings of 1–255 Unicode
-code points, matching capability assessment. Preserve exact case and contents;
+`GetManifestResponse.session_id` uses field **6**. Both are required opaque strings of
+1–255 Unicode code points, matching capability assessment. Preserve exact case and contents;
 do not trim, normalize, parse as UUID, or derive them from endpoint identity.
 No mandatory session metadata header is introduced.
 
@@ -275,6 +278,115 @@ even if the manifest revision is cached and otherwise valid. Session identifiers
 express negotiated context; they are not authentication credentials or
 permission to execute operations. Existing channel trust requirements still
 apply.
+
+## Presentation snapshot
+
+The operational manifest already contains everything a renderer needs to build
+a correct default interface. Its JSON Schemas define fields, types, required
+values, validation, and secret-bearing inputs. The optional `presentation`
+snapshot improves that interface without changing any of those facts.
+
+```mermaid
+flowchart LR
+    Manifest["Operational manifest<br/>capabilities + JSON Schemas"] --> Default["Complete schema-derived UI"]
+    Manifest --> Merge["Validated overlay merge"]
+    Presentation["Presentation snapshot<br/>labels + layout + assets"] --> Merge
+    Merge --> Enhanced["Enhanced Provider UI"]
+    Presentation -. "absent, unsupported,<br/>or invalid" .-> Default
+```
+
+<div class="sf-docs-card-grid sf-docs-card-grid--three">
+  <article class="sf-docs-card">
+    <span class="sf-docs-card__label">PROVIDER</span>
+    <h3>Describe the integration</h3>
+    <p>
+      A summary, longer description, embedded visuals, and optional visual
+      groups describe the Provider without creating capabilities.
+    </p>
+  </article>
+  <article class="sf-docs-card">
+    <span class="sf-docs-card__label">CAPABILITIES</span>
+    <h3>Present operations and triggers</h3>
+    <p>
+      Views add labels, explanations, grouping, field order, and compatible
+      render preferences to capabilities already declared by identifier.
+    </p>
+  </article>
+  <article class="sf-docs-card">
+    <span class="sf-docs-card__label">ASSETS</span>
+    <h3>Ship Provider-owned visuals</h3>
+    <p>
+      Bounded PNG and sanitized SVG assets travel inside the snapshot and are
+      addressed by the SHA-256 digest of their exact bytes.
+    </p>
+  </article>
+</div>
+
+### The schema remains authoritative
+
+Every schema view points into exactly one authoritative schema using JSON
+Pointer. Operation input hints resolve only against that operation's
+`input_schema`; result hints resolve against `result_schema`; trigger hints
+resolve against `payload_schema`.
+
+| Presentation can suggest | Presentation cannot change |
+| --- | --- |
+| Labels, help text, placeholders, units, field order, and visual groups | Field types, requiredness, defaults, validation, or secret semantics |
+| A compatible input widget such as text, select, slider, or secret input | Operation input values or admission behavior |
+| A compatible result display such as code, table, badge, or metric | Operation results or trigger payloads |
+| Provider, operation, trigger, or group icons | Capability identifiers, membership, availability, or authorization |
+
+Groups are optional. An operation or trigger with an empty `group_id` remains
+visible. A field omitted from `field_order`, `groups`, or `fields` also remains
+visible through normal schema-derived rendering. There is no presentation
+field that hides a capability or schema field.
+
+Widget and display preferences must agree with the referenced field schema. A
+secret widget, for example, requires a string field marked `writeOnly`; a
+slider requires a numeric field with explicit minimum and maximum; a table
+requires an array. Input preferences are invalid on result and trigger payload
+views.
+
+### Independent acceptance and revision
+
+The Agent validates the operational manifest first. It then handles the
+presentation snapshot independently:
+
+| Presentation state | Result |
+| --- | --- |
+| Absent | Accept the manifest and render directly from its schemas. |
+| Supported and valid | Accept both snapshots and merge the overlay into schema-derived rendering. |
+| Unsupported schema version | Accept the manifest and ignore the presentation snapshot. |
+| Invalid reference, preference, asset, or revision | Accept the manifest and ignore the presentation snapshot. |
+
+`manifest_revision` never includes presentation. Its value therefore remains
+stable when only labels, layout, groups, or assets change. The separate
+`presentation_revision` is SHA-256 over RFC 8785 canonical JSON of:
+
+```json
+{
+  "manifestRevision": "sha256:<accepted-manifest-revision>",
+  "presentation": {},
+  "providerInstanceId": "<canonical-provider-instance-uuid>"
+}
+```
+
+Binding the presentation revision to `manifestRevision` prevents an overlay
+from being reused with a different declaration. Session ID and endpoint
+generation remain response fences and are excluded from both revisions.
+
+### Asset boundary
+
+Presentation assets are data, never executable extensions. A snapshot may
+contain at most 64 assets, each no larger than 256 KiB and together no larger
+than 1 MiB. Dimensions are positive and bounded to 8192 × 8192 pixels. Every
+asset must be referenced, every reference must resolve, and each map key must
+equal the SHA-256 digest of the exact content.
+
+Only validated PNG and sanitized SVG are accepted. SVG uses a closed element
+and attribute allowlist and rejects scripts, event handlers, styles, external
+references, data URLs, DTDs, and entities. The contract has no field for HTML,
+CSS, JavaScript, a remote URL, or a filesystem path.
 
 ## Declaration model
 
@@ -422,7 +534,12 @@ flowchart TB
     Decode --> Document["Validate the packaged<br/>document schema"]
     Document --> Embedded["Validate embedded<br/>Draft 2020-12 schemas"]
     Embedded --> Semantic["Validate session fences,<br/>declaration semantics, and revision"]
-    Semantic --> Accept["Manifest accepted"]
+    Semantic --> Accept["Operational manifest accepted"]
+    Accept --> Overlay{"Presentation present<br/>and supported?"}
+    Overlay -->|No| Fallback["Use schema-derived rendering"]
+    Overlay -->|Yes| Presentation["Validate overlay references,<br/>assets, and revision"]
+    Presentation -->|Valid| Enhanced["Accept presentation snapshot"]
+    Presentation -->|Invalid| Fallback
 ```
 
 | Stage | Question answered |
@@ -432,6 +549,7 @@ flowchart TB
 | Packaged document schema | Is the complete request or response structurally valid? |
 | Embedded-schema validation | Are operation, result, configuration, and trigger schemas safe Draft 2020-12 documents? |
 | Semantic validation | Do identities, session fences, declaration rules, and the deterministic revision agree? |
+| Presentation validation | Do optional views refer only to declared capabilities and schema fields, use compatible preferences, carry safe assets, and match their independent revision? |
 
 !!! important "Decoding is not validation"
 
@@ -470,7 +588,7 @@ validation or revision calculation.
 | --- | --- |
 | `manifest.proto` | Field names, numbers, wire types, messages, and service shape. |
 | `manifest.schema.json` | Required fields, identifier syntax, uniqueness, counts, and nested structural constraints. |
-| `validation.py` | Embedded-schema inspection, bounded canonicalization, revision calculation, and revision verification. |
+| `validation.py` | Embedded-schema and presentation semantics, bounded canonicalization, independent revision calculation, and cache-key validation. |
 | Provider and Agent runtimes | Live-session lookup, declaration construction, request correlation, cache storage, and admission decisions. |
 
 The protocol package exposes validation functions; callers invoke them
@@ -487,6 +605,8 @@ declarations, or maintain Agent caches.
 | Operation, trigger, requirement, and profile identifiers | Their respective canonical identifier syntax. |
 | Manifest schema version | A known supported version. |
 | Manifest revision | `sha256:` followed by 64 lowercase hexadecimal characters. |
+| Presentation schema version | Version `1` when a presentation snapshot is included. |
+| Presentation revision | `sha256:` followed by 64 lowercase hexadecimal characters and bound to the accepted manifest revision. |
 | Repeated declarations | Unique where the contract defines set-like semantics. |
 
 ### Bounded validation
@@ -498,12 +618,15 @@ Implementations enforce these limits before accepting a snapshot:
 | Serialized request | 8 KiB |
 | Serialized response | 2 MiB |
 | Canonical revision preimage | 1 MiB |
+| Canonical presentation revision preimage | 2 MiB |
 | JSON nodes processed during validation | 100,000 |
 | Schema nodes processed per embedded document | 25,000 |
 | Each operations, triggers, or requirements map | 1,024 entries |
 | Platform pairs | 256 unique pairs |
 | Profile claims per operation | 64 unique claims |
 | Embedded JSON nesting | 64 containers |
+| Presentation assets | 64 assets; 256 KiB each; 1 MiB total |
+| Presentation dimensions | 8192 × 8192 pixels |
 
 !!! warning "Reject expensive input early"
 
@@ -598,7 +721,11 @@ is `sha256:6bfdf3aedc2d4e45d77d4787cc0e744a488208b2510d81788291f51d24a623e8`.
    limits, and canonical digest. Store only accepted snapshots. A revision is
    a change detector, not authentication. Profile-specific conformance still
    requires the validators and behavior tests defined by that profile.
-5. An invalid manifest leaves the integration unusable even if gRPC health is
+5. Validate `presentation` independently. Cache it by Provider identity,
+   accepted manifest revision, presentation schema version, and presentation
+   revision. If it is absent, unsupported, or invalid, discard it and retain
+   complete schema-derived rendering from the accepted manifest.
+6. An invalid manifest leaves the integration unusable even if gRPC health is
    `SERVING`. Block operational requests. A valid changed manifest replaces the
    normalized declaration and triggers Agent-owned reconciliation.
 
@@ -617,6 +744,7 @@ protocol package does not implement the cache or inventory.
 | Session unknown/inactive, handshake missing, or instance/generation does not match the requested active session | Provider returns `FAILED_PRECONDITION`; Agent re-establishes a session (rediscovering if needed) before a new attempt. |
 | No common manifest schema version | Provider returns `UNIMPLEMENTED`; Agent marks the endpoint incompatible instead of indefinitely retrying unchanged capabilities. |
 | Provider cannot produce a valid snapshot | Fail startup before ready publication where possible; otherwise return `INTERNAL` with sanitized diagnostics, never partial success. |
+| Presentation is absent, unsupported, invalid, or its revision does not match | Accept the operational manifest, discard the presentation snapshot, and render directly from the manifest schemas. |
 | Transport lost or temporarily unavailable | `UNAVAILABLE`; bounded read retries with backoff are safe after validating/re-establishing the session. |
 | Client deadline or cancellation | Standard `DEADLINE_EXCEEDED` / `CANCELLED`; no operation is started or cancelled by this read. |
 | Success payload fails Agent validation or revision check | Local manifest rejection, independently of transport health; it is not a successful capability negotiation. |
@@ -645,13 +773,19 @@ no generic target-kind declaration or configured resource. An operation's
 `input_schema` defines any resource information that operation needs. The
 manifest contains schemas, not configuration values or operation inputs.
 
+`ProviderPresentation` is a separate optional snapshot in the same response.
+It describes the Provider itself and overlays declared operations, triggers,
+and schema fields. It cannot add or hide capabilities, redefine schemas, carry
+runtime values, or affect operation and trigger protocol semantics.
+
 The `manifest_revision` hashes the canonical declaration, schema version, and
-Provider instance identity. Session ID and endpoint generation are not part of
-that preimage. Consumers must validate the full response and revision before
-caching it; a changed declaration has a different revision.
+Provider instance identity. `presentation_revision` separately hashes the
+presentation snapshot while binding it to that accepted manifest revision.
+Session ID and endpoint generation are not part of either preimage. Consumers
+must validate each snapshot before caching it.
 
 This package defines wire messages, validation schemas, and conformance
 vectors, not Provider session storage or an Agent client. The portable
-`tests/fixtures/manifest/request.json`, `response.json`, and
-`session-binding.json` fixtures exercise the current schema and session
-binding.
+`tests/fixtures/manifest/request.json`, `response.json`,
+`presentation-response.json`, and `session-binding.json` fixtures exercise the
+schema, presentation overlay, and session binding.

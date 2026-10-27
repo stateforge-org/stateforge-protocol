@@ -8,6 +8,7 @@ from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 import builtins as _builtins
 import sys
 import typing as _typing
@@ -18,6 +19,72 @@ else:
     from typing_extensions import TypeAlias as _TypeAlias, Never as _Never
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class _InputWidget:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _InputWidgetEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_InputWidget.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    INPUT_WIDGET_UNSPECIFIED: _InputWidget.ValueType  # 0
+    INPUT_WIDGET_TEXT: _InputWidget.ValueType  # 1
+    INPUT_WIDGET_MULTILINE: _InputWidget.ValueType  # 2
+    INPUT_WIDGET_SECRET: _InputWidget.ValueType  # 3
+    INPUT_WIDGET_NUMBER: _InputWidget.ValueType  # 4
+    INPUT_WIDGET_SLIDER: _InputWidget.ValueType  # 5
+    INPUT_WIDGET_CHECKBOX: _InputWidget.ValueType  # 6
+    INPUT_WIDGET_SELECT: _InputWidget.ValueType  # 7
+    INPUT_WIDGET_RADIO: _InputWidget.ValueType  # 8
+    INPUT_WIDGET_DATE_TIME: _InputWidget.ValueType  # 9
+    INPUT_WIDGET_JSON: _InputWidget.ValueType  # 10
+
+class InputWidget(_InputWidget, metaclass=_InputWidgetEnumTypeWrapper):
+    """InputWidget selects an optional input control compatible with a field's
+    authoritative JSON Schema. Unspecified delegates entirely to the renderer.
+    """
+
+INPUT_WIDGET_UNSPECIFIED: InputWidget.ValueType  # 0
+INPUT_WIDGET_TEXT: InputWidget.ValueType  # 1
+INPUT_WIDGET_MULTILINE: InputWidget.ValueType  # 2
+INPUT_WIDGET_SECRET: InputWidget.ValueType  # 3
+INPUT_WIDGET_NUMBER: InputWidget.ValueType  # 4
+INPUT_WIDGET_SLIDER: InputWidget.ValueType  # 5
+INPUT_WIDGET_CHECKBOX: InputWidget.ValueType  # 6
+INPUT_WIDGET_SELECT: InputWidget.ValueType  # 7
+INPUT_WIDGET_RADIO: InputWidget.ValueType  # 8
+INPUT_WIDGET_DATE_TIME: InputWidget.ValueType  # 9
+INPUT_WIDGET_JSON: InputWidget.ValueType  # 10
+Global___InputWidget: _TypeAlias = InputWidget  # noqa: Y015
+
+class _DisplayStyle:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _DisplayStyleEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_DisplayStyle.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    DISPLAY_STYLE_UNSPECIFIED: _DisplayStyle.ValueType  # 0
+    DISPLAY_STYLE_TEXT: _DisplayStyle.ValueType  # 1
+    DISPLAY_STYLE_CODE: _DisplayStyle.ValueType  # 2
+    DISPLAY_STYLE_JSON: _DisplayStyle.ValueType  # 3
+    DISPLAY_STYLE_TABLE: _DisplayStyle.ValueType  # 4
+    DISPLAY_STYLE_BADGE: _DisplayStyle.ValueType  # 5
+    DISPLAY_STYLE_METRIC: _DisplayStyle.ValueType  # 6
+    DISPLAY_STYLE_DATE_TIME: _DisplayStyle.ValueType  # 7
+
+class DisplayStyle(_DisplayStyle, metaclass=_DisplayStyleEnumTypeWrapper):
+    """DisplayStyle selects an optional read-only presentation compatible with a
+    field's authoritative JSON Schema. Unspecified delegates to the renderer.
+    """
+
+DISPLAY_STYLE_UNSPECIFIED: DisplayStyle.ValueType  # 0
+DISPLAY_STYLE_TEXT: DisplayStyle.ValueType  # 1
+DISPLAY_STYLE_CODE: DisplayStyle.ValueType  # 2
+DISPLAY_STYLE_JSON: DisplayStyle.ValueType  # 3
+DISPLAY_STYLE_TABLE: DisplayStyle.ValueType  # 4
+DISPLAY_STYLE_BADGE: DisplayStyle.ValueType  # 5
+DISPLAY_STYLE_METRIC: DisplayStyle.ValueType  # 6
+DISPLAY_STYLE_DATE_TIME: DisplayStyle.ValueType  # 7
+Global___DisplayStyle: _TypeAlias = DisplayStyle  # noqa: Y015
 
 @_typing.final
 class GetManifestRequest(_message.Message):
@@ -77,6 +144,8 @@ class GetManifestResponse(_message.Message):
     MANIFEST_REVISION_FIELD_NUMBER: _builtins.int
     MANIFEST_FIELD_NUMBER: _builtins.int
     SESSION_ID_FIELD_NUMBER: _builtins.int
+    PRESENTATION_FIELD_NUMBER: _builtins.int
+    PRESENTATION_REVISION_FIELD_NUMBER: _builtins.int
     provider_instance_id: _builtins.str
     """Must equal the request's expected identity and the negotiated session."""
     endpoint_generation: _builtins.int
@@ -94,9 +163,22 @@ class GetManifestResponse(_message.Message):
     The Agent must match it to both the request and its current session before
     accepting or reusing a cached declaration. Not part of manifest_revision.
     """
+    presentation_revision: _builtins.str
+    """Present exactly when presentation is present. "sha256:" plus 64 lowercase
+    hex digits over the canonical presentation preimage defined by this
+    package. Session ID and endpoint generation are excluded.
+    """
     @_builtins.property
     def manifest(self) -> Global___ProviderManifest:
         """Required. At most 1 MiB of canonical JSON for the revision preimage."""
+
+    @_builtins.property
+    def presentation(self) -> Global___ProviderPresentation:
+        """Optional declarative presentation snapshot. Operational JSON Schemas
+        remain sufficient to render every declared capability when this field is
+        absent, unsupported or rejected. Presentation never changes execution
+        semantics and is not part of manifest_revision.
+        """
 
     def __init__(
         self,
@@ -107,12 +189,16 @@ class GetManifestResponse(_message.Message):
         manifest_revision: _builtins.str = ...,
         manifest: Global___ProviderManifest | None = ...,
         session_id: _builtins.str = ...,
+        presentation: Global___ProviderPresentation | None = ...,
+        presentation_revision: _builtins.str | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["manifest", b"manifest"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_presentation_revision", b"_presentation_revision", "manifest", b"manifest", "presentation", b"presentation", "presentation_revision", b"presentation_revision"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["endpoint_generation", b"endpoint_generation", "manifest", b"manifest", "manifest_revision", b"manifest_revision", "manifest_schema_version", b"manifest_schema_version", "provider_instance_id", b"provider_instance_id", "session_id", b"session_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_presentation_revision", b"_presentation_revision", "endpoint_generation", b"endpoint_generation", "manifest", b"manifest", "manifest_revision", b"manifest_revision", "manifest_schema_version", b"manifest_schema_version", "presentation", b"presentation", "presentation_revision", b"presentation_revision", "provider_instance_id", b"provider_instance_id", "session_id", b"session_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
+    _WhichOneofReturnType__presentation_revision: _TypeAlias = _typing.Literal["presentation_revision"]  # noqa: Y015
+    _WhichOneofArgType__presentation_revision: _TypeAlias = _typing.Literal["_presentation_revision", b"_presentation_revision"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__presentation_revision) -> _WhichOneofReturnType__presentation_revision | None: ...
 
 Global___GetManifestResponse: _TypeAlias = GetManifestResponse  # noqa: Y015
 
@@ -373,3 +459,428 @@ class TriggerDeclaration(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___TriggerDeclaration: _TypeAlias = TriggerDeclaration  # noqa: Y015
+
+@_typing.final
+class ProviderPresentation(_message.Message):
+    """ProviderPresentation is an optional, independently revised visual overlay
+    on an accepted ProviderManifest. Maps use the exact operation and trigger
+    identifiers declared by that manifest. Presentation cannot add, remove or
+    redefine capabilities or their JSON Schemas.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class OperationsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___OperationView: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___OperationView | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+    @_typing.final
+    class TriggersEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___TriggerView: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___TriggerView | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+    @_typing.final
+    class AssetsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___PresentationAsset: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___PresentationAsset | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+    PRESENTATION_SCHEMA_VERSION_FIELD_NUMBER: _builtins.int
+    PROVIDER_FIELD_NUMBER: _builtins.int
+    OPERATIONS_FIELD_NUMBER: _builtins.int
+    TRIGGERS_FIELD_NUMBER: _builtins.int
+    ASSETS_FIELD_NUMBER: _builtins.int
+    presentation_schema_version: _builtins.int
+    """Presentation document version. Version 1 is defined by this package."""
+    @_builtins.property
+    def provider(self) -> Global___ProviderView:
+        """Optional Provider-level description, branding and visual groups."""
+
+    @_builtins.property
+    def operations(self) -> _containers.MessageMap[_builtins.str, Global___OperationView]:
+        """Optional overlays keyed by declared operation identifier."""
+
+    @_builtins.property
+    def triggers(self) -> _containers.MessageMap[_builtins.str, Global___TriggerView]:
+        """Optional overlays keyed by declared trigger identifier."""
+
+    @_builtins.property
+    def assets(self) -> _containers.MessageMap[_builtins.str, Global___PresentationAsset]:
+        """Embedded content-addressed visuals keyed by their sha256 digest."""
+
+    def __init__(
+        self,
+        *,
+        presentation_schema_version: _builtins.int = ...,
+        provider: Global___ProviderView | None = ...,
+        operations: _abc.Mapping[_builtins.str, Global___OperationView] | None = ...,
+        triggers: _abc.Mapping[_builtins.str, Global___TriggerView] | None = ...,
+        assets: _abc.Mapping[_builtins.str, Global___PresentationAsset] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["provider", b"provider"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["assets", b"assets", "operations", b"operations", "presentation_schema_version", b"presentation_schema_version", "provider", b"provider", "triggers", b"triggers"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ProviderPresentation: _TypeAlias = ProviderPresentation  # noqa: Y015
+
+@_typing.final
+class ProviderView(_message.Message):
+    """ProviderView describes the Provider itself. Group order is declaration order;
+    operations and triggers opt into a group by ID, and ungrouped capabilities
+    remain visible through schema-derived rendering.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SUMMARY_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    ICON_ASSET_DIGEST_FIELD_NUMBER: _builtins.int
+    BANNER_ASSET_DIGEST_FIELD_NUMBER: _builtins.int
+    GROUPS_FIELD_NUMBER: _builtins.int
+    summary: _builtins.str
+    description: _builtins.str
+    icon_asset_digest: _builtins.str
+    banner_asset_digest: _builtins.str
+    @_builtins.property
+    def groups(self) -> _containers.RepeatedCompositeFieldContainer[Global___CapabilityGroup]: ...
+    def __init__(
+        self,
+        *,
+        summary: _builtins.str = ...,
+        description: _builtins.str = ...,
+        icon_asset_digest: _builtins.str = ...,
+        banner_asset_digest: _builtins.str = ...,
+        groups: _abc.Iterable[Global___CapabilityGroup] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["banner_asset_digest", b"banner_asset_digest", "description", b"description", "groups", b"groups", "icon_asset_digest", b"icon_asset_digest", "summary", b"summary"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ProviderView: _TypeAlias = ProviderView  # noqa: Y015
+
+@_typing.final
+class CapabilityGroup(_message.Message):
+    """CapabilityGroup supplies optional visual organization without duplicating
+    operation or trigger membership.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ID_FIELD_NUMBER: _builtins.int
+    LABEL_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    ICON_ASSET_DIGEST_FIELD_NUMBER: _builtins.int
+    id: _builtins.str
+    label: _builtins.str
+    description: _builtins.str
+    icon_asset_digest: _builtins.str
+    def __init__(
+        self,
+        *,
+        id: _builtins.str = ...,
+        label: _builtins.str = ...,
+        description: _builtins.str = ...,
+        icon_asset_digest: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "icon_asset_digest", b"icon_asset_digest", "id", b"id", "label", b"label"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___CapabilityGroup: _TypeAlias = CapabilityGroup  # noqa: Y015
+
+@_typing.final
+class OperationView(_message.Message):
+    """OperationView supplies labels and schema-addressed overlays for one declared
+    operation. Empty group_id means that the operation is not grouped.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    LABEL_FIELD_NUMBER: _builtins.int
+    SUMMARY_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    ICON_ASSET_DIGEST_FIELD_NUMBER: _builtins.int
+    GROUP_ID_FIELD_NUMBER: _builtins.int
+    INPUT_FIELD_NUMBER: _builtins.int
+    RESULT_FIELD_NUMBER: _builtins.int
+    label: _builtins.str
+    summary: _builtins.str
+    description: _builtins.str
+    icon_asset_digest: _builtins.str
+    group_id: _builtins.str
+    @_builtins.property
+    def input(self) -> Global___SchemaView: ...
+    @_builtins.property
+    def result(self) -> Global___SchemaView: ...
+    def __init__(
+        self,
+        *,
+        label: _builtins.str = ...,
+        summary: _builtins.str = ...,
+        description: _builtins.str = ...,
+        icon_asset_digest: _builtins.str = ...,
+        group_id: _builtins.str = ...,
+        input: Global___SchemaView | None = ...,
+        result: Global___SchemaView | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["input", b"input", "result", b"result"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "group_id", b"group_id", "icon_asset_digest", b"icon_asset_digest", "input", b"input", "label", b"label", "result", b"result", "summary", b"summary"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___OperationView: _TypeAlias = OperationView  # noqa: Y015
+
+@_typing.final
+class TriggerView(_message.Message):
+    """TriggerView supplies labels and a schema-addressed overlay for one declared
+    trigger. Empty group_id means that the trigger is not grouped.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    LABEL_FIELD_NUMBER: _builtins.int
+    SUMMARY_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    ICON_ASSET_DIGEST_FIELD_NUMBER: _builtins.int
+    GROUP_ID_FIELD_NUMBER: _builtins.int
+    PAYLOAD_FIELD_NUMBER: _builtins.int
+    label: _builtins.str
+    summary: _builtins.str
+    description: _builtins.str
+    icon_asset_digest: _builtins.str
+    group_id: _builtins.str
+    @_builtins.property
+    def payload(self) -> Global___SchemaView: ...
+    def __init__(
+        self,
+        *,
+        label: _builtins.str = ...,
+        summary: _builtins.str = ...,
+        description: _builtins.str = ...,
+        icon_asset_digest: _builtins.str = ...,
+        group_id: _builtins.str = ...,
+        payload: Global___SchemaView | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["payload", b"payload"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "group_id", b"group_id", "icon_asset_digest", b"icon_asset_digest", "label", b"label", "payload", b"payload", "summary", b"summary"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___TriggerView: _TypeAlias = TriggerView  # noqa: Y015
+
+@_typing.final
+class SchemaView(_message.Message):
+    """SchemaView adds optional ordering, grouping and compatible render hints to a
+    JSON Schema. Every pointer addresses a field schema in the corresponding
+    operation input/result or trigger payload schema. Unmentioned fields remain
+    visible and retain their schema-defined semantics.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class FieldsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___FieldView: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___FieldView | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+    FIELD_ORDER_FIELD_NUMBER: _builtins.int
+    GROUPS_FIELD_NUMBER: _builtins.int
+    FIELDS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def field_order(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    @_builtins.property
+    def groups(self) -> _containers.RepeatedCompositeFieldContainer[Global___FieldGroup]: ...
+    @_builtins.property
+    def fields(self) -> _containers.MessageMap[_builtins.str, Global___FieldView]: ...
+    def __init__(
+        self,
+        *,
+        field_order: _abc.Iterable[_builtins.str] | None = ...,
+        groups: _abc.Iterable[Global___FieldGroup] | None = ...,
+        fields: _abc.Mapping[_builtins.str, Global___FieldView] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["field_order", b"field_order", "fields", b"fields", "groups", b"groups"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___SchemaView: _TypeAlias = SchemaView  # noqa: Y015
+
+@_typing.final
+class FieldGroup(_message.Message):
+    """FieldGroup visually groups schema fields. Field pointers may appear in at
+    most one group and group order is declaration order.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ID_FIELD_NUMBER: _builtins.int
+    LABEL_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    FIELDS_FIELD_NUMBER: _builtins.int
+    id: _builtins.str
+    label: _builtins.str
+    description: _builtins.str
+    @_builtins.property
+    def fields(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        id: _builtins.str = ...,
+        label: _builtins.str = ...,
+        description: _builtins.str = ...,
+        fields: _abc.Iterable[_builtins.str] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "fields", b"fields", "id", b"id", "label", b"label"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___FieldGroup: _TypeAlias = FieldGroup  # noqa: Y015
+
+@_typing.final
+class FieldView(_message.Message):
+    """FieldView supplies optional text and compatible render preferences for one
+    schema field. It cannot change validation, requiredness or visibility.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    LABEL_FIELD_NUMBER: _builtins.int
+    HELP_TEXT_FIELD_NUMBER: _builtins.int
+    PLACEHOLDER_FIELD_NUMBER: _builtins.int
+    UNIT_FIELD_NUMBER: _builtins.int
+    WIDGET_FIELD_NUMBER: _builtins.int
+    DISPLAY_FIELD_NUMBER: _builtins.int
+    label: _builtins.str
+    help_text: _builtins.str
+    placeholder: _builtins.str
+    unit: _builtins.str
+    widget: Global___InputWidget.ValueType
+    display: Global___DisplayStyle.ValueType
+    def __init__(
+        self,
+        *,
+        label: _builtins.str = ...,
+        help_text: _builtins.str = ...,
+        placeholder: _builtins.str = ...,
+        unit: _builtins.str = ...,
+        widget: Global___InputWidget.ValueType = ...,
+        display: Global___DisplayStyle.ValueType = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["display", b"display", "help_text", b"help_text", "label", b"label", "placeholder", b"placeholder", "unit", b"unit", "widget", b"widget"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___FieldView: _TypeAlias = FieldView  # noqa: Y015
+
+@_typing.final
+class PresentationAsset(_message.Message):
+    """PresentationAsset is embedded, content-addressed media. The map key is the
+    sha256 digest of content. Remote URLs and filesystem paths have no wire field.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    MEDIA_TYPE_FIELD_NUMBER: _builtins.int
+    CONTENT_FIELD_NUMBER: _builtins.int
+    WIDTH_FIELD_NUMBER: _builtins.int
+    HEIGHT_FIELD_NUMBER: _builtins.int
+    ALT_TEXT_FIELD_NUMBER: _builtins.int
+    media_type: _builtins.str
+    content: _builtins.bytes
+    width: _builtins.int
+    height: _builtins.int
+    alt_text: _builtins.str
+    def __init__(
+        self,
+        *,
+        media_type: _builtins.str = ...,
+        content: _builtins.bytes = ...,
+        width: _builtins.int = ...,
+        height: _builtins.int = ...,
+        alt_text: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["alt_text", b"alt_text", "content", b"content", "height", b"height", "media_type", b"media_type", "width", b"width"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___PresentationAsset: _TypeAlias = PresentationAsset  # noqa: Y015

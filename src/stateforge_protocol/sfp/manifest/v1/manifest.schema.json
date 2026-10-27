@@ -286,6 +286,426 @@
       ],
       "additionalProperties": false
     },
+    "presentationGroupId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_-]*(?![\\s\\S])"
+    },
+    "jsonPointer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^(/([^~/]|~0|~1)*)+$(?![\\s\\S])"
+    },
+    "presentationText": {
+      "type": "string",
+      "minLength": 0,
+      "maxLength": 4096
+    },
+    "capabilityGroup": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/presentationGroupId"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "description": {
+          "$ref": "#/$defs/presentationText"
+        },
+        "iconAssetDigest": {
+          "oneOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/revision"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "description",
+        "iconAssetDigest"
+      ],
+      "additionalProperties": false
+    },
+    "providerView": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 512
+        },
+        "description": {
+          "$ref": "#/$defs/presentationText"
+        },
+        "iconAssetDigest": {
+          "oneOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/revision"
+            }
+          ]
+        },
+        "bannerAssetDigest": {
+          "oneOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/revision"
+            }
+          ]
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capabilityGroup"
+          },
+          "minItems": 0,
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "summary",
+        "description",
+        "iconAssetDigest",
+        "bannerAssetDigest",
+        "groups"
+      ],
+      "additionalProperties": false
+    },
+    "fieldGroup": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/presentationGroupId"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "description": {
+          "$ref": "#/$defs/presentationText"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jsonPointer"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "description",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "fieldView": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 255
+        },
+        "helpText": {
+          "$ref": "#/$defs/presentationText"
+        },
+        "placeholder": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 512
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "widget": {
+          "enum": [
+            "INPUT_WIDGET_UNSPECIFIED",
+            "INPUT_WIDGET_TEXT",
+            "INPUT_WIDGET_MULTILINE",
+            "INPUT_WIDGET_SECRET",
+            "INPUT_WIDGET_NUMBER",
+            "INPUT_WIDGET_SLIDER",
+            "INPUT_WIDGET_CHECKBOX",
+            "INPUT_WIDGET_SELECT",
+            "INPUT_WIDGET_RADIO",
+            "INPUT_WIDGET_DATE_TIME",
+            "INPUT_WIDGET_JSON"
+          ]
+        },
+        "display": {
+          "enum": [
+            "DISPLAY_STYLE_UNSPECIFIED",
+            "DISPLAY_STYLE_TEXT",
+            "DISPLAY_STYLE_CODE",
+            "DISPLAY_STYLE_JSON",
+            "DISPLAY_STYLE_TABLE",
+            "DISPLAY_STYLE_BADGE",
+            "DISPLAY_STYLE_METRIC",
+            "DISPLAY_STYLE_DATE_TIME"
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "helpText",
+        "placeholder",
+        "unit",
+        "widget",
+        "display"
+      ],
+      "additionalProperties": false
+    },
+    "schemaView": {
+      "type": "object",
+      "properties": {
+        "fieldOrder": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jsonPointer"
+          },
+          "minItems": 0,
+          "maxItems": 1024,
+          "uniqueItems": true
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fieldGroup"
+          },
+          "minItems": 0,
+          "maxItems": 64
+        },
+        "fields": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/jsonPointer"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/fieldView"
+          },
+          "minProperties": 0,
+          "maxProperties": 1024
+        }
+      },
+      "required": [
+        "fieldOrder",
+        "groups",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "operationView": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 255
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 512
+        },
+        "description": {
+          "$ref": "#/$defs/presentationText"
+        },
+        "iconAssetDigest": {
+          "oneOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/revision"
+            }
+          ]
+        },
+        "groupId": {
+          "oneOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/presentationGroupId"
+            }
+          ]
+        },
+        "input": {
+          "$ref": "#/$defs/schemaView"
+        },
+        "result": {
+          "$ref": "#/$defs/schemaView"
+        }
+      },
+      "required": [
+        "label",
+        "summary",
+        "description",
+        "iconAssetDigest",
+        "groupId"
+      ],
+      "additionalProperties": false
+    },
+    "triggerView": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 255
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 512
+        },
+        "description": {
+          "$ref": "#/$defs/presentationText"
+        },
+        "iconAssetDigest": {
+          "oneOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/revision"
+            }
+          ]
+        },
+        "groupId": {
+          "oneOf": [
+            {
+              "const": ""
+            },
+            {
+              "$ref": "#/$defs/presentationGroupId"
+            }
+          ]
+        },
+        "payload": {
+          "$ref": "#/$defs/schemaView"
+        }
+      },
+      "required": [
+        "label",
+        "summary",
+        "description",
+        "iconAssetDigest",
+        "groupId"
+      ],
+      "additionalProperties": false
+    },
+    "presentationAsset": {
+      "type": "object",
+      "properties": {
+        "mediaType": {
+          "enum": [
+            "image/png",
+            "image/svg+xml"
+          ]
+        },
+        "content": {
+          "type": "string",
+          "minLength": 4,
+          "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\\s\\S])"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192
+        },
+        "altText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "required": [
+        "mediaType",
+        "content",
+        "width",
+        "height",
+        "altText"
+      ],
+      "additionalProperties": false
+    },
+    "providerPresentation": {
+      "type": "object",
+      "properties": {
+        "presentationSchemaVersion": {
+          "const": 1
+        },
+        "provider": {
+          "$ref": "#/$defs/providerView"
+        },
+        "operations": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/operationView"
+          },
+          "minProperties": 0,
+          "maxProperties": 1024
+        },
+        "triggers": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/triggerView"
+          },
+          "minProperties": 0,
+          "maxProperties": 1024
+        },
+        "assets": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/revision"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/presentationAsset"
+          },
+          "minProperties": 0,
+          "maxProperties": 64
+        }
+      },
+      "required": [
+        "presentationSchemaVersion",
+        "operations",
+        "triggers",
+        "assets"
+      ],
+      "additionalProperties": false
+    },
     "providerManifest": {
       "type": "object",
       "properties": {
@@ -410,6 +830,23 @@
         },
         "sessionId": {
           "$ref": "#/$defs/sessionId"
+        },
+        "presentation": {
+          "type": "object",
+          "required": [
+            "presentationSchemaVersion"
+          ],
+          "properties": {
+            "presentationSchemaVersion": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            }
+          },
+          "additionalProperties": true
+        },
+        "presentationRevision": {
+          "$ref": "#/$defs/revision"
         }
       },
       "required": [
@@ -418,9 +855,35 @@
         "manifestSchemaVersion",
         "manifestRevision",
         "manifest",
-        "sessionId"
+      "sessionId"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "presentation"
+            ]
+          },
+          "then": {
+        "required": [
+          "presentationRevision"
+        ],
+            "properties": {
+              "presentationRevision": {
+                "$ref": "#/$defs/revision"
+              }
+            }
+          },
+        "else": {
+          "not": {
+            "required": [
+              "presentationRevision"
+            ]
+            }
+          }
+        }
+      ]
     },
     "sessionId": {
       "type": "string",

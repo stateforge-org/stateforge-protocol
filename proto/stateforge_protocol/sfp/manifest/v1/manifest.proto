@@ -52,6 +52,15 @@ message GetManifestResponse {
   // The Agent must match it to both the request and its current session before
   // accepting or reusing a cached declaration. Not part of manifest_revision.
   string session_id = 6;
+  // Optional declarative presentation snapshot. Operational JSON Schemas
+  // remain sufficient to render every declared capability when this field is
+  // absent, unsupported or rejected. Presentation never changes execution
+  // semantics and is not part of manifest_revision.
+  ProviderPresentation presentation = 7;
+  // Present exactly when presentation is present. "sha256:" plus 64 lowercase
+  // hex digits over the canonical presentation preimage defined by this
+  // package. Session ID and endpoint generation are excluded.
+  optional string presentation_revision = 8;
 }
 
 // ProviderManifest describes implementation-wide declarations, not configured
@@ -118,4 +127,133 @@ message PlatformCompatibility {
 message TriggerDeclaration {
   // Required Draft 2020-12 object schema, never an event instance.
   google.protobuf.Struct payload_schema = 1;
+}
+
+// ProviderPresentation is an optional, independently revised visual overlay
+// on an accepted ProviderManifest. Maps use the exact operation and trigger
+// identifiers declared by that manifest. Presentation cannot add, remove or
+// redefine capabilities or their JSON Schemas.
+message ProviderPresentation {
+  // Presentation document version. Version 1 is defined by this package.
+  uint32 presentation_schema_version = 1;
+  // Optional Provider-level description, branding and visual groups.
+  ProviderView provider = 2;
+  // Optional overlays keyed by declared operation identifier.
+  map<string, OperationView> operations = 3;
+  // Optional overlays keyed by declared trigger identifier.
+  map<string, TriggerView> triggers = 4;
+  // Embedded content-addressed visuals keyed by their sha256 digest.
+  map<string, PresentationAsset> assets = 5;
+}
+
+// ProviderView describes the Provider itself. Group order is declaration order;
+// operations and triggers opt into a group by ID, and ungrouped capabilities
+// remain visible through schema-derived rendering.
+message ProviderView {
+  string summary = 1;
+  string description = 2;
+  string icon_asset_digest = 3;
+  string banner_asset_digest = 4;
+  repeated CapabilityGroup groups = 5;
+}
+
+// CapabilityGroup supplies optional visual organization without duplicating
+// operation or trigger membership.
+message CapabilityGroup {
+  string id = 1;
+  string label = 2;
+  string description = 3;
+  string icon_asset_digest = 4;
+}
+
+// OperationView supplies labels and schema-addressed overlays for one declared
+// operation. Empty group_id means that the operation is not grouped.
+message OperationView {
+  string label = 1;
+  string summary = 2;
+  string description = 3;
+  string icon_asset_digest = 4;
+  string group_id = 5;
+  SchemaView input = 6;
+  SchemaView result = 7;
+}
+
+// TriggerView supplies labels and a schema-addressed overlay for one declared
+// trigger. Empty group_id means that the trigger is not grouped.
+message TriggerView {
+  string label = 1;
+  string summary = 2;
+  string description = 3;
+  string icon_asset_digest = 4;
+  string group_id = 5;
+  SchemaView payload = 6;
+}
+
+// SchemaView adds optional ordering, grouping and compatible render hints to a
+// JSON Schema. Every pointer addresses a field schema in the corresponding
+// operation input/result or trigger payload schema. Unmentioned fields remain
+// visible and retain their schema-defined semantics.
+message SchemaView {
+  repeated string field_order = 1;
+  repeated FieldGroup groups = 2;
+  map<string, FieldView> fields = 3;
+}
+
+// FieldGroup visually groups schema fields. Field pointers may appear in at
+// most one group and group order is declaration order.
+message FieldGroup {
+  string id = 1;
+  string label = 2;
+  string description = 3;
+  repeated string fields = 4;
+}
+
+// FieldView supplies optional text and compatible render preferences for one
+// schema field. It cannot change validation, requiredness or visibility.
+message FieldView {
+  string label = 1;
+  string help_text = 2;
+  string placeholder = 3;
+  string unit = 4;
+  InputWidget widget = 5;
+  DisplayStyle display = 6;
+}
+
+// InputWidget selects an optional input control compatible with a field's
+// authoritative JSON Schema. Unspecified delegates entirely to the renderer.
+enum InputWidget {
+  INPUT_WIDGET_UNSPECIFIED = 0;
+  INPUT_WIDGET_TEXT = 1;
+  INPUT_WIDGET_MULTILINE = 2;
+  INPUT_WIDGET_SECRET = 3;
+  INPUT_WIDGET_NUMBER = 4;
+  INPUT_WIDGET_SLIDER = 5;
+  INPUT_WIDGET_CHECKBOX = 6;
+  INPUT_WIDGET_SELECT = 7;
+  INPUT_WIDGET_RADIO = 8;
+  INPUT_WIDGET_DATE_TIME = 9;
+  INPUT_WIDGET_JSON = 10;
+}
+
+// DisplayStyle selects an optional read-only presentation compatible with a
+// field's authoritative JSON Schema. Unspecified delegates to the renderer.
+enum DisplayStyle {
+  DISPLAY_STYLE_UNSPECIFIED = 0;
+  DISPLAY_STYLE_TEXT = 1;
+  DISPLAY_STYLE_CODE = 2;
+  DISPLAY_STYLE_JSON = 3;
+  DISPLAY_STYLE_TABLE = 4;
+  DISPLAY_STYLE_BADGE = 5;
+  DISPLAY_STYLE_METRIC = 6;
+  DISPLAY_STYLE_DATE_TIME = 7;
+}
+
+// PresentationAsset is embedded, content-addressed media. The map key is the
+// sha256 digest of content. Remote URLs and filesystem paths have no wire field.
+message PresentationAsset {
+  string media_type = 1;
+  bytes content = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  string alt_text = 5;
 }

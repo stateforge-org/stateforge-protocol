@@ -1,0 +1,242 @@
+{
+  "providerInstanceId": "7f7db7d8-68b4-4f71-9769-065b5c4f941c",
+  "endpointGeneration": "4",
+  "manifestSchemaVersion": 1,
+  "manifest": {
+    "providerIdentity": "stateforge.git",
+    "implementationVersion": "1.0.0",
+    "displayName": "Git Provider",
+    "operations": {
+      "stateforge.git/reference.resolve@1": {
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "token": {
+              "type": "string",
+              "writeOnly": true
+            }
+          },
+          "required": [
+            "repository"
+          ],
+          "additionalProperties": false
+        },
+        "resultSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "commit": {
+              "type": "string"
+            },
+            "changed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "commit"
+          ],
+          "additionalProperties": false
+        },
+        "implements": []
+      }
+    },
+    "runtimeRequirements": {
+      "executable.git": {
+        "description": "Git executable available to the Provider",
+        "versionConstraint": ">=2.40"
+      }
+    },
+    "platforms": [
+      {
+        "operatingSystem": "linux",
+        "architecture": "x86_64"
+      }
+    ],
+    "configurationSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "repository"
+      ],
+      "additionalProperties": false
+    },
+    "triggers": {
+      "stateforge.git/reference.changed@1": {
+        "payloadSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "reference": {
+              "type": "string"
+            },
+            "previous": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "reference"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "manifestRevision": "sha256:c836c97c8f170ea22b7c9002aa6075d84746dab7bbe3c822f628fd1176fd3c56",
+  "sessionId": "manifest-session-A",
+  "presentation": {
+    "presentationSchemaVersion": 1,
+    "provider": {
+      "summary": "Inspect and resolve Git references.",
+      "description": "A local Provider for Git repository state.",
+      "iconAssetDigest": "sha256:8c5dec37f2aba701bd79272fc7fe4d34292623e531df7fd23b95cb3c96034741",
+      "bannerAssetDigest": "",
+      "groups": [
+        {
+          "id": "repository",
+          "label": "Repository",
+          "description": "Repository inspection and reference operations.",
+          "iconAssetDigest": ""
+        }
+      ]
+    },
+    "operations": {
+      "stateforge.git/reference.resolve@1": {
+        "label": "Resolve reference",
+        "summary": "Resolve a Git reference to a commit.",
+        "description": "Reads a repository reference without changing it.",
+        "iconAssetDigest": "",
+        "groupId": "repository",
+        "input": {
+          "fieldOrder": [
+            "/properties/repository",
+            "/properties/depth",
+            "/properties/token"
+          ],
+          "groups": [
+            {
+              "id": "credentials",
+              "label": "Credentials",
+              "description": "Optional credentials for repository access.",
+              "fields": [
+                "/properties/token"
+              ]
+            }
+          ],
+          "fields": {
+            "/properties/repository": {
+              "label": "Repository",
+              "helpText": "Repository path or canonical name.",
+              "placeholder": "owner/repository",
+              "unit": "",
+              "widget": "INPUT_WIDGET_TEXT",
+              "display": "DISPLAY_STYLE_UNSPECIFIED"
+            },
+            "/properties/depth": {
+              "label": "Depth",
+              "helpText": "Maximum history depth.",
+              "placeholder": "",
+              "unit": "commits",
+              "widget": "INPUT_WIDGET_SLIDER",
+              "display": "DISPLAY_STYLE_METRIC"
+            },
+            "/properties/token": {
+              "label": "Access token",
+              "helpText": "Used only for this request.",
+              "placeholder": "",
+              "unit": "",
+              "widget": "INPUT_WIDGET_SECRET",
+              "display": "DISPLAY_STYLE_UNSPECIFIED"
+            }
+          }
+        },
+        "result": {
+          "fieldOrder": [
+            "/properties/commit",
+            "/properties/changed"
+          ],
+          "groups": [],
+          "fields": {
+            "/properties/commit": {
+              "label": "Commit",
+              "helpText": "Resolved commit identifier.",
+              "placeholder": "",
+              "unit": "",
+              "widget": "INPUT_WIDGET_UNSPECIFIED",
+              "display": "DISPLAY_STYLE_CODE"
+            },
+            "/properties/changed": {
+              "label": "Changed",
+              "helpText": "Whether the reference changed.",
+              "placeholder": "",
+              "unit": "",
+              "widget": "INPUT_WIDGET_UNSPECIFIED",
+              "display": "DISPLAY_STYLE_BADGE"
+            }
+          }
+        }
+      }
+    },
+    "triggers": {
+      "stateforge.git/reference.changed@1": {
+        "label": "Reference changed",
+        "summary": "A repository reference moved.",
+        "description": "Published after a tracked reference changes.",
+        "iconAssetDigest": "",
+        "groupId": "repository",
+        "payload": {
+          "fieldOrder": [
+            "/properties/reference",
+            "/properties/previous"
+          ],
+          "groups": [],
+          "fields": {
+            "/properties/reference": {
+              "label": "Reference",
+              "helpText": "Current reference value.",
+              "placeholder": "",
+              "unit": "",
+              "widget": "INPUT_WIDGET_UNSPECIFIED",
+              "display": "DISPLAY_STYLE_CODE"
+            },
+            "/properties/previous": {
+              "label": "Previous",
+              "helpText": "Previous reference value.",
+              "placeholder": "",
+              "unit": "",
+              "widget": "INPUT_WIDGET_UNSPECIFIED",
+              "display": "DISPLAY_STYLE_CODE"
+            }
+          }
+        }
+      }
+    },
+    "assets": {
+      "sha256:8c5dec37f2aba701bd79272fc7fe4d34292623e531df7fd23b95cb3c96034741": {
+        "mediaType": "image/svg+xml",
+        "content": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZD0iTTIgMmgxMnYxMkgyeiIvPjwvc3ZnPg==",
+        "width": 16,
+        "height": 16,
+        "altText": "Git Provider mark"
+      }
+    }
+  },
+  "presentationRevision": "sha256:1cbd5452404898672d31afa2f98172f08b4976edb6e7bfb4f576524d70beaf0c"
+}

@@ -15,6 +15,18 @@ from jsonschema import Draft202012Validator, ValidationError
 from tests.documentation import annotated_json_example
 
 from stateforge_protocol.sfp.manifest.v1 import contract, manifest_pb2
+from stateforge_protocol.sfp.operation_admission.v1 import (
+    operation_admission_pb2,
+)
+from stateforge_protocol.sfp.operation_admission.v1 import (
+    validation as admission_validation,
+)
+from stateforge_protocol.sfp.trigger_publication.v1 import (
+    trigger_publication_pb2,
+)
+from stateforge_protocol.sfp.trigger_publication.v1 import (
+    validation as trigger_validation,
+)
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "manifest"
 _SCHEMA = json.loads(
@@ -56,12 +68,19 @@ def test_versioned_contract_exposes_normative_limits() -> None:
         "MAX_REQUEST_BYTES": 8 * 1024,
         "MAX_RESPONSE_BYTES": 2 * 1024 * 1024,
         "MAX_CANONICAL_REVISION_PREIMAGE_BYTES": 1 * 1024 * 1024,
+        "MAX_PRESENTATION_REVISION_PREIMAGE_BYTES": 2 * 1024 * 1024,
         "MAX_EMBEDDED_JSON_DEPTH": 64,
         "MAX_OPERATIONS": 1_024,
         "MAX_TRIGGERS": 1_024,
         "MAX_RUNTIME_REQUIREMENTS": 1_024,
         "MAX_PLATFORMS": 256,
         "MAX_PROFILE_CLAIMS_PER_OPERATION": 64,
+        "PRESENTATION_SCHEMA_VERSION": 1,
+        "MAX_CAPABILITY_GROUPS": 64,
+        "MAX_PRESENTATION_ASSETS": 64,
+        "MAX_PRESENTATION_ASSET_BYTES": 256 * 1024,
+        "MAX_PRESENTATION_ASSET_TOTAL_BYTES": 1 * 1024 * 1024,
+        "MAX_PRESENTATION_ASSET_DIMENSION": 8_192,
     }
 
     assert {name: getattr(contract, name) for name in expected} == expected
@@ -91,6 +110,33 @@ def test_versioned_contract_limits_match_packaged_schema() -> None:
     assert (
         definitions["sessionId"]["maxLength"]
         == contract.MAX_SESSION_ID_CODE_POINTS
+    )
+    presentation = definitions["providerPresentation"]["properties"]
+    assert (
+        presentation["presentationSchemaVersion"]["const"]
+        == contract.PRESENTATION_SCHEMA_VERSION
+    )
+    assert (
+        presentation["operations"]["maxProperties"]
+        == contract.MAX_PRESENTATION_OPERATIONS
+    )
+    assert (
+        presentation["triggers"]["maxProperties"]
+        == contract.MAX_PRESENTATION_TRIGGERS
+    )
+    assert (
+        presentation["assets"]["maxProperties"]
+        == contract.MAX_PRESENTATION_ASSETS
+    )
+    assert (
+        definitions["providerView"]["properties"]["groups"]["maxItems"]
+        == contract.MAX_CAPABILITY_GROUPS
+    )
+    assert (
+        set(
+            definitions["presentationAsset"]["properties"]["mediaType"]["enum"]
+        )
+        == contract.ALLOWED_PRESENTATION_MEDIA_TYPES
     )
 
 
@@ -168,7 +214,7 @@ def test_documented_manifest_protojson_matches_conformance_fixtures() -> None:
     Draft202012Validator(_SCHEMA).validate(response)
 
 
-def test_response_round_trip_preserves_canonical_representation(
+def test_response_round_trip_matches_canonical_representation(
     response, validator
 ) -> None:
     validator.validate(response)
@@ -192,6 +238,168 @@ def test_response_round_trip_preserves_canonical_representation(
         "sha256:" + hashlib.sha256(_preimage(projected)).hexdigest()
         == response["manifestRevision"]
     )
+
+
+def test_provider_presentation_fixture_validates_and_round_trips() -> None:
+    document = json.loads(
+        (_FIXTURES / "presentation-response.json").read_text()
+    )
+    Draft202012Validator(_SCHEMA).validate(document)
+    Draft202012Validator(
+        {
+            "$ref": "#/$defs/providerPresentation",
+            "$defs": _SCHEMA["$defs"],
+        }
+    ).validate(document["presentation"])
+
+    message = json_format.ParseDict(
+        document,
+        manifest_pb2.GetManifestResponse(),
+    )
+    projected = json_format.MessageToDict(
+        message,
+        always_print_fields_with_no_presence=True,
+    )
+
+    assert projected == document
+
+
+def test_presentation_is_outside_the_operational_manifest() -> None:
+    manifest_fields = manifest_pb2.ProviderManifest.DESCRIPTOR.fields_by_name
+    operation_fields = (
+        manifest_pb2.OperationDeclaration.DESCRIPTOR.fields_by_name
+    )
+    trigger_fields = manifest_pb2.TriggerDeclaration.DESCRIPTOR.fields_by_name
+
+    assert "presentation" not in manifest_fields
+    assert "view" not in operation_fields
+    assert "view" not in trigger_fields
+    assert {
+        field.name: field.number
+        for field in manifest_pb2.GetManifestResponse.DESCRIPTOR.fields
+    } == {
+        "provider_instance_id": 1,
+        "endpoint_generation": 2,
+        "manifest_schema_version": 3,
+        "manifest_revision": 4,
+        "manifest": 5,
+        "session_id": 6,
+        "presentation": 7,
+        "presentation_revision": 8,
+    }
+
+
+def test_presentation_contract_cannot_hide_or_redefine_fields() -> None:
+    field_view = manifest_pb2.FieldView.DESCRIPTOR.fields_by_name
+    schema_view = manifest_pb2.SchemaView.DESCRIPTOR.fields_by_name
+    forbidden = {
+        "hidden",
+        "required",
+        "schema",
+        "default",
+        "value",
+        "html",
+        "css",
+        "javascript",
+        "url",
+        "path",
+    }
+
+    assert not forbidden & set(field_view)
+    assert not forbidden & set(schema_view)
+
+
+def test_presentation_is_not_part_of_operation_or_trigger_messages() -> None:
+    descriptors = (
+        operation_admission_pb2.OperationInvocation.DESCRIPTOR,
+        operation_admission_pb2.StartOperationRequest.DESCRIPTOR,
+        trigger_publication_pb2.TriggerPublication.DESCRIPTOR,
+        trigger_publication_pb2.StreamTriggersResponse.DESCRIPTOR,
+    )
+
+    for descriptor in descriptors:
+        assert not {
+            "presentation",
+            "presentation_revision",
+            "view",
+            "asset",
+        } & set(descriptor.fields_by_name)
+
+
+def test_presentation_changes_do_not_change_business_fingerprints() -> None:
+    operation = json_format.ParseDict(
+        json.loads(
+            (
+                _FIXTURES.parent / "operation_admission" / "request.json"
+            ).read_text()
+        ),
+        operation_admission_pb2.StartOperationRequest(),
+    ).invocation
+    publication = json_format.ParseDict(
+        json.loads(
+            (
+                _FIXTURES.parent / "trigger_publication" / "publication.json"
+            ).read_text()
+        ),
+        trigger_publication_pb2.StreamTriggersResponse(),
+    ).publication
+    operation_fingerprint = admission_validation.compute_request_fingerprint(
+        operation
+    )
+    trigger_fingerprint = (
+        trigger_validation.compute_publication_content_fingerprint(publication)
+    )
+
+    manifest_response = json_format.ParseDict(
+        json.loads((_FIXTURES / "presentation-response.json").read_text()),
+        manifest_pb2.GetManifestResponse(),
+    )
+    manifest_response.presentation.provider.summary = "Changed presentation"
+
+    assert (
+        admission_validation.compute_request_fingerprint(operation)
+        == operation_fingerprint
+    )
+    assert (
+        trigger_validation.compute_publication_content_fingerprint(publication)
+        == trigger_fingerprint
+    )
+
+
+@pytest.mark.parametrize(
+    ("target", "field", "value"),
+    [
+        ("field", "hidden", True),
+        ("field", "required", False),
+        ("field", "schema", {"type": "string"}),
+        ("field", "html", "<strong>unsafe</strong>"),
+        ("field", "javascript", "alert(1)"),
+        ("asset", "url", "https://example.invalid/icon.svg"),
+        ("asset", "path", "../../etc/passwd"),
+    ],
+)
+def test_presentation_protojson_rejects_executable_or_semantic_fields(
+    target: str,
+    field: str,
+    value: object,
+) -> None:
+    document = json.loads(
+        (_FIXTURES / "presentation-response.json").read_text()
+    )["presentation"]
+    if target == "field":
+        view = next(iter(document["operations"].values()))
+        selected = next(iter(view["input"]["fields"].values()))
+    else:
+        selected = next(iter(document["assets"].values()))
+    selected[field] = value
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(
+            {
+                "$ref": "#/$defs/providerPresentation",
+                "$defs": _SCHEMA["$defs"],
+            }
+        ).validate(document)
 
 
 def test_request_round_trip_and_offer_order() -> None:
