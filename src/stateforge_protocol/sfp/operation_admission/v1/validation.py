@@ -18,6 +18,7 @@ __all__ = [
     "validate_admission_error_detail",
     "validate_admission_exchange",
     "validate_admission_record",
+    "validate_admission_rejection",
     "validate_start_operation_request",
     "validate_start_operation_response",
 ]
@@ -144,6 +145,30 @@ def validate_admission_error_detail(
     )
     _VALIDATION.validate_message_schema(
         _SCHEMA, detail, "operationAdmissionErrorDetail", "error"
+    )
+
+
+def validate_admission_rejection(
+    detail: operation_admission_pb2.OperationAdmissionErrorDetail,
+    *,
+    grpc_status: str,
+) -> None:
+    """Validate structured rejection detail and its gRPC status together."""
+    validate_admission_error_detail(detail)
+    error_contract = contract.ADMISSION_ERROR_CONTRACTS.get(detail.reason)
+    if error_contract is None:
+        raise OperationAdmissionValidationError(
+            "error: reason has no canonical rejection contract"
+        )
+    _VALIDATION.require_equal(
+        grpc_status,
+        error_contract.grpc_status,
+        "error: gRPC status does not match reason",
+    )
+    _VALIDATION.require_equal(
+        detail.retryable,
+        error_contract.retryable,
+        "error: retryable does not match reason",
     )
 
 

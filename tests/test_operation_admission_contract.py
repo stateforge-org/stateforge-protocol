@@ -466,6 +466,21 @@ def test_error_fixture_covers_every_reason_and_creates_no_record() -> None:
         "UNAVAILABLE",
         "UNIMPLEMENTED",
     }
+    assert set(contract.ADMISSION_ERROR_CONTRACTS) == {
+        value.number
+        for value in (
+            operation_admission_pb2.AdmissionErrorReason.DESCRIPTOR.values
+        )
+        if value.number != 0
+    }
+
+    for case in cases:
+        reason = operation_admission_pb2.AdmissionErrorReason.Value(
+            case["reason"]
+        )
+        error_contract = contract.ADMISSION_ERROR_CONTRACTS[reason]
+        assert error_contract.grpc_status == case["grpcStatus"]
+        assert error_contract.retryable is case["retryable"]
 
 
 @pytest.mark.parametrize("case", _read_json("error-cases.json"))
@@ -484,12 +499,59 @@ def test_error_detail_round_trips_for_every_documented_case(case) -> None:
         operation_admission_pb2.OperationAdmissionErrorDetail(),
     )
     admission_validation.validate_admission_error_detail(message)
+    admission_validation.validate_admission_rejection(
+        message,
+        grpc_status=case["grpcStatus"],
+    )
     projected = json_format.MessageToDict(
         message,
         always_print_fields_with_no_presence=True,
     )
 
     assert projected == detail
+
+
+def test_rejection_rejects_status_that_does_not_match_reason() -> None:
+    detail = json_format.ParseDict(
+        {
+            "operationId": "22222222-2222-4222-8222-222222222222",
+            "reason": "ADMISSION_ERROR_REASON_PROVIDER_UNAVAILABLE",
+            "retryable": True,
+            "retryAfter": "5s",
+            "explanation": "Provider is temporarily unavailable.",
+        },
+        operation_admission_pb2.OperationAdmissionErrorDetail(),
+    )
+
+    with pytest.raises(
+        admission_validation.OperationAdmissionValidationError,
+        match="gRPC status does not match reason",
+    ):
+        admission_validation.validate_admission_rejection(
+            detail,
+            grpc_status="FAILED_PRECONDITION",
+        )
+
+
+def test_rejection_rejects_retryable_that_does_not_match_reason() -> None:
+    detail = json_format.ParseDict(
+        {
+            "operationId": "22222222-2222-4222-8222-222222222222",
+            "reason": "ADMISSION_ERROR_REASON_PROVIDER_UNAVAILABLE",
+            "retryable": False,
+            "explanation": "Provider is temporarily unavailable.",
+        },
+        operation_admission_pb2.OperationAdmissionErrorDetail(),
+    )
+
+    with pytest.raises(
+        admission_validation.OperationAdmissionValidationError,
+        match="retryable does not match reason",
+    ):
+        admission_validation.validate_admission_rejection(
+            detail,
+            grpc_status="UNAVAILABLE",
+        )
 
 
 def test_retry_after_is_forbidden_for_non_retryable_error() -> None:
