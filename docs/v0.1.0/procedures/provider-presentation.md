@@ -15,21 +15,22 @@ from its JSON Schemas.
 ```mermaid
 flowchart LR
     Manifest["ProviderManifest<br/>capabilities + JSON Schemas"] --> Sources["Control Plane data sources"]
-    Presentation["ProviderPresentation<br/>surfaces + component trees"] --> Validate{"SFP presentation<br/>valid?"}
-    Validate -->|yes| Registry["Control Plane<br/>renderer registry"]
+    Presentation["ProviderPresentation<br/>opaque identifiers + bounded tree"] --> Validate{"SFP generic<br/>structure valid?"}
+    Validate -->|yes| Registry["Control Plane-owned<br/>catalog + renderer registry"]
     Validate -.->|no| Defaults["Schema-derived interface"]
     Sources --> Registry
     Assets["Embedded PNG / SVG assets"] --> Registry
     Extensions["Installed renderer extensions"] --> Registry
-    Registry --> Render["Rendered Provider, operation,<br/>trigger, and evidence surfaces"]
+    Registry -->|supported| Render["Rendered surfaces"]
+    Registry -.->|unsupported| Defaults
     Defaults --> Render
 ```
 
 | Layer | Owns |
 | --- | --- |
 | Operational manifest | Capability identifiers, JSON Schemas, requirements, and execution semantics |
-| SFP presentation contract | Surface identifiers, component-tree structure, bindings, conditions, repetition, extension metadata, safe assets, and limits |
-| Control Plane renderer registry | The property schema and rendering behavior for each component identifier |
+| SFP presentation contract | Generic bounded component-tree structure, bindings, conditions, repetition, asset bytes, and transport limits |
+| Control Plane catalog and renderer registry | Surface and component applicability, property schemas, data-source resolution, renderer availability, and rendering behavior |
 | Control Plane skin | Typography, color, spacing, framing, and product-wide visual language |
 
 SFP carries declarative data only. It never carries HTML, CSS, JavaScript,
@@ -41,17 +42,11 @@ A `ProviderPresentation` can attach a `PresentationTarget` to the Provider
 itself and to any operation or trigger declared by the same manifest. Operation
 and trigger map keys must match exact manifest identifiers.
 
-Each target contains one or more named surfaces:
-
-| Target | Surface identifier | Intended use |
-| --- | --- | --- |
-| Provider | `stateforge.ui/surface.provider.overview@1` | Provider identity, status, capabilities, and summary information |
-| Operation | `stateforge.ui/surface.operation.request@1` | Construct and review an operation request |
-| Operation | `stateforge.ui/surface.operation.run@1` | Follow an admitted operation while it runs |
-| Operation | `stateforge.ui/surface.operation.result@1` | Inspect a terminal operation result |
-| Trigger | `stateforge.ui/surface.trigger.policy@1` | Configure how a trigger participates in policy |
-| Trigger | `stateforge.ui/surface.trigger.event@1` | Inspect one published trigger event |
-| Operation or trigger | `stateforge.ui/surface.evidence@1` | Inspect evidence and audit material associated with that target |
+Each target contains a map of named surfaces. The Control Plane catalog owns
+surface identifiers and their applicability to Provider, operation, and trigger
+targets. SFP accepts any well-formed surface identifier on any target; it does
+not maintain the surface list or decide which target type or Control Plane
+supports a surface.
 
 Groups are optional. A Provider author creates visual grouping with ordinary
 layout components such as a section, grid, tabs, or steps; the Protocol does
@@ -73,7 +68,7 @@ flowchart TD
     Root --> Assets["asset_bindings"]
     Root -. optional .-> Condition["condition"]
     Root -. optional .-> Repeat["repeat"]
-    Root -. custom only .-> Fallback["core fallback"]
+    Root -. optional .-> Fallback["fallback tree"]
 ```
 
 | Node field | Meaning |
@@ -85,99 +80,52 @@ flowchart TD
 | `asset_bindings` | Renderer slot names mapped to embedded asset digests |
 | `condition` | Optional declarative existence or equality test controlling visibility |
 | `repeat` | Optional bounded repetition over a collection binding |
-| `fallback` | Required core-only tree used when a custom renderer is unavailable |
+| `fallback` | Optional declarative tree that the Control Plane may use according to its own policy |
 
-The Protocol validates the identifier and tree, bounds the document, verifies
-references, and constrains which data sources exist on each surface. It does
-not interpret component properties. The Control Plane validates those
-properties against the renderer definition registered for the component
-identifier.
+The Protocol checks generic identifier syntax and bounded tree structure;
+component identifiers, surface identifiers, binding slot names, asset slot
+names, and property meanings are opaque to SFP. It does not maintain the
+Provider Views catalog or decide whether a component is supported on a
+surface. The Control Plane owns the catalog and renderer registry, validates
+properties and applicability, resolves data sources, and decides how to handle
+unknown or unsupported identifiers. A Control Plane is not required to render
+every catalog component.
+Component applicability is not decided by SFP.
 
-## Core component catalog
-
-SFP 1.0 defines a compact core catalog that every conforming Control Plane can
-render:
-
-| Category | Component identifiers |
-| --- | --- |
-| Layout | `layout.stack`, `layout.grid`, `layout.section`, `layout.tabs`, `layout.steps` |
-| Input | `input.form`, `input.field`, `input.object`, `input.array`, `input.key_value`, `input.code`, `input.secret` |
-| Content and structured data | `content.text`, `content.markdown`, `data.key_value`, `data.table`, `data.tree`, `data.code`, `data.diff`, `data.log` |
-| Status and visualization | `status.badge`, `status.progress`, `status.timeline`, `data.metric`, `data.chart`, `data.topology`, `data.artifacts` |
-| Media and actions | `media.image`, `action.operation_submit`, `action.operation_cancel` |
-
-Each value above uses the `stateforge.ui` namespace and `@1` major version.
-For example, the complete table identifier is
-`stateforge.ui/data.table@1`.
-
-These are identifiers, not protobuf message types. Adding a renderer does not
-require adding a new component-specific message or enum to SFP.
-
-### Portable core structure
-
-Core identifiers also carry a small Protocol-owned structural contract. This
-does not define styling or renderer properties; it guarantees that an accepted
-core tree, including a custom component's fallback, can be interpreted the same
-way by every conforming Control Plane.
-
-| Core family | Surfaces | Children | Binding and asset slots |
-| --- | --- | --- | --- |
-| Layout | All | One or more | No bindings or assets |
-| Form, object, array | Operation request or trigger policy | Optional nested controls | Required `schema`; optional public `value` |
-| Field, key/value, code input | Operation request or trigger policy | None | Required `schema`; optional public `value` |
-| Secret input | Operation request or trigger policy | None | Required `schema`; secret value remains private host state |
-| Text and Markdown | All | None | Optional `value` |
-| Key/value, tree, code, badge, progress, and metric | All | None | Required `value` |
-| Table, log, timeline, chart, and artifacts | All | None | Required `rows`, `entries`, `events`, `series`, or `items` respectively |
-| Diff | All | None | Required `before` and `after` |
-| Topology | All | None | Required `nodes` and `edges` |
-| Image | All | None | Required `source` asset |
-| Submit action | Operation request | None | Host-controlled action; no binding or asset |
-| Cancel action | Operation run | None | Host-controlled action; no binding or asset |
-
-A core component cannot declare a fallback. Custom components must declare a
-core-only fallback, and every node in that fallback is checked against this
-same structural registry. Renderer-specific `properties` remain owned by the
-Control Plane registry.
+The catalog's 30 component identifiers are maintained by the Control Plane.
+Those names are ordinary versioned identifiers in this wire format—not
+Protocol enums, component-specific protobuf messages, or a Protocol allowlist.
+A catalog or renderer change does not require changing the SFP message schema.
 
 ## Data bindings
 
-A `DataBinding` selects one Control Plane-provided source and optionally a
-JSON Pointer within it. An empty pointer selects the complete source. The
-sources available depend on the surface, preventing a Provider from referring
-to data that does not exist in that rendering context.
-
-Examples include:
-
-| Surface | Representative binding sources |
-| --- | --- |
-| Provider overview | Provider manifest and Provider runtime state |
-| Operation request | Request schema and the public request draft |
-| Operation run | Public admitted-request projection and live operation state |
-| Operation result | Public request projection, result schema, result value, and operation evidence |
-| Trigger policy | Trigger payload schema |
-| Trigger event | Payload schema and published payload value |
-| Evidence | Operation evidence or trigger value plus audit data |
+A `DataBinding` names a Control Plane-provided source and optionally a JSON
+Pointer within it. An empty pointer selects the complete source. SFP treats
+source identifiers and their availability as opaque; the Control Plane owns
+the source catalog and decides which sources a given target and surface may
+resolve. It must not resolve a source the active rendering context does not
+provide.
 
 A repetition creates a named item scope. Descendants can bind to
 `stateforge.binding/repetition.item@1` only by naming an active scope. Each
-repetition also declares a positive `max_items` ceiling.
+repetition also declares a positive `max_items` ceiling. These are generic
+tree and resource invariants; component-specific repetition behavior belongs
+to the Control Plane catalog.
 
 Conditions support `EXISTS`, `NOT_EXISTS`, `EQUALS`, and `NOT_EQUALS`.
 Existence conditions omit a comparison value; equality conditions require one,
 including an explicitly supplied JSON `null`.
 
-The request-value source is
-`stateforge.binding/operation.request.public_value@1`. It is a safe projection,
-not the submitted request: every value whose applicable input schema marks it
-`writeOnly` is omitted. If an implementation cannot prove that a value is
-public, it must omit that value. Secret-entry state remains private to the form
-renderer and is never addressable by a presentation binding. The raw request
-has no presentation binding identifier.
+`stateforge.binding/operation.request.public_value@1` denotes a safe
+projection, not the submitted request: every value whose applicable input
+schema marks it `writeOnly` is omitted. If the data-source owner cannot prove a
+value is public, it must omit it. Secret-entry state remains private to the
+Control Plane and is never addressable by a presentation binding. The raw
+operation request binding identifier is forbidden by SFP.
 
-## Core example
+## Example presentation
 
-The manifest fixture uses a core form for the operation request:
+The manifest fixture uses a form component identifier for the operation request:
 
 ```json
 {
@@ -211,12 +159,11 @@ validation or manufacture an operation field.
 ## Custom components and renderer extensions
 
 A Provider may use its own component identifier, such as
-`example.git/data.commit_graph@1`. A custom node has two additional
-requirements:
-
-1. its namespace has one matching `RendererRequirement`; and
-2. the node includes a fallback tree composed only of core
-   `stateforge.ui` components.
+`example.git/data.commit_graph@1`. A node may include a fallback tree and
+`RendererRequirement` metadata. SFP transports these fields as bounded declarative data; it
+does not require an identifier to be listed in a Protocol registry, require a
+renderer requirement for a node, or restrict fallback nodes to a Protocol
+catalog.
 
 ```json
 {
@@ -247,7 +194,8 @@ requirements:
 }
 ```
 
-The matching requirement carries identity and compatibility metadata:
+Renderer metadata may carry identity and compatibility information for a
+separately installed renderer:
 
 ```json
 {
@@ -261,20 +209,17 @@ The matching requirement carries identity and compatibility metadata:
 }
 ```
 
-Every namespace beginning with `stateforge.` is reserved for identifiers
-defined by StateForge contracts. A Provider-owned renderer must use a namespace
-it owns; it cannot introduce custom components or renderer requirements under
-`stateforge.ui`, `stateforge.ui.*`, or another `stateforge.*` namespace.
+Renderer requirements cannot claim a `stateforge.*` namespace. Component
+identifier support and ownership are resolved by the Control Plane catalog;
+SFP does not use a namespace to classify components as built-in or custom.
 
 The renderer artifact is distributed separately from SFP. The Control Plane
-uses the metadata to locate an already trusted or separately acquired bundle,
-checks compatibility and permissions in its extension host, and registers the
-component identifiers exposed by that bundle. SFP never downloads or executes
-it.
+decides whether to trust, acquire, enable, and register it. SFP transports the
+metadata as bounded data and never downloads or executes renderer code.
 
 If the extension is missing, incompatible, disabled, or rejected, the Control
-Plane renders the core fallback. This preserves a functional interface without
-limiting advanced Provider authors to the built-in catalog.
+Plane applies its own fallback policy. Fallback availability and use are not
+determined by SFP.
 
 ## Embedded assets
 
@@ -296,13 +241,15 @@ The presentation is then evaluated independently:
 | Presentation state | Result |
 | --- | --- |
 | Absent | Keep the manifest and render from its JSON Schemas. |
-| Supported and valid | Cache the component tree and its independent revision. |
+| Structurally valid | Cache the component tree and its independent revision; renderer support is not decided here. |
 | Unsupported schema version | Keep the manifest and ignore presentation. |
-| Invalid tree, source, extension metadata, asset, or revision | Keep the manifest and discard the complete presentation snapshot. |
+| Invalid generic structure, forbidden raw request binding, asset, or revision | Keep the manifest and discard the complete presentation snapshot. |
 
-The Protocol enforces limits for tree depth, total component count, children,
-bindings, properties, repetition, extensions, permissions, assets, and
-canonical bytes. Partial acceptance is not allowed.
+The Protocol enforces generic limits for tree depth, total component count,
+children, bindings, properties, repetition, renderer metadata, permissions,
+assets, and canonical bytes. It does not reject a presentation because a
+component, surface, property, slot, or data source is unknown to SFP. Partial
+acceptance is not allowed for structural or safety failures.
 
 `manifest_revision` excludes presentation. `presentation_revision` hashes the
 complete presentation and is bound to the accepted manifest revision, so a
@@ -314,11 +261,10 @@ The Provider returns `ProviderPresentation` through the existing
 `ManifestService.GetManifest` response. The Agent validates and caches the
 manifest and presentation independently.
 
-A future SF-AOP contract will transport the accepted snapshots to the Control
-Plane. No second SFP presentation RPC is introduced. Once received, the
-Control Plane resolves component identifiers through its renderer registry,
-binds the current runtime data, applies its active skin, and renders the
-surface.
+SF-AOP transports the accepted snapshots to the Control Plane; SFP introduces
+no separate presentation RPC. The Control Plane resolves component
+identifiers through its renderer registry, binds the current runtime data,
+applies its active skin, and renders the surface.
 
 For the exact service envelope, revision construction, limits, and public
 Python validators, return to
@@ -328,10 +274,10 @@ Python validators, return to
 
 | Module | Responsibility |
 | --- | --- |
-| [`contract.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/contract.py) | Owns the supported surface identifiers, core component catalog, binding-source identifiers, renderer metadata limits, and component-tree bounds. |
+| [`contract.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/contract.py) | Owns generic wire limits, repetition safety identifiers, renderer-metadata bounds, and component-tree bounds—not the Control Plane renderer catalog. |
 | [`validation.py`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/src/stateforge_protocol/sfp/manifest/v1/validation.py) | Exposes complete Manifest Exchange validation, independent presentation acceptance, presentation revision calculation, and presentation fallback. |
 
-Provider and Agent implementations should import these canonical definitions
-instead of duplicating component identifiers, source identifiers, or limits.
-Renderer-specific property schemas belong to the Control Plane renderer
-registry and are deliberately not defined by these Protocol modules.
+Provider and Agent implementations should use these generic Protocol
+definitions for wire validation and resource limits. The Control Plane owns
+the renderer catalog, component and surface applicability, source availability,
+property schemas, fallback behavior, and rendering semantics.

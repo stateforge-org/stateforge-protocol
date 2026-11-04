@@ -31,6 +31,11 @@ from stateforge_protocol.sfp.manifest.v1.validation import (
 )
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "manifest"
+PROVIDER_OVERVIEW_SURFACE = "stateforge.ui/surface.provider.overview@1"
+OPERATION_REQUEST_SURFACE = "stateforge.ui/surface.operation.request@1"
+OPERATION_RESULT_SURFACE = "stateforge.ui/surface.operation.result@1"
+TRIGGER_EVENT_SURFACE = "stateforge.ui/surface.trigger.event@1"
+PROVIDER_RUNTIME_BINDING = "stateforge.binding/provider.runtime@1"
 _GOLDEN_REVISION = (
     "sha256:6bfdf3aedc2d4e45d77d4787cc0e744a488208b2510d81788291f51d24a623e8"
 )
@@ -160,7 +165,7 @@ def _provider_image(
     response: manifest_pb2.GetManifestResponse,
 ) -> manifest_pb2.ComponentNode:
     return response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
+        PROVIDER_OVERVIEW_SURFACE
     ].root.children[0]
 
 
@@ -256,18 +261,20 @@ def test_empty_presentation_overlay_is_valid() -> None:
     }
 
 
-def test_invalid_presentation_falls_back_without_rejecting_manifest() -> None:
+def test_renderer_specific_binding_mismatch_is_not_a_protocol_error() -> None:
     response = _presentation_response()
-    _operation_root(response, contract.OPERATION_REQUEST_SURFACE).bindings[
+    _operation_root(response, OPERATION_REQUEST_SURFACE).bindings[
         "schema"
-    ].source_identifier = contract.PROVIDER_RUNTIME_BINDING
+    ].source_identifier = PROVIDER_RUNTIME_BINDING
     _refresh_presentation_revision(response)
 
     exchange = validate_manifest_exchange(response)
 
-    assert exchange.presentation_status is PresentationValidationStatus.INVALID
-    assert exchange.presentation_document is None
-    assert exchange.presentation_key is None
+    assert (
+        exchange.presentation_status is PresentationValidationStatus.ACCEPTED
+    )
+    assert exchange.presentation_document is not None
+    assert exchange.presentation_key is not None
     assert exchange.manifest_document == validate_manifest_response(response)
 
 
@@ -328,7 +335,7 @@ def test_presentation_revision_is_isolated_and_bound_to_manifest() -> None:
     original_presentation_revision = response.presentation_revision
 
     response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
+        PROVIDER_OVERVIEW_SURFACE
     ].root.properties.update({"gap": "compact"})
     _refresh_presentation_revision(response)
 
@@ -441,236 +448,123 @@ def test_targets_cannot_name_undeclared_capabilities(collection: str) -> None:
         _validate_presentation(response)
 
 
-def test_surface_must_belong_to_its_target_kind() -> None:
+def test_surface_applicability_is_owned_by_the_control_plane() -> None:
     response = _presentation_response()
     target = response.presentation.provider
-    target.surfaces[contract.OPERATION_REQUEST_SURFACE].CopyFrom(
-        target.surfaces[contract.PROVIDER_OVERVIEW_SURFACE]
+    target.surfaces["example.ui/surface.operation.request@1"].CopyFrom(
+        target.surfaces[PROVIDER_OVERVIEW_SURFACE]
     )
 
-    with pytest.raises(ManifestValidationError, match="provider targets"):
-        _validate_presentation(response)
+    _validate_presentation(response)
 
 
-def test_surface_binding_source_must_be_available() -> None:
+def test_binding_source_applicability_is_owned_by_the_control_plane() -> None:
     response = _presentation_response()
-    _operation_root(response, contract.OPERATION_REQUEST_SURFACE).bindings[
+    _operation_root(response, OPERATION_REQUEST_SURFACE).bindings[
         "schema"
-    ].source_identifier = contract.OPERATION_RESULT_VALUE_BINDING
+    ].source_identifier = "example.control/operation.private_context@1"
 
-    with pytest.raises(ManifestValidationError, match="unavailable"):
-        _validate_presentation(response)
+    _validate_presentation(response)
 
 
-def test_raw_operation_request_values_are_not_presentation_sources() -> None:
+def test_raw_operation_request_values_remain_forbidden() -> None:
     response = _presentation_response()
-    result = _operation_root(
-        response, contract.OPERATION_RESULT_SURFACE
-    ).fallback
-    result.bindings[
+    request = _operation_root(response, OPERATION_REQUEST_SURFACE)
+    request.bindings[
         "secret"
-    ].source_identifier = "stateforge.binding/operation.request.value@1"
-    result.bindings["secret"].pointer = "/token"
+    ].source_identifier = contract.RAW_OPERATION_REQUEST_BINDING
+    request.bindings["secret"].pointer = "/token"
 
-    with pytest.raises(ManifestValidationError, match="unavailable"):
+    with pytest.raises(ManifestValidationError, match="raw operation request"):
         _validate_presentation(response)
 
 
-def test_public_request_projection_is_available_across_lifecycle() -> None:
-    expected = contract.OPERATION_REQUEST_PUBLIC_VALUE_BINDING
-
-    for surface in (
-        contract.OPERATION_REQUEST_SURFACE,
-        contract.OPERATION_RUN_SURFACE,
-        contract.OPERATION_RESULT_SURFACE,
-    ):
-        assert expected in contract.SURFACE_BINDING_SOURCES[surface]
-
-    assert all(
-        "stateforge.binding/operation.request.value@1" not in sources
-        for sources in contract.SURFACE_BINDING_SOURCES.values()
-    )
-
-
-def test_core_component_catalog_is_explicit() -> None:
+def test_component_catalog_is_not_a_protocol_allowlist() -> None:
     response = _presentation_response()
-    response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
-    ].root.component_identifier = "stateforge.ui/layout.unknown@1"
+    node = response.presentation.provider.surfaces[
+        PROVIDER_OVERVIEW_SURFACE
+    ].root
+    node.component_identifier = "stateforge.ui/layout.unknown@1"
+    node.properties.update({"catalogOwned": True})
+    node.bindings[
+        "catalog_defined_slot"
+    ].source_identifier = "example.control/provider.summary@1"
 
-    with pytest.raises(ManifestValidationError, match="unknown core"):
-        _validate_presentation(response)
+    _validate_presentation(response)
 
 
-def test_core_action_is_rejected_outside_its_operation_surface() -> None:
+def test_component_applicability_is_owned_by_the_control_plane() -> None:
     response = _presentation_response()
     root = response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
+        PROVIDER_OVERVIEW_SURFACE
     ].root
     root.component_identifier = "stateforge.ui/action.operation_submit@1"
 
-    with pytest.raises(ManifestValidationError, match="unavailable"):
-        _validate_presentation(response)
+    _validate_presentation(response)
 
 
-def test_core_leaf_component_rejects_children() -> None:
+def test_component_child_contract_is_owned_by_the_control_plane() -> None:
     response = _presentation_response()
     image = _provider_image(response)
     child = image.children.add(
-        component_identifier="stateforge.ui/content.text@1"
+        component_identifier="example.vendor/content.caption@1"
     )
     child.properties.CopyFrom(struct_pb2.Struct())
 
-    with pytest.raises(ManifestValidationError, match="child contract"):
-        _validate_presentation(response)
+    _validate_presentation(response)
 
 
-def test_core_component_requires_its_binding_slots() -> None:
+def test_component_binding_slots_are_owned_by_the_control_plane() -> None:
     response = _presentation_response()
     event = next(iter(response.presentation.triggers.values()))
-    event.surfaces[contract.TRIGGER_EVENT_SURFACE].root.ClearField("bindings")
+    event.surfaces[TRIGGER_EVENT_SURFACE].root.ClearField("bindings")
 
-    with pytest.raises(ManifestValidationError, match="required binding"):
-        _validate_presentation(response)
+    _validate_presentation(response)
 
 
-def test_core_component_rejects_unknown_binding_slots() -> None:
+def test_component_asset_slots_are_owned_by_the_control_plane() -> None:
     response = _presentation_response()
     image = _provider_image(response)
-    image.bindings[
-        "value"
-    ].source_identifier = contract.PROVIDER_MANIFEST_BINDING
+    image.asset_bindings["catalog_defined_slot"] = image.asset_bindings[
+        "source"
+    ]
+    del image.asset_bindings["source"]
 
-    with pytest.raises(ManifestValidationError, match="binding slot"):
-        _validate_presentation(response)
+    _validate_presentation(response)
 
 
-def test_core_input_schema_slot_rejects_value_sources() -> None:
+def test_custom_fallback_is_not_limited_to_protocol_core_components() -> None:
     response = _presentation_response()
-    request = _operation_root(response, contract.OPERATION_REQUEST_SURFACE)
-    request.bindings[
-        "schema"
-    ].source_identifier = contract.OPERATION_REQUEST_PUBLIC_VALUE_BINDING
+    custom = _operation_root(response, OPERATION_RESULT_SURFACE)
+    custom.fallback.CopyFrom(
+        manifest_pb2.ComponentNode(
+            component_identifier="example.vendor/fallback.tree@1",
+            properties=struct_pb2.Struct(),
+        )
+    )
+    custom.fallback.fallback.CopyFrom(
+        manifest_pb2.ComponentNode(
+            component_identifier="stateforge.ui/future.fallback@2",
+            properties=struct_pb2.Struct(),
+        )
+    )
 
-    with pytest.raises(ManifestValidationError, match="component slot"):
-        _validate_presentation(response)
-
-
-def test_core_media_component_requires_its_asset_slot() -> None:
-    response = _presentation_response()
-    _provider_image(response).ClearField("asset_bindings")
-
-    with pytest.raises(ManifestValidationError, match="required asset"):
-        _validate_presentation(response)
-
-
-def test_core_component_cannot_declare_a_fallback() -> None:
-    response = _presentation_response()
-    root = response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
-    ].root
-    root.fallback.component_identifier = "stateforge.ui/content.text@1"
-    root.fallback.properties.CopyFrom(struct_pb2.Struct())
-
-    with pytest.raises(ManifestValidationError, match="cannot declare"):
-        _validate_presentation(response)
+    _validate_presentation(response)
 
 
-def test_secret_input_is_part_of_the_portable_core_catalog() -> None:
-    secret = contract.CORE_COMPONENT_CONTRACTS["stateforge.ui/input.secret@1"]
-
-    assert secret.required_bindings == frozenset({"schema"})
-    assert "value" not in secret.optional_bindings
-
-
-@pytest.mark.parametrize(
-    ("identifier", "required_bindings"),
-    [
-        ("stateforge.ui/data.table@1", {"rows"}),
-        ("stateforge.ui/data.diff@1", {"before", "after"}),
-        ("stateforge.ui/data.log@1", {"entries"}),
-        ("stateforge.ui/status.timeline@1", {"events"}),
-        ("stateforge.ui/data.chart@1", {"series"}),
-        ("stateforge.ui/data.topology@1", {"nodes", "edges"}),
-        ("stateforge.ui/data.artifacts@1", {"items"}),
-    ],
-)
-def test_core_data_components_have_semantic_binding_slots(
-    identifier: str,
-    required_bindings: set[str],
-) -> None:
-    component = contract.CORE_COMPONENT_CONTRACTS[identifier]
-
-    assert component.required_bindings == frozenset(required_bindings)
-
-
-def test_custom_component_requires_renderer_metadata() -> None:
+def test_renderer_requirements_are_not_a_component_registry() -> None:
     response = _presentation_response()
     del response.presentation.renderer_requirements["example.git"]
-
-    with pytest.raises(ManifestValidationError, match="renderer requirement"):
-        _validate_presentation(response)
-
-
-def test_custom_component_requires_core_fallback() -> None:
-    response = _presentation_response()
-    _operation_root(response, contract.OPERATION_RESULT_SURFACE).ClearField(
-        "fallback"
+    response.presentation.renderer_requirements["example.unused"].CopyFrom(
+        manifest_pb2.RendererRequirement(
+            extension_identifier="example.unused/renderer@1",
+            extension_version="1.0.0",
+            renderer_api_version="1.0.0",
+            artifact_digest="sha256:" + "a" * 64,
+        )
     )
 
-    with pytest.raises(ManifestValidationError, match="core fallback"):
-        _validate_presentation(response)
-
-
-def test_custom_component_fallback_cannot_require_an_extension() -> None:
-    response = _presentation_response()
-    _operation_root(
-        response, contract.OPERATION_RESULT_SURFACE
-    ).fallback.component_identifier = "example.git/data.commit_graph@1"
-
-    with pytest.raises(ManifestValidationError, match="core components"):
-        _validate_presentation(response)
-
-
-def test_renderer_requirements_cannot_be_unreferenced() -> None:
-    response = _presentation_response()
-    response.presentation.renderer_requirements["example.widget"].CopyFrom(
-        response.presentation.renderer_requirements["example.git"]
-    )
-    requirement = response.presentation.renderer_requirements["example.widget"]
-    requirement.extension_identifier = "example.widget/renderer@1"
-
-    with pytest.raises(ManifestValidationError, match="exactly match"):
-        _validate_presentation(response)
-
-
-def test_renderer_extension_must_share_component_namespace() -> None:
-    response = _presentation_response()
-    response.presentation.renderer_requirements[
-        "example.git"
-    ].extension_identifier = "example.widget/renderer@1"
-
-    with pytest.raises(ManifestValidationError, match="namespace"):
-        _validate_presentation(response)
-
-
-@pytest.mark.parametrize(
-    "identifier",
-    [
-        "stateforge.git/data.commit_graph@1",
-        "stateforge.ui.custom/data.commit_graph@1",
-    ],
-)
-def test_custom_components_cannot_claim_stateforge_namespaces(
-    identifier: str,
-) -> None:
-    response = _presentation_response()
-    _operation_root(
-        response, contract.OPERATION_RESULT_SURFACE
-    ).component_identifier = identifier
-
-    with pytest.raises(ManifestValidationError, match="StateForge-owned"):
-        _validate_presentation(response)
+    _validate_presentation(response)
 
 
 def test_renderer_requirements_cannot_claim_stateforge_namespaces() -> None:
@@ -689,7 +583,7 @@ def test_renderer_requirements_cannot_claim_stateforge_namespaces() -> None:
 def test_repetition_scope_is_available_to_component_bindings() -> None:
     response = _presentation_response()
     root = response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
+        PROVIDER_OVERVIEW_SURFACE
     ].root
     repeated = root.children.add(
         component_identifier="stateforge.ui/data.table@1"
@@ -697,7 +591,7 @@ def test_repetition_scope_is_available_to_component_bindings() -> None:
     repeated.properties.update({"title": "Runtime items"})
     repeated.repeat.collection.CopyFrom(
         manifest_pb2.DataBinding(
-            source_identifier=contract.PROVIDER_RUNTIME_BINDING,
+            source_identifier=PROVIDER_RUNTIME_BINDING,
             pointer="/items",
         )
     )
@@ -717,7 +611,7 @@ def test_repetition_scope_is_available_to_component_bindings() -> None:
 def test_repetition_item_binding_requires_an_active_scope() -> None:
     response = _presentation_response()
     root = response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
+        PROVIDER_OVERVIEW_SURFACE
     ].root
     root.bindings["item"].CopyFrom(
         manifest_pb2.DataBinding(
@@ -732,7 +626,7 @@ def test_repetition_item_binding_requires_an_active_scope() -> None:
 
 def test_non_repetition_binding_cannot_claim_a_scope() -> None:
     response = _presentation_response()
-    _operation_root(response, contract.OPERATION_REQUEST_SURFACE).bindings[
+    _operation_root(response, OPERATION_REQUEST_SURFACE).bindings[
         "schema"
     ].scope = "row"
 
@@ -762,11 +656,11 @@ def test_condition_value_presence_matches_operator(
 ) -> None:
     response = _presentation_response()
     root = response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
+        PROVIDER_OVERVIEW_SURFACE
     ].root
     root.condition.binding.CopyFrom(
         manifest_pb2.DataBinding(
-            source_identifier=contract.PROVIDER_RUNTIME_BINDING,
+            source_identifier=PROVIDER_RUNTIME_BINDING,
             pointer="/available",
         )
     )
@@ -781,7 +675,7 @@ def test_condition_value_presence_matches_operator(
 def test_component_properties_have_an_independent_byte_limit() -> None:
     response = _presentation_response()
     response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
+        PROVIDER_OVERVIEW_SURFACE
     ].root.properties.update(
         {"content": "x" * contract.MAX_COMPONENT_PROPERTIES_BYTES}
     )
@@ -793,7 +687,7 @@ def test_component_properties_have_an_independent_byte_limit() -> None:
 def test_component_tree_depth_is_bounded() -> None:
     response = _presentation_response()
     node = response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
+        PROVIDER_OVERVIEW_SURFACE
     ].root
     for depth in range(contract.MAX_PRESENTATION_COMPONENT_DEPTH):
         node = node.children.add(
@@ -894,7 +788,7 @@ def test_aggregate_asset_size_limit_is_enforced() -> None:
         )
         references.append(digest)
     root = response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
+        PROVIDER_OVERVIEW_SURFACE
     ].root
     root.ClearField("children")
     for index, digest in enumerate(references):

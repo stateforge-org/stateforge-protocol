@@ -123,48 +123,15 @@ def validate_presentation_semantics(
         )
 
     state = _PresentationState()
-    provider = presentation.get("provider")
-    if isinstance(provider, dict):
-        _validate_target(
-            provider,
-            target_kind="provider",
-            permitted_surfaces=contract.PROVIDER_SURFACES,
-            state=state,
-            requirements=requirements,
-            error_type=error_type,
-        )
-    for target in operation_targets.values():
-        _validate_target(
-            target,
-            target_kind="operation",
-            permitted_surfaces=contract.OPERATION_SURFACES,
-            state=state,
-            requirements=requirements,
-            error_type=error_type,
-        )
-    for target in trigger_targets.values():
-        _validate_target(
-            target,
-            target_kind="trigger",
-            permitted_surfaces=contract.TRIGGER_SURFACES,
-            state=state,
-            requirements=requirements,
-            error_type=error_type,
-        )
-
-    if requirements.keys() != state.custom_namespaces:
-        raise error_type(
-            "presentation: renderer requirements must exactly match custom "
-            "component namespaces"
-        )
-    for namespace, requirement in requirements.items():
-        if (
-            _namespace(cast(str, requirement["extensionIdentifier"]))
-            != namespace
-        ):
-            raise error_type(
-                "presentation: renderer extension namespace must match its "
-                "component namespace"
+    targets = [presentation.get("provider")]
+    targets.extend(operation_targets.values())
+    targets.extend(trigger_targets.values())
+    for target in targets:
+        if isinstance(target, dict):
+            _validate_target(
+                target,
+                state=state,
+                error_type=error_type,
             )
 
     _validate_assets(message, state.asset_references, error_type)
@@ -175,35 +142,22 @@ class _PresentationState:
 
     def __init__(self) -> None:
         self.component_count = 0
-        self.custom_namespaces: set[str] = set()
         self.asset_references: set[str] = set()
 
 
 def _validate_target(
     target: dict[str, Any],
     *,
-    target_kind: str,
-    permitted_surfaces: frozenset[str],
     state: _PresentationState,
-    requirements: dict[str, dict[str, Any]],
     error_type: type[ValueError],
 ) -> None:
     surfaces = cast(dict[str, dict[str, Any]], target["surfaces"])
-    unsupported = surfaces.keys() - permitted_surfaces
-    if unsupported:
-        raise error_type(
-            f"presentation: surface is not valid for {target_kind} targets"
-        )
-    for surface_identifier, surface in surfaces.items():
+    for surface in surfaces.values():
         _validate_component(
             cast(dict[str, Any], surface["root"]),
-            surface_identifier=surface_identifier,
-            target_kind=target_kind,
             scopes=frozenset(),
             depth=1,
-            core_only=False,
             state=state,
-            requirements=requirements,
             error_type=error_type,
         )
 
@@ -211,13 +165,9 @@ def _validate_target(
 def _validate_component(
     node: dict[str, Any],
     *,
-    surface_identifier: str,
-    target_kind: str,
     scopes: frozenset[str],
     depth: int,
-    core_only: bool,
     state: _PresentationState,
-    requirements: dict[str, dict[str, Any]],
     error_type: type[ValueError],
 ) -> None:
     if depth > contract.MAX_PRESENTATION_COMPONENT_DEPTH:
@@ -226,13 +176,6 @@ def _validate_component(
     if state.component_count > contract.MAX_PRESENTATION_COMPONENTS:
         raise error_type("presentation: component count limit exceeded")
 
-    core_contract = _validate_component_identity(
-        node,
-        core_only=core_only,
-        state=state,
-        requirements=requirements,
-        error_type=error_type,
-    )
     properties = cast(dict[str, Any], node["properties"])
     if (
         len(rfc8785.dumps(properties))
@@ -242,8 +185,6 @@ def _validate_component(
 
     current_scopes = _extend_repetition_scopes(
         node,
-        surface_identifier=surface_identifier,
-        target_kind=target_kind,
         scopes=scopes,
         error_type=error_type,
     )
@@ -251,164 +192,37 @@ def _validate_component(
     for binding in cast(dict[str, dict[str, Any]], node["bindings"]).values():
         _validate_binding(
             binding,
-            surface_identifier=surface_identifier,
-            target_kind=target_kind,
             scopes=current_scopes,
             error_type=error_type,
         )
     _validate_optional_condition(
         node,
-        surface_identifier=surface_identifier,
-        target_kind=target_kind,
         scopes=current_scopes,
         error_type=error_type,
     )
     state.asset_references.update(
         cast(dict[str, str], node["assetBindings"]).values()
     )
-    if core_contract is not None:
-        _validate_core_component_contract(
-            node,
-            surface_identifier=surface_identifier,
-            component_contract=core_contract,
-            error_type=error_type,
-        )
-
     _validate_optional_fallback(
         node,
-        surface_identifier=surface_identifier,
-        target_kind=target_kind,
         scopes=current_scopes,
         depth=depth,
         state=state,
-        requirements=requirements,
         error_type=error_type,
     )
     for child in cast(list[dict[str, Any]], node["children"]):
         _validate_component(
             child,
-            surface_identifier=surface_identifier,
-            target_kind=target_kind,
             scopes=current_scopes,
             depth=depth + 1,
-            core_only=core_only,
             state=state,
-            requirements=requirements,
             error_type=error_type,
-        )
-
-
-def _validate_component_identity(
-    node: dict[str, Any],
-    *,
-    core_only: bool,
-    state: _PresentationState,
-    requirements: dict[str, dict[str, Any]],
-    error_type: type[ValueError],
-) -> contract.CoreComponentContract | None:
-    identifier = cast(str, node["componentIdentifier"])
-    namespace = _namespace(identifier)
-    is_core = namespace == contract.CORE_COMPONENT_NAMESPACE
-    if is_core:
-        try:
-            component_contract = contract.CORE_COMPONENT_CONTRACTS[identifier]
-        except KeyError:
-            raise error_type(
-                "presentation: unknown core component identifier"
-            ) from None
-        if "fallback" in node:
-            raise error_type(
-                "presentation: core component cannot declare a fallback"
-            )
-        return component_contract
-    if _is_stateforge_owned(namespace):
-        raise error_type(
-            "presentation: custom component cannot use a StateForge-owned "
-            "namespace"
-        )
-    if core_only and not is_core:
-        raise error_type(
-            "presentation: custom component fallback must use core components"
-        )
-    if not is_core:
-        if namespace not in requirements:
-            raise error_type(
-                "presentation: custom component has no renderer requirement"
-            )
-        if "fallback" not in node:
-            raise error_type(
-                "presentation: custom component requires a core fallback"
-            )
-        state.custom_namespaces.add(namespace)
-    return None
-
-
-def _validate_core_component_contract(
-    node: dict[str, Any],
-    *,
-    surface_identifier: str,
-    component_contract: contract.CoreComponentContract,
-    error_type: type[ValueError],
-) -> None:
-    if surface_identifier not in component_contract.permitted_surfaces:
-        raise error_type(
-            "presentation: core component is unavailable on this surface"
-        )
-
-    child_count = len(cast(list[dict[str, Any]], node["children"]))
-    if not (
-        component_contract.minimum_children
-        <= child_count
-        <= component_contract.maximum_children
-    ):
-        raise error_type(
-            "presentation: core component child contract is violated"
-        )
-
-    bindings = cast(dict[str, dict[str, Any]], node["bindings"])
-    binding_names = set(bindings)
-    permitted_bindings = (
-        component_contract.required_bindings
-        | component_contract.optional_bindings
-    )
-    if not component_contract.required_bindings <= binding_names:
-        raise error_type(
-            "presentation: core component is missing a required binding"
-        )
-    if not binding_names <= permitted_bindings:
-        raise error_type(
-            "presentation: core component binding slot is not permitted"
-        )
-    for slot, permitted_sources in component_contract.binding_source_rules:
-        binding = bindings.get(slot)
-        if binding is not None and binding["sourceIdentifier"] not in (
-            permitted_sources
-        ):
-            raise error_type(
-                "presentation: binding source is invalid for core "
-                "component slot"
-            )
-
-    asset_bindings = cast(dict[str, str], node["assetBindings"])
-    asset_names = set(asset_bindings)
-    permitted_assets = (
-        component_contract.required_assets | component_contract.optional_assets
-    )
-    if not component_contract.required_assets <= asset_names:
-        raise error_type(
-            "presentation: core component is missing a required asset"
-        )
-    if not asset_names <= permitted_assets:
-        raise error_type(
-            "presentation: core component asset slot is not permitted"
         )
 
 
 def _extend_repetition_scopes(
     node: dict[str, Any],
     *,
-    surface_identifier: str,
-    target_kind: str,
     scopes: frozenset[str],
     error_type: type[ValueError],
 ) -> frozenset[str]:
@@ -417,8 +231,6 @@ def _extend_repetition_scopes(
         return scopes
     _validate_binding(
         cast(dict[str, Any], repeat["collection"]),
-        surface_identifier=surface_identifier,
-        target_kind=target_kind,
         scopes=scopes,
         error_type=error_type,
     )
@@ -431,8 +243,6 @@ def _extend_repetition_scopes(
 def _validate_optional_condition(
     node: dict[str, Any],
     *,
-    surface_identifier: str,
-    target_kind: str,
     scopes: frozenset[str],
     error_type: type[ValueError],
 ) -> None:
@@ -440,8 +250,6 @@ def _validate_optional_condition(
     if isinstance(condition, dict):
         _validate_condition(
             condition,
-            surface_identifier=surface_identifier,
-            target_kind=target_kind,
             scopes=scopes,
             error_type=error_type,
         )
@@ -450,25 +258,18 @@ def _validate_optional_condition(
 def _validate_optional_fallback(
     node: dict[str, Any],
     *,
-    surface_identifier: str,
-    target_kind: str,
     scopes: frozenset[str],
     depth: int,
     state: _PresentationState,
-    requirements: dict[str, dict[str, Any]],
     error_type: type[ValueError],
 ) -> None:
     fallback = node.get("fallback")
     if isinstance(fallback, dict):
         _validate_component(
             fallback,
-            surface_identifier=surface_identifier,
-            target_kind=target_kind,
             scopes=scopes,
             depth=depth + 1,
-            core_only=True,
             state=state,
-            requirements=requirements,
             error_type=error_type,
         )
 
@@ -476,15 +277,11 @@ def _validate_optional_fallback(
 def _validate_condition(
     condition: dict[str, Any],
     *,
-    surface_identifier: str,
-    target_kind: str,
     scopes: frozenset[str],
     error_type: type[ValueError],
 ) -> None:
     _validate_binding(
         cast(dict[str, Any], condition["binding"]),
-        surface_identifier=surface_identifier,
-        target_kind=target_kind,
         scopes=scopes,
         error_type=error_type,
     )
@@ -515,13 +312,15 @@ def _validate_condition(
 def _validate_binding(
     binding: dict[str, Any],
     *,
-    surface_identifier: str,
-    target_kind: str,
     scopes: frozenset[str],
     error_type: type[ValueError],
 ) -> None:
     source = cast(str, binding["sourceIdentifier"])
     scope = cast(str, binding["scope"])
+    if source == contract.RAW_OPERATION_REQUEST_BINDING:
+        raise error_type(
+            "presentation: raw operation request values cannot be bound"
+        )
     if source == contract.REPETITION_ITEM_BINDING:
         if not scope or scope not in scopes:
             raise error_type(
@@ -531,16 +330,6 @@ def _validate_binding(
     if scope:
         raise error_type(
             "presentation: only repetition item bindings may name a scope"
-        )
-    allowed = set(contract.SURFACE_BINDING_SOURCES[surface_identifier])
-    if surface_identifier == contract.EVIDENCE_SURFACE:
-        if target_kind == "operation":
-            allowed.discard(contract.TRIGGER_PAYLOAD_VALUE_BINDING)
-        elif target_kind == "trigger":
-            allowed.discard(contract.OPERATION_EVIDENCE_BINDING)
-    if source not in allowed:
-        raise error_type(
-            "presentation: binding source is unavailable on this surface"
         )
 
 

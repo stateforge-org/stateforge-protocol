@@ -631,7 +631,8 @@ Global___PresentationSurface: _TypeAlias = PresentationSurface  # noqa: Y015
 class ComponentNode(_message.Message):
     """ComponentNode selects a renderer by identifier and supplies only declarative
     data. Properties are interpreted by the Control Plane renderer registry, not
-    by SFP. Custom components require renderer metadata and a core-only fallback.
+    by SFP. Component and surface applicability are decided by the Control Plane.
+    Fallback trees are optional and are interpreted by the Control Plane.
     """
 
     DESCRIPTOR: _descriptor.Descriptor
