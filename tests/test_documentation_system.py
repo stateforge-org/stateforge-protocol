@@ -97,7 +97,8 @@ def test_provider_presentation_guide_maps_components_to_surfaces() -> None:
         "The catalog's 30 component identifiers are "
         "maintained by the Control Plane" in page
     )
-    assert "No second SFP presentation RPC" in page
+    assert "SFP introduces" in page
+    assert "no separate presentation RPC" in page
     assert "SF-AOP" in page
 
 

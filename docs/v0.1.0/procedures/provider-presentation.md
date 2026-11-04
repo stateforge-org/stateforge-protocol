@@ -261,11 +261,10 @@ The Provider returns `ProviderPresentation` through the existing
 `ManifestService.GetManifest` response. The Agent validates and caches the
 manifest and presentation independently.
 
-A future SF-AOP contract will transport the accepted snapshots to the Control
-Plane. No second SFP presentation RPC is introduced. Once received, the
-Control Plane resolves component identifiers through its renderer registry,
-binds the current runtime data, applies its active skin, and renders the
-surface.
+SF-AOP transports the accepted snapshots to the Control Plane; SFP introduces
+no separate presentation RPC. The Control Plane resolves component
+identifiers through its renderer registry, binds the current runtime data,
+applies its active skin, and renders the surface.
 
 For the exact service envelope, revision construction, limits, and public
 Python validators, return to
