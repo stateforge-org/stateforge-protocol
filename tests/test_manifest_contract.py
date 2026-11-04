@@ -29,6 +29,8 @@ from stateforge_protocol.sfp.trigger_publication.v1 import (
 )
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "manifest"
+PROVIDER_OVERVIEW_SURFACE = "stateforge.ui/surface.provider.overview@1"
+OPERATION_RESULT_SURFACE = "stateforge.ui/surface.operation.result@1"
 _SCHEMA = json.loads(
     files("stateforge_protocol.sfp.manifest.v1")
     .joinpath("manifest.schema.json")
@@ -396,7 +398,7 @@ def test_presentation_changes_do_not_change_business_fingerprints() -> None:
         manifest_pb2.GetManifestResponse(),
     )
     manifest_response.presentation.provider.surfaces[
-        contract.PROVIDER_OVERVIEW_SURFACE
+        PROVIDER_OVERVIEW_SURFACE
     ].root.properties.update({"gap": "changed"})
 
     assert (
@@ -430,9 +432,7 @@ def test_presentation_protojson_rejects_executable_or_semantic_fields(
     )["presentation"]
     if target == "component":
         operation = next(iter(document["operations"].values()))
-        selected = operation["surfaces"][contract.OPERATION_RESULT_SURFACE][
-            "root"
-        ]
+        selected = operation["surfaces"][OPERATION_RESULT_SURFACE]["root"]
     elif target == "renderer":
         selected = next(iter(document["rendererRequirements"].values()))
     else:

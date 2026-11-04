@@ -87,22 +87,16 @@ def test_provider_presentation_guide_maps_components_to_surfaces() -> None:
         "`PresentationAsset`",
     ):
         assert contract_type in page
-    for surface in (
-        "surface.provider.overview@1",
-        "surface.operation.request@1",
-        "surface.operation.run@1",
-        "surface.operation.result@1",
-        "surface.trigger.policy@1",
-        "surface.trigger.event@1",
-        "surface.evidence@1",
-    ):
-        assert surface in page
     assert "schema-derived interface" in page.lower()
     assert "active Control Plane skin" in page
-    assert "operation.request.public_value@1" in page
-    assert "has no presentation binding identifier" in page
-    assert "input.secret" in page
-    assert "Portable core structure" in page
+    assert "operation request binding identifier is forbidden by SFP" in page
+    assert "Control Plane owns the catalog and renderer registry" in page
+    assert "surface identifiers and their applicability" in page
+    assert "SFP accepts any well-formed surface identifier" in page
+    assert (
+        "The catalog's 30 component identifiers are "
+        "maintained by the Control Plane" in page
+    )
     assert "No second SFP presentation RPC" in page
     assert "SF-AOP" in page
 

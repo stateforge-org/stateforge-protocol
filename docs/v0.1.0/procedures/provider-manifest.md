@@ -293,8 +293,8 @@ absent or rejected. A valid presentation is revised independently and bound
 to the accepted `manifest_revision`.
 
 The [Provider presentation guide](provider-presentation.md) explains surfaces,
-the generic component tree, core renderers, custom renderer metadata and
-fallback, data bindings, and embedded assets. The wire fields, validation
+the generic component tree, the Control Plane-owned renderer catalog, renderer
+metadata and fallback, data bindings, and embedded assets. The wire fields, validation
 pipeline, and limits remain defined on this page.
 
 ## Declaration model
