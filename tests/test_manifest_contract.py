@@ -76,7 +76,6 @@ def test_versioned_contract_exposes_normative_limits() -> None:
         "MAX_TRIGGERS": 1_024,
         "MAX_RUNTIME_REQUIREMENTS": 1_024,
         "MAX_PLATFORMS": 256,
-        "MAX_PROFILE_CLAIMS_PER_OPERATION": 64,
         "PRESENTATION_SCHEMA_VERSION": 1,
         "MAX_PRESENTATION_SURFACES_PER_TARGET": 8,
         "MAX_PRESENTATION_COMPONENTS": 4_096,
@@ -108,10 +107,6 @@ def test_versioned_contract_limits_match_packaged_schema() -> None:
         == contract.MAX_RUNTIME_REQUIREMENTS
     )
     assert manifest["platforms"]["maxItems"] == contract.MAX_PLATFORMS
-    assert (
-        definitions["operation"]["properties"]["implements"]["maxItems"]
-        == contract.MAX_PROFILE_CLAIMS_PER_OPERATION
-    )
     schema_versions = request["supportedManifestSchemaVersions"]
     assert (
         schema_versions["maxItems"] == contract.MAX_SUPPORTED_SCHEMA_VERSIONS
@@ -592,7 +587,7 @@ def test_secret_schema_fields_cannot_embed_values(
         validator.validate(response)
 
 
-def test_custom_operations_do_not_imply_compliance(response, validator):
+def test_custom_operations_preserve_declared_schemas(response, validator):
     operations = response["manifest"]["operations"]
     declaration = operations.pop("stateforge.git/reference.resolve@1")
     operations["example.vendor/resource.inspect@3"] = declaration
@@ -601,9 +596,7 @@ def test_custom_operations_do_not_imply_compliance(response, validator):
     message = json_format.ParseDict(
         response, manifest_pb2.GetManifestResponse()
     )
-    assert not message.manifest.operations[
-        "example.vendor/resource.inspect@3"
-    ].implements
+    assert "example.vendor/resource.inspect@3" in message.manifest.operations
 
 
 @pytest.mark.parametrize(
@@ -624,12 +617,9 @@ def test_invalid_operation_identifiers(response, validator, identifier):
         validator.validate(response)
 
 
-def test_compliance_claims_and_trigger_schemas_survive_wire(
-    response, validator
-):
+def test_operation_and_trigger_schemas_survive_wire(response, validator):
     manifest = response["manifest"]
     operation = next(iter(manifest["operations"].values()))
-    operation["implements"] = ["example.vendor.profile.v1.read_only"]
     manifest["triggers"]["stateforge.git/reference.changed@1"] = {
         "payloadSchema": copy.deepcopy(operation["resultSchema"])
     }
@@ -640,11 +630,8 @@ def test_compliance_claims_and_trigger_schemas_survive_wire(
     decoded = manifest_pb2.GetManifestResponse.FromString(
         message.SerializeToString()
     )
-    assert list(
-        decoded.manifest.operations[
-            "stateforge.git/reference.resolve@1"
-        ].implements
-    ) == ["example.vendor.profile.v1.read_only"]
+    assert decoded.manifest.operations == message.manifest.operations
+    assert decoded.manifest.triggers == message.manifest.triggers
     assert "stateforge.git/reference.changed@1" in decoded.manifest.triggers
 
 
@@ -659,7 +646,7 @@ def test_unchanged_revision_is_independent_of_map_order_and_generation(
 
 @pytest.mark.parametrize(
     "change",
-    ["identity", "version", "configuration", "operation", "profile", "result"],
+    ["identity", "version", "configuration", "operation", "input", "result"],
 )
 def test_interoperability_changes_change_revision(response, change):
     original = hashlib.sha256(_preimage(response)).digest()
@@ -679,9 +666,9 @@ def test_interoperability_changes_change_revision(response, change):
             "properties"
         ] = {"count": {"type": "integer"}}
     else:
-        next(iter(manifest["operations"].values()))["implements"] = [
-            "example.vendor.profile.v1.read_only"
-        ]
+        next(iter(manifest["operations"].values()))["inputSchema"][
+            "properties"
+        ] = {"count": {"type": "integer"}}
     assert hashlib.sha256(_preimage(response)).digest() != original
 
 
@@ -702,13 +689,10 @@ def test_operation_declaration_contains_only_generic_fields():
     assert {field.name: field.number for field in descriptor.fields} == {
         "input_schema": 1,
         "result_schema": 2,
-        "implements": 3,
     }
 
 
-@pytest.mark.parametrize(
-    "field", ["inputSchema", "resultSchema", "implements"]
-)
+@pytest.mark.parametrize("field", ["inputSchema", "resultSchema"])
 def test_all_declaration_fields_are_explicitly_required(response, field):
     operation = next(iter(response["manifest"]["operations"].values()))
     del operation[field]
@@ -717,25 +701,19 @@ def test_all_declaration_fields_are_explicitly_required(response, field):
 
 
 @pytest.mark.parametrize(
-    ("identifier", "roles"),
+    "identifier",
     [
-        ("stateforge.git/reference.resolve@1", []),
-        ("example.vendor/resource.inspect@3", []),
-        ("example.vendor/collect@1", ["example.vendor.profile.v1.read_only"]),
-        (
-            "example.vendor/resource.update@1",
-            ["example.vendor.profile.v1.mutating"],
-        ),
-        ("example.vendor/custom@2", ["example.vendor.manifest_pb2.custom"]),
+        "stateforge.git/reference.resolve@1",
+        "example.vendor/resource.inspect@3",
+        "example.vendor/collect@1",
+        "example.vendor/resource.update@1",
+        "example.vendor/custom@2",
     ],
 )
 def test_all_operation_categories_share_generic_declaration(
-    response, identifier, roles
+    response, identifier
 ):
-    # These are structural claim examples. SFP transports but does not assign
-    # semantics to extensible profile identifiers.
     operation = next(iter(response["manifest"]["operations"].values()))
-    operation["implements"] = roles
     response["manifest"]["operations"] = {identifier: operation}
     Draft202012Validator(_SCHEMA).validate(response)
     message = json_format.ParseDict(
@@ -745,8 +723,16 @@ def test_all_operation_categories_share_generic_declaration(
         message, always_print_fields_with_no_presence=True
     )["manifest"]["operations"][identifier]
     assert projected == operation
-    assert set(projected) == {"inputSchema", "resultSchema", "implements"}
-    assert projected["implements"] == roles
+    assert set(projected) == {"inputSchema", "resultSchema"}
+
+
+def test_removed_profile_claim_is_rejected(response, validator):
+    operation = next(iter(response["manifest"]["operations"].values()))
+    operation["implements"] = ["example.vendor.profile.v1.read_only"]
+    with pytest.raises(ValidationError, match="Additional properties"):
+        validator.validate(response)
+    with pytest.raises(json_format.ParseError, match="implements"):
+        json_format.ParseDict(response, manifest_pb2.GetManifestResponse())
 
 
 def test_incidental_result_shape_creates_no_manifest_semantics(response):
@@ -764,8 +750,7 @@ def test_incidental_result_shape_creates_no_manifest_semantics(response):
         message, always_print_fields_with_no_presence=True
     )
     assert projected == response
-    assert not operation["implements"]
-    assert set(operation) == {"inputSchema", "resultSchema", "implements"}
+    assert set(operation) == {"inputSchema", "resultSchema"}
 
 
 @pytest.mark.parametrize("field", ["inputSchema", "resultSchema"])

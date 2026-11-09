@@ -3,13 +3,11 @@
 isort:skip_file
 """
 
-from collections import abc as _abc
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import message as _message
 from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
-from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 import builtins as _builtins
 import sys
@@ -186,8 +184,8 @@ Global___OperationSessionBinding: _TypeAlias = OperationSessionBinding  # noqa: 
 @_typing.final
 class OperationInvocation(_message.Message):
     """OperationInvocation is the immutable semantic request identified by
-    operation_id. Its complete ProtoJSON projection, with defaults emitted and
-    required_implementation_roles sorted, is the canonical fingerprint preimage.
+    operation_id. Its complete ProtoJSON projection, with defaults emitted,
+    is the canonical fingerprint preimage.
     """
 
     DESCRIPTOR: _descriptor.Descriptor
@@ -219,7 +217,7 @@ class OperationInvocation(_message.Message):
 
     @_builtins.property
     def contract(self) -> Global___OperationContractContext:
-        """Pins the declaration/schema/profile expectations authorized by the Agent."""
+        """Pins the accepted declaration and its schemas."""
 
     @_builtins.property
     def execution_context(self) -> _struct_pb2.Struct:
@@ -247,35 +245,21 @@ Global___OperationInvocation: _TypeAlias = OperationInvocation  # noqa: Y015
 
 @_typing.final
 class OperationContractContext(_message.Message):
-    """OperationContractContext pins the exact accepted declaration and optional
-    compliance roles needed by this invocation without changing P1 schema 1.
-    """
+    """OperationContractContext pins the exact accepted declaration."""
 
     DESCRIPTOR: _descriptor.Descriptor
 
     MANIFEST_REVISION_FIELD_NUMBER: _builtins.int
-    REQUIRED_IMPLEMENTATION_ROLES_FIELD_NUMBER: _builtins.int
     manifest_revision: _builtins.str
     """Exact accepted GetManifestResponse.manifest_revision."""
-    @_builtins.property
-    def required_implementation_roles(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """Distinct profile claims this invocation relies on: a subset of the selected
-        operation's P1 implements list, not a list of Control Plane contracts or
-        permissions. The Agent validates recognized profiles before relying on
-        them; the Provider checks that each requested claim is declared. Empty
-        means no profile claim is required for this invocation. Ordering is
-        semantically irrelevant and is sorted in the fingerprint projection.
-        """
-
     def __init__(
         self,
         *,
         manifest_revision: _builtins.str = ...,
-        required_implementation_roles: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["manifest_revision", b"manifest_revision", "required_implementation_roles", b"required_implementation_roles"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["manifest_revision", b"manifest_revision"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

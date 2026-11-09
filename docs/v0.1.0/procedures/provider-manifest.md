@@ -193,8 +193,7 @@ revisioned declaration snapshot.
               "type": "object",
               "properties": {},
               "additionalProperties": false
-            },
-            "implements": []
+            }
           }
         },
         "runtimeRequirements": {
@@ -228,7 +227,7 @@ revisioned declaration snapshot.
         },
         "triggers": {}
       },
-      "manifestRevision": "sha256:6bfdf3aedc2d4e45d77d4787cc0e744a488208b2510d81788291f51d24a623e8 (3)",
+      "manifestRevision": "sha256:aa27f0fddaa13df211bd3e4e4e4230cdda42d9188d4b480d196c2e0de2d20cdb (3)",
       "sessionId": "manifest-session-A (4)"
     }
     ```
@@ -300,7 +299,7 @@ pipeline, and limits remain defined on this page.
 ## Declaration model
 
 The public Provider framework constructs these declarations from Python
-metadata, typed models, decorators, and explicit compliance claims. Provider
+metadata, typed models, and decorators. Provider
 authors do not construct protobuf messages or calculate revisions themselves.
 
 | Declaration | Schema-1 meaning |
@@ -308,7 +307,7 @@ authors do not construct protobuf messages or calculate revisions themselves.
 | `provider_identity` | Author-declared dotted lowercase identity such as `stateforge.git`. |
 | `implementation_version` | SemVer 2.0.0 of the running Provider implementation. |
 | `display_name` | Nonempty human-readable name. |
-| `operations` | Map from extensible operation identifier to Draft 2020-12 input schema, result schema, and explicit `implements` roles. |
+| `operations` | Map from extensible operation identifier to Draft 2020-12 input and result schemas. |
 | `runtime_requirements` | Map of dotted requirement identifiers to descriptions and version constraints. These are declarations, not installed-state observations or commands to execute. |
 | `platforms` | Nonempty list of explicit operating-system/architecture pairs, such as `linux` / `x86_64`. No wildcard or implied Cartesian product. |
 | `configuration_schema` | JSON Schema Draft 2020-12 object schema describing configuration shape. |
@@ -367,42 +366,19 @@ not by `stateforge-protocol`.
     that the requirement is satisfied. Capability Assessment and Operation
     Admission own that later runtime decision.
 
-### Profiles express interoperability
+### Profiles and Contracts
 
-A **profile** is a separately named and versioned contract for a reusable
-operation role. It can define common semantics, schemas, and behavior outside
-the generic SFP operation model. This lets consumers recognize operations that
-implement the same role even when their Provider-specific operation identifiers
-are different.
+Providers describe concrete operations through input and result schemas, and
+triggers through event-payload schemas. They do not declare Profile compliance.
 
-A **profile claim** is the Provider's explicit assertion that one operation
-conforms to that profile:
+The Control Plane owns Profile definitions, schema-based matching, field
+mappings, and Contract fulfillment. Matching names with compatible types and
+constraints can supply automatic mappings. Differently named fields remain
+mapping candidates; partial matches are not complete fulfillment. Structural
+compatibility does not prove behavioral compliance.
 
-```text
-stateforge.git/reference.resolve@1
-    └── implements → example.vendor.profile.v1.read_only
-```
-
-| Concept | What it identifies |
-| --- | --- |
-| Operation identifier | The concrete operation exposed by this Provider. |
-| Profile identifier | The reusable external contract. |
-| Entry in `implements` | The operation's explicit claim that it conforms to that profile. |
-
-| SFP does | SFP does not |
-| --- | --- |
-| Validate each claim's identifier shape. | Assign application-specific meaning to a claim. |
-| Transport declared claims unchanged. | Infer a claim from an operation's name or schemas. |
-| Treat `implements: []` as no claims. | Treat an empty list as implicit support. |
-
-Another specification may define a profile's schemas and semantics. Manifest
-Exchange only carries the explicit claim.
-
-!!! note "Declaration, not runtime evidence"
-
-    A profile claim describes what the operation implements. It does not prove
-    that the operation can run in the current environment; Capability
-    Assessment decides that later.
+The planned SF-AOP connection will carry accepted declarations through the Agent
+to the Control Plane. This is not an implemented SFP matching service.
 
 ### Every operation has the same shape
 
@@ -414,19 +390,17 @@ Exchange only carries the explicit claim.
   result_schema:
     $schema: https://json-schema.org/draft/2020-12/schema
     type: object
-  implements: []
 ```
 
 | Field | Meaning |
 | --- | --- |
 | `input_schema` | The operation's accepted input shape. |
 | `result_schema` | The operation's terminal result shape. This is its only manifest-level result declaration. |
-| `implements` | The operation's explicit profile claims; an empty list claims none. |
 
 !!! important "Do not infer another contract"
 
-    Construction and validation must not invent result modes or profile claims
-    from operation names, roles, or schema payloads. Names inside embedded
+    Construction and validation must not invent result modes
+    from operation names or schema payloads. Names inside embedded
     schemas remain ordinary schema data; they do not create manifest fields or
     claims.
 
@@ -511,7 +485,7 @@ declarations, or maintain Agent caches.
 | Provider instance identity | Canonical lowercase UUIDv4. |
 | Endpoint generation | Positive decimal value within protobuf's `uint64` range. |
 | Implementation version | SemVer 2.0.0. |
-| Operation, trigger, requirement, and profile identifiers | Their respective canonical identifier syntax. |
+| Operation, trigger, and requirement identifiers | Their respective canonical identifier syntax. |
 | Manifest schema version | A known supported version. |
 | Manifest revision | `sha256:` followed by 64 lowercase hexadecimal characters. |
 | Presentation schema version | Version `1` when a presentation snapshot is included. |
@@ -532,7 +506,6 @@ Implementations enforce these limits before accepting a snapshot:
 | Schema nodes processed per embedded document | 25,000 |
 | Each operations, triggers, or requirements map | 1,024 entries |
 | Platform pairs | 256 unique pairs |
-| Profile claims per operation | 64 unique claims |
 | Embedded JSON nesting | 64 containers |
 | Presentation assets | 64 assets; 256 KiB each; 1 MiB total |
 | Presentation dimensions | 8192 × 8192 pixels |
@@ -592,15 +565,14 @@ revision = validation.compute_manifest_revision(
 [RFC 8785 JSON Canonicalization Scheme](https://www.rfc-editor.org/rfc/rfc8785.html),
 encode it as UTF-8, and set the revision to `sha256:` followed by the lowercase
 SHA-256 digest. Include all schema-1 declaration fields, including display
-metadata, explicit empty maps/lists/strings, embedded schemas, and compliance
-claims. Exclude `manifest_revision`, `endpoint_generation`, and `session_id`.
+metadata, explicit empty maps/lists/strings, and embedded schemas. Exclude `manifest_revision`, `endpoint_generation`, and `session_id`.
 Thus a new handshake or a restart with unchanged declarations and stable
 installation identity can retain its revision, while a new installation or
 changed declarations gets a new one. Session binding changes only the exchange
 envelope: the checked-in canonical preimage bytes and golden digest stay the
 same.
 
-Changing an input or result schema changes the revision even if the role is
+Changing an input or result schema changes the revision even if the operation identifier is
 unchanged. Object/map key insertion order does not affect the revision. Array
 order is preserved and contributes to the revision, including JSON Schema arrays. A
 Provider should generate stable ordering for set-like declaration lists to
@@ -612,7 +584,7 @@ Do not hash protobuf bytes, even with deterministic serialization enabled:
 [protobuf serialization is not canonical](https://protobuf.dev/programming-guides/serialization-not-canonical/).
 The checked-in `tests/fixtures/manifest/response.json` and
 `revision-preimage.json` form a cross-language conformance vector. Its revision
-is `sha256:6bfdf3aedc2d4e45d77d4787cc0e744a488208b2510d81788291f51d24a623e8`.
+is `sha256:aa27f0fddaa13df211bd3e4e4e4230cdda42d9188d4b480d196c2e0de2d20cdb`.
 
 ## Agent acceptance and caching
 
@@ -626,10 +598,9 @@ is `sha256:6bfdf3aedc2d4e45d77d4787cc0e744a488208b2510d81788291f51d24a623e8`.
    cache entry. On a match, reuse that exact cached declaration; do not merge
    fields from the new response or skip current session/generation checks.
 4. For a new key, call the versioned semantic validator before acceptance. It
-   validates the complete schema, embedded references, identity, claim shapes,
+   validates the complete schema, embedded references, identity, identifier shapes,
    limits, and canonical digest. Store only accepted snapshots. A revision is
-   a change detector, not authentication. Profile-specific conformance still
-   requires the validators and behavior tests defined by that profile.
+   a change detector, not authentication.
 5. Validate `presentation` independently. Cache it by Provider identity,
    accepted manifest revision, presentation schema version, and presentation
    revision. If it is absent, unsupported, or invalid, discard it and retain

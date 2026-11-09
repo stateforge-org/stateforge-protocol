@@ -83,7 +83,7 @@ flowchart LR
 | Endpoint observation | Canonical bounded descriptor plus a correlated Unix socket | Opening a provisional channel to one Provider generation | A negotiated session or permission to use later procedures |
 | Bootstrap session | Matching Provider identity and generation, mutually supported wire version, Provider runtime ID, fresh session ID | Binding the channel to one negotiated SFP session | Authorization to invoke an operation |
 | Accepted declaration | Valid manifest envelope, schemas, deterministic revision, and current Health | Selecting declared operations and triggers from the current Provider surface | That a declaration is truthful or that an operation is safe now |
-| Runtime admission | Current session, declaration, availability, schema, profile, prerequisite, capacity, deadline, and policy checks | Creating or resolving one immutable operation record | That an earlier capability finding remains current |
+| Runtime admission | Current session, declaration, availability, schema, prerequisite, capacity, deadline, and policy checks | Creating or resolving one immutable operation record | That an earlier capability finding remains current |
 
 ## The local trust anchor
 
@@ -152,10 +152,9 @@ approval.
 
 | Signal | What it means | What it does not mean |
 | --- | --- | --- |
-| Manifest declaration | The Provider declares an operation, trigger, schema, requirement, or profile claim | The Agent authorizes its use or the implementation satisfies the claim |
+| Manifest declaration | The Provider declares an operation, trigger, schema, or runtime requirement | The Agent authorizes its use |
 | Health `SERVING` | The Provider reports process-wide readiness and the Agent may include it in eligibility | A target is authorized or a particular operation will succeed |
 | Capability finding | Point-in-time evidence about runtime support and requirements | Authorization, capacity reservation, or a durable promise |
-| Profile claim or required role | A versioned semantic claim is declared and selected | A permission or independent proof of compliance |
 | Admission success | The Provider atomically accepted or resolved one immutable invocation under current fences | Authorization for a different invocation or identity |
 
 The Agent passes only approved, non-secret metadata in `execution_context`.

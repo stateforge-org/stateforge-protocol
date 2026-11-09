@@ -61,6 +61,17 @@ _EXPECTED_SOCKET_MODE = 0o660
 
 def _verify_wire_contracts() -> int:
     """Verify installed Bootstrap, Health, and endpoint limit contracts."""
+    declarations = (
+        manifest_pb2.OperationDeclaration,
+        operation_admission_pb2.OperationContractContext,
+    )
+    if tuple(
+        {field.name: field.number for field in message.DESCRIPTOR.fields}
+        for message in declarations
+    ) != ({"input_schema": 1, "result_schema": 2}, {"manifest_revision": 1}):
+        raise ValueError(
+            "Installed operation declaration contracts are invalid"
+        )
     bootstrap_service = bootstrap_pb2.DESCRIPTOR.services_by_name[
         "BootstrapService"
     ]

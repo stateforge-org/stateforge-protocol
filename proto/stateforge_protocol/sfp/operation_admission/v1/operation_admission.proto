@@ -81,8 +81,8 @@ message OperationSessionBinding {
 }
 
 // OperationInvocation is the immutable semantic request identified by
-// operation_id. Its complete ProtoJSON projection, with defaults emitted and
-// required_implementation_roles sorted, is the canonical fingerprint preimage.
+// operation_id. Its complete ProtoJSON projection, with defaults emitted,
+// is the canonical fingerprint preimage.
 message OperationInvocation {
   // Agent-assigned canonical lowercase UUIDv4 allocated before first contact.
   // A genuinely new authorized attempt receives a new operation ID.
@@ -96,25 +96,17 @@ message OperationInvocation {
   // the immutable request, not the gRPC call deadline. A deadline that has
   // elapsed rejects a new admission but does not erase a retained record.
   google.protobuf.Timestamp execution_deadline = 5;
-  // Pins the declaration/schema/profile expectations authorized by the Agent.
+  // Pins the accepted declaration and its schemas.
   OperationContractContext contract = 6;
   // Required bounded, non-secret execution metadata. Authorization and policy
   // decisions remain outside SFP; this object carries only approved context.
   google.protobuf.Struct execution_context = 7;
 }
 
-// OperationContractContext pins the exact accepted declaration and optional
-// compliance roles needed by this invocation without changing P1 schema 1.
+// OperationContractContext pins the exact accepted declaration.
 message OperationContractContext {
   // Exact accepted GetManifestResponse.manifest_revision.
   string manifest_revision = 1;
-  // Distinct profile claims this invocation relies on: a subset of the selected
-  // operation's P1 implements list, not a list of Control Plane contracts or
-  // permissions. The Agent validates recognized profiles before relying on
-  // them; the Provider checks that each requested claim is declared. Empty
-  // means no profile claim is required for this invocation. Ordering is
-  // semantically irrelevant and is sorted in the fingerprint projection.
-  repeated string required_implementation_roles = 2;
 }
 
 // StartOperationResponse reports only the admission-layer record. The later

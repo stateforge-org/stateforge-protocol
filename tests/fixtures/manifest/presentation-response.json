@@ -45,8 +45,7 @@
             "commit"
           ],
           "additionalProperties": false
-        },
-        "implements": []
+        }
       }
     },
     "runtimeRequirements": {
@@ -99,7 +98,7 @@
       }
     }
   },
-  "manifestRevision": "sha256:c836c97c8f170ea22b7c9002aa6075d84746dab7bbe3c822f628fd1176fd3c56",
+  "manifestRevision": "sha256:6637635060a434145e916c9eef9e3218ec6f07c4c580083b796fdaa99e8977e4",
   "sessionId": "manifest-session-A",
   "presentation": {
     "presentationSchemaVersion": 1,
@@ -236,5 +235,5 @@
       }
     }
   },
-  "presentationRevision": "sha256:df215c63eb41659f8d38649cf84bd9f9e7696aa9d08b88219f219361d1bc8d2d"
+  "presentationRevision": "sha256:d009132a924764a4d7d68947c2d76f654faa6e2111640fc21d49281593644e3e"
 }

@@ -404,7 +404,7 @@ class OperationSuccess(_message.Message):
     def result(self) -> _struct_pb2.Struct:
         """Required object, including an explicitly present empty object when allowed.
         Validate against the original admitted operation's pinned Provider
-        Manifest result_schema and relied-on profiles before committing SUCCEEDED.
+        Manifest result_schema before committing SUCCEEDED.
         Never apply defaults.
         """
 

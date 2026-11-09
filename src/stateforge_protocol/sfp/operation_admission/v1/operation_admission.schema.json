@@ -23,12 +23,6 @@
       "maxLength": 255,
       "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+/[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*@[1-9][0-9]*(?![\\s\\S])"
     },
-    "dottedIdentifier": {
-      "type": "string",
-      "minLength": 3,
-      "maxLength": 255,
-      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+(?![\\s\\S])"
-    },
     "revision": {
       "type": "string",
       "minLength": 71,
@@ -128,16 +122,9 @@
     "operationContractContext": {
       "type": "object",
       "properties": {
-        "manifestRevision": {"$ref": "#/$defs/revision"},
-        "requiredImplementationRoles": {
-          "type": "array",
-          "items": {"$ref": "#/$defs/dottedIdentifier"},
-          "minItems": 0,
-          "maxItems": 16,
-          "uniqueItems": true
-        }
+        "manifestRevision": {"$ref": "#/$defs/revision"}
       },
-      "required": ["manifestRevision", "requiredImplementationRoles"],
+      "required": ["manifestRevision"],
       "additionalProperties": false
     },
     "operationInvocation": {

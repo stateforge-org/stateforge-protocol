@@ -55,7 +55,6 @@ def _canonical_invocation(request_data: dict) -> bytes:
         request.invocation,
         always_print_fields_with_no_presence=True,
     )
-    projection["contract"]["requiredImplementationRoles"].sort()
     return rfc8785.dumps(projection)
 
 
@@ -91,7 +90,6 @@ def test_versioned_contract_exposes_normative_limits() -> None:
         "MAX_PAYLOAD_JSON_DEPTH": 64,
         "MAX_EXECUTION_CONTEXT_JSON_DEPTH": 64,
         "MAX_JSON_CONTAINER_ENTRIES": 256,
-        "MAX_REQUIRED_IMPLEMENTATION_ROLES": 16,
     }
 
     assert {name: getattr(contract, name) for name in expected} == expected
@@ -107,12 +105,6 @@ def test_versioned_contract_limits_match_packaged_schema() -> None:
     assert (
         definitions["boundedObject"]["maxProperties"]
         == contract.MAX_JSON_CONTAINER_ENTRIES
-    )
-    assert (
-        definitions["operationContractContext"]["properties"][
-            "requiredImplementationRoles"
-        ]["maxItems"]
-        == contract.MAX_REQUIRED_IMPLEMENTATION_ROLES
     )
 
 
@@ -289,9 +281,6 @@ def test_resource_selection_is_operation_specific_payload(
         "example.utility/heartbeat.ping@1"
     )
     without_resource["invocation"]["payload"] = {}
-    without_resource["invocation"]["contract"][
-        "requiredImplementationRoles"
-    ] = []
     _REQUEST_VALIDATOR.validate(without_resource)
     json_format.ParseDict(
         without_resource,
@@ -351,13 +340,11 @@ def test_golden_fingerprint_vector(request_data) -> None:
     assert _fingerprint(request_data) == vector["fingerprint"]
 
 
-def test_required_role_order_is_not_semantic(request_data) -> None:
-    reordered = copy.deepcopy(request_data)
-    reordered["invocation"]["contract"][
-        "requiredImplementationRoles"
-    ].reverse()
-
-    assert _fingerprint(reordered) == _fingerprint(request_data)
+def test_contract_context_contains_only_manifest_revision() -> None:
+    descriptor = operation_admission_pb2.OperationContractContext.DESCRIPTOR
+    assert {field.name: field.number for field in descriptor.fields} == {
+        "manifest_revision": 1,
+    }
 
 
 @pytest.mark.parametrize(
@@ -751,12 +738,13 @@ def test_generation_outside_uint64_cannot_enter_wire_message() -> None:
         )
 
 
-def test_duplicate_required_roles_are_structurally_invalid(
-    request_data,
-) -> None:
-    duplicate = copy.deepcopy(request_data)
-    roles = duplicate["invocation"]["contract"]["requiredImplementationRoles"]
-    roles.append(roles[0])
-
-    with pytest.raises(ValidationError):
-        _REQUEST_VALIDATOR.validate(duplicate)
+def test_removed_required_roles_are_rejected(request_data) -> None:
+    request_data["invocation"]["contract"]["requiredImplementationRoles"] = []
+    with pytest.raises(ValidationError, match="Additional properties"):
+        _REQUEST_VALIDATOR.validate(request_data)
+    with pytest.raises(
+        json_format.ParseError, match="requiredImplementationRoles"
+    ):
+        json_format.ParseDict(
+            request_data, operation_admission_pb2.StartOperationRequest()
+        )

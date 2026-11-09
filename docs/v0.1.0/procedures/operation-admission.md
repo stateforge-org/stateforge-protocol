@@ -41,7 +41,7 @@ scenario: first-admission
 
         Agent->>Service: StartOperation(request)
         Service->>Service: Validate structure and live fences
-        Service->>Service: Validate declaration, roles, and payload
+        Service->>Service: Validate declaration and payload
         Service->>Service: Fingerprint immutable invocation
         Service->>Registry: Look up operation_id
 
@@ -189,11 +189,7 @@ invocation from fields needed to validate the current call.
         },
         "executionDeadline": "2026-09-20T12:00:00Z",
         "contract": {
-          "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (4)",
-          "requiredImplementationRoles": [
-            "stateforge.operation.v1.safe",
-            "stateforge.operation.v1.audited"
-          ]
+          "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (4)"
         },
         "executionContext": {
           "authority": "policy-run-123",
@@ -236,7 +232,6 @@ fingerprint.
 | `payload` | Required JSON object validated against the selected operation's manifest `input_schema` before admission. An operation that acts on a resource identifies it here, using its own schema; an operation with no resource needs no placeholder. Provider-level `configuration_schema` does not validate operation input. JSON Schema defaults are annotations and are not silently inserted. |
 | `execution_deadline` | Absolute Agent-selected deadline for the business attempt. It is distinct from the gRPC call deadline and is immutable. |
 | `contract.manifest_revision` | Exact accepted manifest revision. It pins the operation declaration and its input/result schemas. |
-| `contract.required_implementation_roles` | Zero or more distinct profile claims from the selected operation's manifest `implements` list that this invocation relies on. This may be a subset of all declared claims. Empty means this invocation requires no profile claim. These are not permissions. |
 | `execution_context` | Required bounded JSON object containing already-approved, non-secret execution metadata. SFP transports context; it does not make the policy or authorization decision. |
 
 ### Comparison and safety rules
@@ -244,7 +239,6 @@ fingerprint.
 | Concern | Rule |
 | --- | --- |
 | JSON values | Object-member order is irrelevant. Adding, removing, or changing a value changes the invocation. Schema defaults are not inserted automatically. |
-| Required roles | Roles form an unordered, duplicate-free set. Every requested role must appear in the operation declaration; membership is not authorization or proof of compliance. |
 | Secrets | Values declared `writeOnly` must not appear in responses, errors, diagnostics, fixtures, or logs. |
 
 The request fingerprint correlates retries. It is not authentication and must
@@ -258,8 +252,7 @@ invocation**. It is not a hash of the complete RPC request.
 ```mermaid
 flowchart LR
     A[OperationInvocation] --> B[ProtoJSON projection]
-    B --> C[Sort required roles only]
-    C --> D[RFC 8785 canonical JSON]
+    B --> D[RFC 8785 canonical JSON]
     D --> E[SHA-256]
     E --> F[sha256: lowercase hex]
 ```
@@ -269,18 +262,16 @@ flowchart LR
 | Operation ID and operation identifier | Current Provider, generation, and session binding |
 | Complete payload and execution context | Admission mode |
 | Execution deadline | gRPC call deadline |
-| Manifest revision and required roles | Transport metadata |
+| Manifest revision | Transport metadata |
 
 The Provider computes the fingerprint before looking up `operation_id`:
 
 1. Parse and structurally validate `StartOperationRequest`.
 2. Project only `OperationInvocation` to ProtoJSON using lowerCamelCase field
    names and emitting all non-presence defaults.
-3. Sort `contract.requiredImplementationRoles` lexicographically by Unicode
-   code point. Do not sort any other array.
-4. Canonicalize the projected JSON with RFC 8785 (JCS).
-5. Compute SHA-256 over the canonical UTF-8 bytes.
-6. Encode the fingerprint as `sha256:` plus 64 lowercase hexadecimal digits.
+3. Canonicalize the projected JSON with RFC 8785 (JCS).
+4. Compute SHA-256 over the canonical UTF-8 bytes.
+5. Encode the fingerprint as `sha256:` plus 64 lowercase hexadecimal digits.
 
 A reconnect or switch to resolve-only therefore preserves the fingerprint.
 Changing any immutable operation field while retaining the same operation ID
@@ -314,7 +305,7 @@ silently redispatch work:
 ```mermaid
 flowchart TD
     A[Bound and decode request] --> B[Validate structure and active session]
-    B --> C[Validate manifest, operation, roles, and payload]
+    B --> C[Validate manifest, operation, and payload]
     C --> D[Compute invocation fingerprint]
     D --> E{Retained state for operation ID?}
     E -->|Matching record| F[RESOLVED_EXISTING]
@@ -333,7 +324,7 @@ flowchart TD
    `admission_mode`.
 3. Validate the active handshake session, Provider identity, and generation.
 4. Match `contract.manifest_revision` to the Agent-accepted active manifest.
-   Confirm the operation is declared, every required role is present, and the
+   Confirm the operation is declared and the
    complete payload satisfies the selected operation's accepted input schema.
 5. Compute the canonical invocation fingerprint.
 6. Look up `operation_id` before testing a new-admission deadline or capacity:
@@ -356,7 +347,7 @@ has since passed. The lifecycle contract determines what the operation did,
 not a new admission attempt.
 
 Capability assessment is point-in-time evidence, not authorization. Admission
-revalidates the current session, manifest, declaration, roles, schemas,
+revalidates the current session, manifest, declaration, schemas,
 readiness, and any current prerequisites instead of trusting an earlier
 Capability Assessment result.
 
@@ -383,7 +374,7 @@ invalid.
       "disposition": "ADMISSION_DISPOSITION_ACCEPTED_NEW (1)",
       "record": {
         "operationId": "22222222-2222-4222-8222-222222222222",
-        "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df (2)",
+        "requestFingerprint": "sha256:6f555da004a09c3aba919883a19ede8de6cd424d59e1696954fb10aec2f416df (2)",
         "admittedAt": "2026-09-19T12:00:00Z",
         "recordExpiresAt": "2026-09-20T12:00:00Z",
         "admittedEndpointGeneration": "42"
@@ -406,7 +397,7 @@ invalid.
       "disposition": "ADMISSION_DISPOSITION_RESOLVED_EXISTING (2)",
       "record": {
         "operationId": "22222222-2222-4222-8222-222222222222",
-        "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+        "requestFingerprint": "sha256:6f555da004a09c3aba919883a19ede8de6cd424d59e1696954fb10aec2f416df",
         "admittedAt": "2026-09-19T12:00:00Z",
         "recordExpiresAt": "2026-09-20T12:00:00Z",
         "admittedEndpointGeneration": "42 (3)"
@@ -447,7 +438,7 @@ delay, and sanitized explanation.
 | --- | --- | --- | --- |
 | Malformed fields, invalid identifiers, invalid bounds, or schema-invalid payload | `INVALID_ARGUMENT` | `INVALID_OPERATION_REQUEST` | Correct the request. Reusing the same ID is permitted only because the Provider explicitly rejected before admission. |
 | Operation absent from the accepted manifest | `UNIMPLEMENTED` | `OPERATION_NOT_DECLARED` | Refresh declarations or choose declared work; do not reinterpret the identifier. |
-| Selected operation schema or required profile role is incompatible | `FAILED_PRECONDITION` | `OPERATION_INCOMPATIBLE` | Obtain a compatible declaration or profile and use a new operation ID if semantic content changes. |
+| Selected operation schema is incompatible | `FAILED_PRECONDITION` | `OPERATION_INCOMPATIBLE` | Obtain a compatible declaration and use a new operation ID if semantic content changes. |
 | Session, generation, manifest, health, or current prerequisite is stale | `FAILED_PRECONDITION` | `OPERATION_PRECONDITION_FAILED` | Re-establish prerequisites. Reuse the ID only with identical invocation content. |
 | Admission capacity temporarily exhausted | `RESOURCE_EXHAUSTED` | `PROVIDER_CAPACITY_EXHAUSTED` | Retry the identical request with bounded backoff; honor `retry_after` when present. |
 | Whole Provider service temporarily unavailable | `UNAVAILABLE` | `PROVIDER_UNAVAILABLE` | Reconnect and revalidate before a bounded retry. |
@@ -522,7 +513,6 @@ generation zero, and `UNSPECIFIED` enums are invalid.
 | Entries per JSON object or array | 256 |
 | JSON property name | 128 Unicode code points |
 | JSON string value | 65,536 Unicode code points |
-| Required implementation roles | 16 unique entries |
 | Versioned identifier or role identifier | 255 Unicode code points |
 | Session ID | 255 Unicode code points |
 | Sanitized error explanation | 1,024 Unicode code points |

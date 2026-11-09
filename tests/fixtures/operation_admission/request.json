@@ -17,11 +17,7 @@
     },
     "executionDeadline": "2026-09-20T12:00:00Z",
     "contract": {
-      "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "requiredImplementationRoles": [
-        "stateforge.operation.v1.safe",
-        "stateforge.operation.v1.audited"
-      ]
+      "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "executionContext": {
       "authority": "policy-run-123",

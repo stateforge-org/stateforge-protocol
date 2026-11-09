@@ -78,15 +78,12 @@ governing each version surface.
 | Term | Meaning |
 |---|---|
 | **Provider manifest** | Complete revisioned declaration of a Provider's identity, operations, triggers, schemas, requirements, and compatibility. It contains no configured secret values. |
-| **Operation declaration** | Manifest entry defining one operation identifier, input and result schemas, requirements, and profile claims. |
+| **Operation declaration** | Manifest entry defining one concrete operation's input and result schemas. |
 | **Trigger declaration** | Manifest entry defining one trigger identifier and its payload schema. |
 | **Operation or trigger identifier** | Case-sensitive extensible identifier in `namespace/name@major` form. It names a declared type, not one occurrence. |
 | **Runtime requirement** | Named prerequisite declared for an operation and evaluated against the target runtime during Capability Assessment. |
 | **Platform compatibility** | Manifest-declared operating-system or architecture compatibility. It is static declaration data, not current runtime evidence. |
 | **Configuration schema** | JSON Schema describing Provider configuration shape. Fields marked `writeOnly` may carry secrets and must not be echoed. |
-| **Profile** | External versioned semantic or compliance contract that may be implemented by an operation. SFP carries the identifier but does not define the external semantics. |
-| **Profile claim** (`implements`) | Operation declaration's claim that it implements a named profile. An empty list claims none. |
-| **Required implementation role** | Invocation-selected subset of the operation's declared profile claims. Membership validation is not authorization or proof of compliance. |
 | **Health** | Standard gRPC Health status for overall Provider process readiness, watched with an empty service name. |
 | **Availability** | Agent-derived state describing whether the current Provider session can accept new work after transport, session, manifest, and Health checks. |
 | **Eligibility** | Whether the Agent may use a Provider for a particular procedure after that procedure's prerequisites are satisfied. |
@@ -100,7 +97,7 @@ governing each version surface.
 |---|---|
 | **Operation identifier** (`operation_identifier`) | Manifest key naming the declared operation type. |
 | **Operation ID** (`operation_id`) | Agent-assigned UUIDv4 for one immutable business attempt. Reusing it with different content is an idempotency conflict. |
-| **Operation invocation** | Immutable request content for one operation ID: operation identifier, payload, deadline, pinned contract context, execution context, and required roles. |
+| **Operation invocation** | Immutable request content for one operation ID: operation identifier, payload, deadline, pinned contract context, and execution context. |
 | **Payload** | JSON input validated against the operation declaration's input schema. |
 | **Execution context** | Agent-approved non-secret metadata that may affect runtime assessment or execution. |
 | **Admission** | Provider decision that either creates exactly one operation record or resolves an already retained record for the same operation ID. |

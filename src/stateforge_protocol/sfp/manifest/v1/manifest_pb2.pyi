@@ -292,47 +292,31 @@ Global___ProviderManifest: _TypeAlias = ProviderManifest  # noqa: Y015
 
 @_typing.final
 class OperationDeclaration(_message.Message):
-    """OperationDeclaration describes an available handler and explicit compliance
-    claims. Declaring a role is not proof of compliance; consumers validate claims
-    against the referenced profile. No StartOperation or execution behavior is
-    introduced by this message.
+    """OperationDeclaration describes a concrete handler's input and result schemas.
+    No StartOperation or execution behavior is introduced by this message.
     """
 
     DESCRIPTOR: _descriptor.Descriptor
 
     INPUT_SCHEMA_FIELD_NUMBER: _builtins.int
     RESULT_SCHEMA_FIELD_NUMBER: _builtins.int
-    IMPLEMENTS_FIELD_NUMBER: _builtins.int
     @_builtins.property
     def input_schema(self) -> _struct_pb2.Struct:
         """Required Draft 2020-12 object schemas for typed input and terminal result."""
 
     @_builtins.property
     def result_schema(self) -> _struct_pb2.Struct:
-        """The sole declaration of terminal result shape for this versioned operation.
-        Recognized compliance roles require the exact schemas of their profile.
-        """
-
-    @_builtins.property
-    def implements(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """Zero or more distinct claims that this operation implements versioned
-        semantic/compliance profiles, e.g.
-        example.vendor.profile.v1.read_only. SFP transports these extensible
-        claims without assigning application-specific meaning to them. Empty
-        means no profile claim. Never infer a role from the operation identifier
-        or a Python method name.
-        """
+        """The sole declaration of terminal result shape for this versioned operation."""
 
     def __init__(
         self,
         *,
         input_schema: _struct_pb2.Struct | None = ...,
         result_schema: _struct_pb2.Struct | None = ...,
-        implements: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["input_schema", b"input_schema", "result_schema", b"result_schema"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["implements", b"implements", "input_schema", b"input_schema", "result_schema", b"result_schema"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["input_schema", b"input_schema", "result_schema", b"result_schema"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

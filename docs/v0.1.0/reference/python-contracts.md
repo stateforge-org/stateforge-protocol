@@ -173,7 +173,7 @@ Common categories include:
 | --- | --- |
 | RPC size | `MAX_REQUEST_BYTES`, `MAX_RESPONSE_BYTES` |
 | Canonical content | JSON depth, node count, string length, and preimage size |
-| Collections | Operations, triggers, findings, roles, observers, or in-flight publications |
+| Collections | Operations, triggers, findings, observers, or in-flight publications |
 | Stable identities | `SERVICE_NAME`, descriptor suffix, transport name, reason-code vocabulary |
 | Flow control | Pending snapshots, observers, retry bounds, and stalled-delivery deadlines |
 
