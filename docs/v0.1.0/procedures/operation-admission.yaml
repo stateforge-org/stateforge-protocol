@@ -79,7 +79,7 @@ scenarios:
 
       - id: validate-request
         title: Validate the current contract
-        detail: The Admission Service validates message shape, the active session, the accepted manifest revision, the operation declaration, roles, payload schema, and current prerequisites.
+        detail: The Admission Service validates message shape, the active session, the accepted manifest revision, the operation declaration, payload schema, and current prerequisites.
         phase: Validation
         active: [admission]
         fields: [active session, manifest revision, input schema, prerequisites]
@@ -96,7 +96,7 @@ scenarios:
 
       - id: compute-fingerprint
         title: Fingerprint the immutable invocation
-        detail: The Admission Service projects only OperationInvocation, sorts required implementation roles, canonicalizes it with RFC 8785, and hashes the bytes with SHA-256.
+        detail: The Admission Service projects only OperationInvocation, canonicalizes it with RFC 8785, and hashes the bytes with SHA-256.
         phase: Canonical identity
         active: [admission]
         fields: [OperationInvocation, RFC 8785, SHA-256]

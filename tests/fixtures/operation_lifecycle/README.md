@@ -22,7 +22,7 @@ cancellation/transport enforcement.
   earlier cancellation was undone. The fixture tests do not invoke author code.
 - `result-schema.json` is an illustrative pinned Draft 2020-12 result schema for
   Operation Admission's generic maintenance operation. It is not a standardized
-  compliance profile or a replacement for the real admitted manifest. Negative
+  Profile definition or a replacement for the real admitted manifest. Negative
   author values and invalid wire/cross-field values are parametrized in the
   tests.
 - `error-cases.json` distinguishes RPC rejection from a terminal operation

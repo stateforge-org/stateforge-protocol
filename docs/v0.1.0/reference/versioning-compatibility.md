@@ -59,7 +59,6 @@ The complete set of versioned surfaces is:
 | Agent software version | `agent_runtime.software_version` | The running Agent software release | Supplied by the Agent; required but never used to select the SFP wire version |
 | Provider implementation | `1.0.0` | The running Provider software release | Declared by the Provider; never used as the SFP wire version |
 | Operation or trigger identifier | `stateforge.git/reference.resolve@1` | One versioned domain action or event | Declared in the accepted manifest and matched exactly |
-| Profile claim | `example.profile.v1.read_only` | A versioned semantic or compliance claim | Interpreted by the specification that defines that profile |
 
 ## How wire negotiation works
 
@@ -113,7 +112,6 @@ independent:
 | Endpoint descriptor | The Agent parses only a descriptor schema it recognizes. An unknown schema is not interpreted as schema `1`. |
 | Provider manifest | After Bootstrap, the Agent offers supported manifest schema versions and the Provider returns the highest common version. No common schema produces `UNIMPLEMENTED`. |
 | Operation and trigger declarations | Identifiers are exact, extensible strings. `@1` is part of the declared domain identifier; it is not SFP `1.0`. |
-| Profile claims | The profile's defining specification owns its version meaning. SFP validates and transports the claim without inventing that meaning. |
 
 This separation allows a package to add a new domain identifier or schema
 version without pretending that every such addition is a new transport
@@ -152,7 +150,7 @@ same versioned contract.
 | Change | Version boundary to review |
 | --- | --- |
 | Fix implementation behavior without changing the public contract | Python distribution or Provider implementation release |
-| Add a new operation, trigger, or profile identifier under existing extensibility rules | The identifier or profile version; not automatically the SFP wire version |
+| Add a new operation or trigger identifier under existing extensibility rules | The identifier version; not automatically the SFP wire version |
 | Change the endpoint descriptor document incompatibly | Endpoint descriptor schema |
 | Change the Provider declaration shape incompatibly | Manifest schema |
 | Change a procedure's RPC shape or semantics incompatibly | Versioned procedure package and SFP wire compatibility |

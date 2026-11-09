@@ -37,7 +37,7 @@ OPERATION_RESULT_SURFACE = "stateforge.ui/surface.operation.result@1"
 TRIGGER_EVENT_SURFACE = "stateforge.ui/surface.trigger.event@1"
 PROVIDER_RUNTIME_BINDING = "stateforge.binding/provider.runtime@1"
 _GOLDEN_REVISION = (
-    "sha256:6bfdf3aedc2d4e45d77d4787cc0e744a488208b2510d81788291f51d24a623e8"
+    "sha256:aa27f0fddaa13df211bd3e4e4e4230cdda42d9188d4b480d196c2e0de2d20cdb"
 )
 
 

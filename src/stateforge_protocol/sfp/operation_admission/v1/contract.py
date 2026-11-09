@@ -22,7 +22,6 @@ MAX_EXECUTION_CONTEXT_JSON_DEPTH: Final = 64
 MAX_JSON_CONTAINER_ENTRIES: Final = 256
 
 # Contract-context limits mirrored by the packaged validation schema.
-MAX_REQUIRED_IMPLEMENTATION_ROLES: Final = 16
 
 
 @dataclass(frozen=True, slots=True)

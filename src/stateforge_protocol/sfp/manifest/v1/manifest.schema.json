@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:stateforge:sfp:manifest:1",
   "title": "SFP manifest schema 1 ProtoJSON validation",
-  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure; session binding, negotiation, revision integrity, JSON reference resolution and semantic compliance require consumer checks described in the procedure specification.",
+  "description": "Validate ProtoJSON using lowerCamelCase field names and all non-presence defaults emitted. This schema validates structure; session binding, negotiation, revision integrity, JSON reference resolution and runtime admission require consumer checks described in the procedure specification.",
   "$ref": "#/$defs/getManifestResponse",
   "$defs": {
     "instanceId": {
@@ -214,21 +214,11 @@
         },
         "resultSchema": {
           "$ref": "#/$defs/schemaDocument"
-        },
-        "implements": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/dottedIdentifier"
-          },
-          "minItems": 0,
-          "maxItems": 64,
-          "uniqueItems": true
         }
       },
       "required": [
         "inputSchema",
-        "resultSchema",
-        "implements"
+        "resultSchema"
       ],
       "additionalProperties": false
     },

@@ -182,7 +182,7 @@ carries the last validated sequence.
         "expectedSessionId": "session-admission-42"
       },
       "operationId": "22222222-2222-4222-8222-222222222222 (2)",
-      "expectedRequestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df (3)",
+      "expectedRequestFingerprint": "sha256:6f555da004a09c3aba919883a19ede8de6cd424d59e1696954fb10aec2f416df (3)",
       "afterSequence": "0 (4)"
     }
     ```
@@ -202,7 +202,7 @@ carries the last validated sequence.
         "expectedSessionId": "session-admission-42"
       },
       "operationId": "22222222-2222-4222-8222-222222222222",
-      "expectedRequestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df"
+      "expectedRequestFingerprint": "sha256:6f555da004a09c3aba919883a19ede8de6cd424d59e1696954fb10aec2f416df"
     }
     ```
 
@@ -293,7 +293,7 @@ current state and any terminal outcome.
       "snapshot": {
         "admissionRecord": {
           "operationId": "22222222-2222-4222-8222-222222222222",
-          "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+          "requestFingerprint": "sha256:6f555da004a09c3aba919883a19ede8de6cd424d59e1696954fb10aec2f416df",
           "admittedAt": "2026-09-19T12:00:00Z",
           "recordExpiresAt": "2026-09-20T12:00:00Z",
           "admittedEndpointGeneration": "42"
@@ -390,7 +390,7 @@ All four dispositions are successful gRPC responses.
       "snapshot": {
         "admissionRecord": {
           "operationId": "22222222-2222-4222-8222-222222222222",
-          "requestFingerprint": "sha256:9d52f77a7f678fda81dcee97df7b3bc5e4877ee570285f6aa5741b83d4c731df",
+          "requestFingerprint": "sha256:6f555da004a09c3aba919883a19ede8de6cd424d59e1696954fb10aec2f416df",
           "admittedAt": "2026-09-19T12:00:00Z",
           "recordExpiresAt": "2026-09-20T12:00:00Z",
           "admittedEndpointGeneration": "42"

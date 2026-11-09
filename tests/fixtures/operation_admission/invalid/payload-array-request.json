@@ -7,11 +7,14 @@
   "invocation": {
     "operationId": "22222222-2222-4222-8222-222222222222",
     "operationIdentifier": "example.database/maintenance.compact@1",
-    "payload": ["not", "an", "object"],
+    "payload": [
+      "not",
+      "an",
+      "object"
+    ],
     "executionDeadline": "2026-09-20T12:00:00Z",
     "contract": {
-      "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "requiredImplementationRoles": []
+      "manifestRevision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "executionContext": {}
   },

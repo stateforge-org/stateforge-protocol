@@ -59,9 +59,9 @@ This repository contains authoritative Protocol Buffer sources and generated
 language contracts. It contains no Agent client behavior, Provider server
 runtime, third-party integration, BackupEngine, or Control Plane logic.
 
-Operations are namespaced string identifiers rather than a closed enum. Backup
-and disaster recovery are predefined compliance profiles constructed on the
-generic operation model. Contracts must leave room for custom operations.
+Operations are namespaced string identifiers rather than a closed enum.
+Profiles and Contracts are managed by the Control Plane using concrete
+operation and trigger schemas. SFP carries no Provider-owned Profile claims.
 
 Edit `.proto` sources first. Never hand-edit generated `_pb2.py`, `_pb2.pyi`,
 `_pb2_grpc.py`, or `_pb2_grpc.pyi` files. Regenerate them with the checked-in

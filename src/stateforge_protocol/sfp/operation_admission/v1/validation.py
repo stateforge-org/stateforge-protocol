@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Final, cast
+from typing import Final
 
 from stateforge_protocol.sfp import _validation
 from stateforge_protocol.sfp.operation_admission.v1 import (
@@ -243,9 +243,6 @@ def canonical_invocation(
         "operationInvocation",
         "invocation",
     )
-    contract_context = cast(dict[str, object], projected["contract"])
-    roles = cast(list[str], contract_context["requiredImplementationRoles"])
-    roles.sort()
     return _VALIDATION.canonicalize_json(
         projected,
         maximum_bytes=None,

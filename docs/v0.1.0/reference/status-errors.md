@@ -121,7 +121,7 @@ identity.
     | --- | --- | --- |
     | `ADMISSION_ERROR_REASON_INVALID_OPERATION_REQUEST` | `INVALID_ARGUMENT` | The immutable request is malformed or schema-invalid. |
     | `ADMISSION_ERROR_REASON_OPERATION_NOT_DECLARED` | `UNIMPLEMENTED` | The accepted manifest does not declare the operation. |
-    | `ADMISSION_ERROR_REASON_OPERATION_INCOMPATIBLE` | `FAILED_PRECONDITION` | The requested schema or profile context is incompatible. |
+    | `ADMISSION_ERROR_REASON_OPERATION_INCOMPATIBLE` | `FAILED_PRECONDITION` | The requested schema context is incompatible. |
     | `ADMISSION_ERROR_REASON_OPERATION_PRECONDITION_FAILED` | `FAILED_PRECONDITION` | A live session, manifest, health, or requirement fence is stale. |
     | `ADMISSION_ERROR_REASON_PROVIDER_CAPACITY_EXHAUSTED` | `RESOURCE_EXHAUSTED` | Admission capacity is temporarily exhausted. |
     | `ADMISSION_ERROR_REASON_PROVIDER_UNAVAILABLE` | `UNAVAILABLE` | The Provider is temporarily unavailable. |

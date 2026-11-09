@@ -247,7 +247,7 @@ payload.
       "providerInstanceId": "550e8400-e29b-41d4-a716-446655440000",
       "endpointGeneration": "4",
       "sessionId": "session-3d19b6d2-4b7b-4f4a-9c9a-2f3f4f0c9a1b (2)",
-      "manifestRevision": "sha256:dd58cd0518f631e370a095e6ba0c97476b028c8c65fac1f4b8da28d130c94cb7",
+      "manifestRevision": "sha256:4ad60e2cc41a8e180190739cf07acdd511d8236aedf585820897fdbd61d404c9",
       "assessmentId": "6ba7b810-9dad-41d1-80b4-00c04fd430c8 (3)",
       "assessmentTimestamp": "2026-09-16T07:30:00Z",
       "findings": [
