@@ -84,7 +84,6 @@ governing each version surface.
 | **Runtime requirement** | Named prerequisite declared for an operation and evaluated against the target runtime during Capability Assessment. |
 | **Platform compatibility** | Manifest-declared operating-system or architecture compatibility. It is static declaration data, not current runtime evidence. |
 | **Configuration schema** | JSON Schema describing Provider configuration shape. Fields marked `writeOnly` may carry secrets and must not be echoed. |
-| **Profile** | Control Plane-managed capability definition matched to concrete schemas and field mappings. SFP carries no Provider-owned Profile claims. |
 | **Health** | Standard gRPC Health status for overall Provider process readiness, watched with an empty service name. |
 | **Availability** | Agent-derived state describing whether the current Provider session can accept new work after transport, session, manifest, and Health checks. |
 | **Eligibility** | Whether the Agent may use a Provider for a particular procedure after that procedure's prerequisites are satisfied. |
