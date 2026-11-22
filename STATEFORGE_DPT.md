@@ -1,6 +1,6 @@
 <!-- STATEFORGE_DPT_MANIFEST
 {
-  "fingerprint": "5a327b961bbcb021e4ceb0bfc519c1f9ec246cdbc75bd4a23c02ad030aa529da",
+  "fingerprint": "d523dcbc32d39bc7600b7c86e1f8f813e5430899b3cfb83c1746026fc47369a4",
   "format": "stateforge-dpt-plan",
   "format_version": 1,
   "plan": {
@@ -9,7 +9,7 @@
       "name": "StateForge",
       "plan_source_branch": "mvp/implementation",
       "release": "MVP",
-      "revision": 43,
+      "revision": 44,
       "slug": "stateforge"
     },
     "repositories": [
@@ -42,6 +42,12 @@
         "github_default_branch": null,
         "github_full_name": "stateforge-org/stateforge-provider-python",
         "responsibility": "Provider runtime and author-facing integration surface."
+      },
+      {
+        "alias": "provider-runtime",
+        "github_default_branch": "main",
+        "github_full_name": "stateforge-org/stateforge-provider-runtime",
+        "responsibility": "A Rust runtime that implements the Provider side of SFP, enabling language-specific Provider SDKs to expose Operations and Triggers through a shared protocol implementation."
       },
       {
         "alias": "provider-views",
@@ -9064,6 +9070,1839 @@
             "verification_id": "c10-quality-docs"
           }
         ]
+      },
+      {
+        "branch_name": "mvp/provider-runtime-endpoint-discovery",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "prt1-protocol-endpoint-discovery",
+            "explanation": "Read the normative SFP endpoint discovery procedure and its Provider/Agent responsibility split; focus on “Descriptor v1 contract”.",
+            "path": "docs/v0.1.0/procedures/endpoint-discovery.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Descriptor v1 contract",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt1-agent-discovery",
+            "explanation": "Use the current Agent endpoint discovery implementation as the interoperable peer contract.",
+            "path": "src/stateforge_agent/_sfp/_runtime/discovery.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt1-agent-test-endpoint-lifecycle",
+            "explanation": "Preserve current Agent endpoint discovery behavior; use these tests as interoperability expectations.",
+            "path": "tests/test_endpoint_lifecycle.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt1-provider-descriptor",
+            "explanation": "Use the current Provider Python endpoint discovery implementation to identify behavior moving into the shared Rust runtime.",
+            "path": "src/stateforge_provider/_runtime/descriptor.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          }
+        ],
+        "depends_on": [
+          "A0",
+          "P0",
+          "R0"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider-runtime",
+        "required_result": "## Description\n\nThis first runtime procedure gives the Agent a Provider endpoint it can discover and connect to. It establishes the filesystem and socket lifecycle that Bootstrap will use next.\n\n## Outcome\n\nA Rust-managed Provider endpoint is published only when its matching local socket is ready, with stable Provider identity and a new endpoint generation for each runtime start.\n\n## Ownership and boundaries\n\nThe Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.\n\n## Required behavior\n\nCreate the Provider instance identity and increasing endpoint generation, create and permission the generation-specific local socket, then atomically publish its matching descriptor only after the socket is ready. Retire only runtime-owned artifacts safely. Fail closed on malformed, partial, stale, or mismatched descriptor/socket state. The Agent remains the discovery observer and provisional channel initiator; trust is established by Bootstrap, not discovery.\n\nThe implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.\n\nUse the canonical Protocol descriptor v1 filename, schema, bounds, and permissions rather than creating a second format. Create a generation-specific Unix-domain socket, ensure its mode is restrictive, and atomically publish the descriptor only after the socket is bound and accepting connections. On restart, advance the endpoint generation so stale descriptors and channels cannot be mistaken for the live instance. During shutdown, remove only artifacts owned by this runtime instance; do not delete another Provider's socket or descriptor.\n\n## Compatibility requirements\n\nKeep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.\n\n## Acceptance criteria\n\n- Rust unit and conformance tests cover descriptor/socket identity and generation correlation; atomic publication ordering; permissions; restart generation changes; safe cleanup; malformed/stale endpoint rejection.\n\nCover missing, malformed, partially written, stale, mismatched, and permission-denied descriptor/socket cases; restart generation changes; publication-before-listener prevention; and safe cleanup when startup fails partway through.\n\n## Out of scope\n\nDo not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust.",
+        "sort_order": 62,
+        "step_id": "PRT1",
+        "title": "[TASK][MVP] Implement Provider Endpoint Discovery",
+        "verification_requirements": [
+          {
+            "explanation": "Exercise descriptor/socket identity and generation correlation; atomic publication ordering; permissions; restart generation changes; safe cleanup; malformed/stale endpoint rejection against the canonical SFP contract, including invalid and boundary cases.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 0,
+            "target": "Rust endpoint discovery unit/conformance suite",
+            "verification_id": "prt1-conformance"
+          },
+          {
+            "explanation": "Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 1,
+            "target": "SFP compatibility vectors for endpoint discovery",
+            "verification_id": "prt1-protocol-compat"
+          },
+          {
+            "explanation": "Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.",
+            "kind": "command",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 2,
+            "target": "cargo fmt \u002d\u002dcheck && cargo test \u002d\u002dworkspace && cargo clippy \u002d\u002dworkspace \u002d\u002dall-targets \u002d\u002d -D warnings",
+            "verification_id": "prt1-rust-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-python-rust-endpoint-discovery",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "pyr1-protocol-endpoint-discovery",
+            "explanation": "Read the normative SFP endpoint discovery procedure and its Provider/Agent responsibility split; focus on “Descriptor v1 contract”.",
+            "path": "docs/v0.1.0/procedures/endpoint-discovery.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Descriptor v1 contract",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr1-provider-provider",
+            "explanation": "Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime.",
+            "path": "src/stateforge_provider/provider.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr1-provider\u002d\u002dinit-",
+            "explanation": "Preserve existing public exports and import paths.",
+            "path": "src/stateforge_provider/__init__.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr1-provider-descriptor",
+            "explanation": "Replace or adapt the current Python-owned endpoint discovery implementation behind the stable author-facing API.",
+            "path": "src/stateforge_provider/_runtime/descriptor.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "expected_to_change",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr1-agent-test-endpoint-lifecycle",
+            "explanation": "Use the current Agent endpoint discovery integration tests as the end-to-end compatibility contract.",
+            "path": "tests/test_endpoint_lifecycle.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 4
+          }
+        ],
+        "depends_on": [
+          "A0",
+          "A13",
+          "PRT1",
+          "R0"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider",
+        "required_result": "## Description\n\nThis slice connects the existing Provider Python startup experience to Rust endpoint discovery. It is the first migration point where the current Agent can exercise Provider Python backed by the new runtime.\n\n## Outcome\n\nExisting Provider Python startup and shutdown APIs launch and retire the Rust-owned endpoint without changing the descriptor or Agent-facing contract.\n\n## Ownership and boundaries\n\nProvider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.\n\n## Required behavior\n\nExpose the Rust runtime's endpoint lifecycle through the current Provider Python construction and startup API. Preserve existing public imports, configuration, startup/shutdown behavior, descriptor format, and errors. Python must not create a parallel descriptor publisher, socket manager, generation counter, or discovery protocol implementation.\n\nProvider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.\n\nKeep the current Provider constructor, configuration, imports, startup/shutdown calls, and error reporting source-compatible. Map the existing configuration into the Rust runtime, expose its startup result and failures clearly, and ensure shutdown retires the correct runtime-owned endpoint. Package and load the runtime as a required implementation dependency; do not silently fall back to the existing Python descriptor/socket implementation.\n\n## Compatibility requirements\n\nPreserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.\n\n## Acceptance criteria\n\n- Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested.\n- Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns descriptor/socket identity and generation correlation; atomic publication ordering; permissions; restart generation changes; safe cleanup; malformed/stale endpoint rejection.\n- Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify descriptor/socket identity and generation correlation; atomic publication ordering; permissions; restart generation changes; safe cleanup; malformed/stale endpoint rejection across the real SFP boundary.\n\nBuild and install the artifacts, start and stop Provider Python, and verify through the current Agent that descriptor identity, endpoint generation, socket permissions, restart behavior, and cleanup match the existing contract. Exercise runtime load/start failures and prove they do not activate a Python protocol fallback.\n\n## Out of scope\n\nDo not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the endpoint discovery slice.",
+        "sort_order": 63,
+        "step_id": "PYR1",
+        "title": "[TASK][MVP] Expose Rust-Managed Endpoint Discovery Through the Python SDK",
+        "verification_requirements": [
+          {
+            "explanation": "Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns endpoint discovery.",
+            "kind": "test",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 0,
+            "target": "Provider Python public API compatibility tests",
+            "verification_id": "pyr1-api-compat"
+          },
+          {
+            "explanation": "Run the current Agent against built Provider Python backed by the built Rust Runtime; assert descriptor/socket identity and generation correlation; atomic publication ordering; permissions; restart generation changes; safe cleanup; malformed/stale endpoint rejection end to end.",
+            "kind": "integration",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 1,
+            "target": "Installed-process Agent-to-Provider scenario",
+            "verification_id": "pyr1-agent-e2e"
+          },
+          {
+            "explanation": "Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.",
+            "kind": "command",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 2,
+            "target": "Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks",
+            "verification_id": "pyr1-package-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-runtime-bootstrap-session",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "prt2-protocol-bootstrap",
+            "explanation": "Read the normative SFP Bootstrap session negotiation procedure and its Provider/Agent responsibility split.",
+            "path": "docs/v0.1.0/bootstrap.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt2-agent-client",
+            "explanation": "Use the current Agent Bootstrap session negotiation implementation as the interoperable peer contract.",
+            "path": "src/stateforge_agent/_sfp/_services/bootstrap/client.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt2-agent-test-sfp-session",
+            "explanation": "Preserve current Agent Bootstrap session negotiation behavior; use these tests as interoperability expectations.",
+            "path": "tests/test_sfp_session.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt2-provider-service",
+            "explanation": "Use the current Provider Python Bootstrap session negotiation implementation to identify behavior moving into the shared Rust runtime.",
+            "path": "src/stateforge_provider/_services/bootstrap/service.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          }
+        ],
+        "depends_on": [
+          "A0",
+          "P0",
+          "PRT1"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider-runtime",
+        "required_result": "## Description\n\nAfter endpoint discovery, the Provider must establish a trusted SFP session before serving procedure calls. This milestone implements the Provider side of the existing Bootstrap contract.\n\n## Outcome\n\nThe Rust runtime establishes a session only after validating the discovered Provider identity and endpoint generation and negotiating a mutually supported SFP version.\n\n## Ownership and boundaries\n\nThe Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.\n\n## Required behavior\n\nImplement Provider-side Bootstrap using canonical Protocol messages. Verify discovered Provider identity and endpoint generation, negotiate the highest mutually supported SFP version, establish session identity/state, and fence requests outside the active session. Reject incompatible versions and stale or mismatched endpoints deterministically.\n\nThe implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.\n\nConsume the canonical Bootstrap messages and rules from Protocol. Compare the identity and generation received over the provisional channel with the endpoint the runtime published. Select the highest mutually supported version according to the contract; reject an empty version intersection and mismatched or stale generations deterministically. Bind subsequent requests to the resulting active session and reject requests arriving on a superseded or invalid channel.\n\n## Compatibility requirements\n\nKeep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.\n\n## Acceptance criteria\n\n- Rust unit and conformance tests cover identity/generation match and mismatch; highest-common-version selection; no-common-version errors; session establishment; stale-session fencing.\n\nTest matching and mismatching identities/generations, version lists with one and several common versions, no common version, malformed handshake messages, repeated connection attempts, and requests associated with a stale session. Verify errors are stable and no later service becomes usable before a successful handshake.\n\n## Out of scope\n\nDo not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust.",
+        "sort_order": 64,
+        "step_id": "PRT2",
+        "title": "[TASK][MVP] Implement Bootstrap Handshake and Version Negotiation",
+        "verification_requirements": [
+          {
+            "explanation": "Exercise identity/generation match and mismatch; highest-common-version selection; no-common-version errors; session establishment; stale-session fencing against the canonical SFP contract, including invalid and boundary cases.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 0,
+            "target": "Rust Bootstrap session negotiation unit/conformance suite",
+            "verification_id": "prt2-conformance"
+          },
+          {
+            "explanation": "Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 1,
+            "target": "SFP compatibility vectors for Bootstrap session negotiation",
+            "verification_id": "prt2-protocol-compat"
+          },
+          {
+            "explanation": "Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.",
+            "kind": "command",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 2,
+            "target": "cargo fmt \u002d\u002dcheck && cargo test \u002d\u002dworkspace && cargo clippy \u002d\u002dworkspace \u002d\u002dall-targets \u002d\u002d -D warnings",
+            "verification_id": "prt2-rust-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-python-rust-bootstrap-session",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "pyr2-protocol-bootstrap",
+            "explanation": "Read the normative SFP Bootstrap session negotiation procedure and its Provider/Agent responsibility split.",
+            "path": "docs/v0.1.0/bootstrap.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr2-provider-provider",
+            "explanation": "Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime.",
+            "path": "src/stateforge_provider/provider.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr2-provider\u002d\u002dinit-",
+            "explanation": "Preserve existing public exports and import paths.",
+            "path": "src/stateforge_provider/__init__.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr2-provider-service",
+            "explanation": "Replace or adapt the current Python-owned Bootstrap session negotiation implementation behind the stable author-facing API.",
+            "path": "src/stateforge_provider/_services/bootstrap/service.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "expected_to_change",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr2-agent-test-sfp-session",
+            "explanation": "Use the current Agent Bootstrap session negotiation integration tests as the end-to-end compatibility contract.",
+            "path": "tests/test_sfp_session.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 4
+          }
+        ],
+        "depends_on": [
+          "A0",
+          "A13",
+          "PRT2"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider",
+        "required_result": "## Description\n\nThis slice routes Provider Python startup/session management through the Rust Bootstrap implementation. It follows the Rust handshake milestone and provides the first negotiated session for later procedures.\n\n## Outcome\n\nThe existing Python startup API opens the Rust-managed SFP session and surfaces the negotiated result through the established ergonomic interface.\n\n## Ownership and boundaries\n\nProvider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.\n\n## Required behavior\n\nWire the existing Provider Python startup/session API to Rust-managed Bootstrap. Preserve public configuration and lifecycle calls while exposing ergonomic errors and negotiated session information. Python must not independently negotiate versions, validate session identity, or own session fencing.\n\nProvider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.\n\nPreserve Provider Python's public construction, configuration, lifecycle, and import paths. Delegate version negotiation, identity/generation checks, session creation, and fencing to Rust; Python may translate runtime errors into the SDK's established error style but must not make its own negotiation decision. Ensure a failed handshake aborts startup cleanly and does not report the Provider ready.\n\n## Compatibility requirements\n\nPreserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.\n\n## Acceptance criteria\n\n- Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested.\n- Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns identity/generation match and mismatch; highest-common-version selection; no-common-version errors; session establishment; stale-session fencing.\n- Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify identity/generation match and mismatch; highest-common-version selection; no-common-version errors; session establishment; stale-session fencing across the real SFP boundary.\n\nExercise successful negotiation and startup failure against the current Agent using installed Provider Python and the built Rust runtime. Verify common-version selection, no-common-version failure, identity/generation mismatch, stale-session rejection, and source compatibility for existing callers.\n\n## Out of scope\n\nDo not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the Bootstrap session negotiation slice.",
+        "sort_order": 65,
+        "step_id": "PYR2",
+        "title": "[TASK][MVP] Expose Rust-Managed Session Negotiation Through the Python SDK",
+        "verification_requirements": [
+          {
+            "explanation": "Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns Bootstrap session negotiation.",
+            "kind": "test",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 0,
+            "target": "Provider Python public API compatibility tests",
+            "verification_id": "pyr2-api-compat"
+          },
+          {
+            "explanation": "Run the current Agent against built Provider Python backed by the built Rust Runtime; assert identity/generation match and mismatch; highest-common-version selection; no-common-version errors; session establishment; stale-session fencing end to end.",
+            "kind": "integration",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 1,
+            "target": "Installed-process Agent-to-Provider scenario",
+            "verification_id": "pyr2-agent-e2e"
+          },
+          {
+            "explanation": "Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.",
+            "kind": "command",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 2,
+            "target": "Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks",
+            "verification_id": "pyr2-package-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-runtime-manifest-presentation",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "prt3-protocol-provider-manifest",
+            "explanation": "Read the normative SFP manifest and presentation exchange procedure and its Provider/Agent responsibility split; focus on “Who implements Manifest Exchange”.",
+            "path": "docs/v0.1.0/procedures/provider-manifest.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Manifest Exchange",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt3-agent-client",
+            "explanation": "Use the current Agent manifest and presentation exchange implementation as the interoperable peer contract.",
+            "path": "src/stateforge_agent/_sfp/_services/manifest/client.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt3-agent-test-manifest-exchange",
+            "explanation": "Preserve current Agent manifest and presentation exchange behavior; use these tests as interoperability expectations.",
+            "path": "tests/test_manifest_exchange.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt3-provider-declaration",
+            "explanation": "Use the current Provider Python manifest and presentation exchange implementation to identify behavior moving into the shared Rust runtime.",
+            "path": "src/stateforge_provider/_services/manifest/declaration.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          }
+        ],
+        "depends_on": [
+          "A1",
+          "P1",
+          "PYR2"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider-runtime",
+        "required_result": "## Description\n\nOnce a session exists, the Agent needs the Provider's operational manifest and optional presentation snapshot. This milestone moves the Provider-side exchange and its protocol lifecycle into Rust without making presentation operationally authoritative.\n\n## Outcome\n\nThe Rust runtime serves the declared manifest and optional presentation through the canonical SFP exchange, with validation and revision/session behavior matching Protocol.\n\n## Ownership and boundaries\n\nThe Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.\n\n## Required behavior\n\nServe the accepted Provider manifest and optional presentation snapshot through canonical SFP. Rust owns wire exchange, protocol validation, session/revision fencing, and safe refresh. Keep the operational manifest authoritative; presentation metadata cannot alter operation or trigger semantics. Provider-specific declarations may be supplied by the host SDK, while Rust owns their protocol representation and exchange.\n\nThe implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.\n\nUse the Protocol-owned manifest and presentation structures; do not define new wire fields or duplicate schemas. Keep presentation optional and separate from operation/trigger eligibility, request/result schemas, and execution behavior. Enforce the contract's structural validation, accepted revision/snapshot rules, session association, refresh behavior, and resource bounds. Host-language declarations may supply the Provider-specific manifest content, while Rust owns its SFP representation, validation, serving, and refresh.\n\n## Compatibility requirements\n\nKeep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.\n\n## Acceptance criteria\n\n- Rust unit and conformance tests cover valid manifest/presentation exchange; malformed schema/declaration rejection; revision consistency; refresh and session fencing.\n\nCover valid and absent presentation, malformed manifest/presentation, stale or inconsistent revision, refresh during a session, refresh across sessions, and proof that presentation-only changes do not alter operational declarations or admission semantics.\n\n## Out of scope\n\nDo not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust.",
+        "sort_order": 66,
+        "step_id": "PRT3",
+        "title": "[TASK][MVP] Implement Provider Manifest and Presentation Exchange",
+        "verification_requirements": [
+          {
+            "explanation": "Exercise valid manifest/presentation exchange; malformed schema/declaration rejection; revision consistency; refresh and session fencing against the canonical SFP contract, including invalid and boundary cases.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 0,
+            "target": "Rust manifest and presentation exchange unit/conformance suite",
+            "verification_id": "prt3-conformance"
+          },
+          {
+            "explanation": "Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 1,
+            "target": "SFP compatibility vectors for manifest and presentation exchange",
+            "verification_id": "prt3-protocol-compat"
+          },
+          {
+            "explanation": "Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.",
+            "kind": "command",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 2,
+            "target": "cargo fmt \u002d\u002dcheck && cargo test \u002d\u002dworkspace && cargo clippy \u002d\u002dworkspace \u002d\u002dall-targets \u002d\u002d -D warnings",
+            "verification_id": "prt3-rust-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-python-rust-manifest-presentation",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "pyr3-protocol-provider-manifest",
+            "explanation": "Read the normative SFP manifest and presentation exchange procedure and its Provider/Agent responsibility split; focus on “Who implements Manifest Exchange”.",
+            "path": "docs/v0.1.0/procedures/provider-manifest.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Manifest Exchange",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr3-provider-provider",
+            "explanation": "Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime.",
+            "path": "src/stateforge_provider/provider.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr3-provider\u002d\u002dinit-",
+            "explanation": "Preserve existing public exports and import paths.",
+            "path": "src/stateforge_provider/__init__.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr3-provider-declaration",
+            "explanation": "Replace or adapt the current Python-owned manifest and presentation exchange implementation behind the stable author-facing API.",
+            "path": "src/stateforge_provider/_services/manifest/declaration.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "expected_to_change",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr3-agent-test-manifest-exchange",
+            "explanation": "Use the current Agent manifest and presentation exchange integration tests as the end-to-end compatibility contract.",
+            "path": "tests/test_manifest_exchange.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 4
+          }
+        ],
+        "depends_on": [
+          "A1",
+          "A13",
+          "PRT3",
+          "R1"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider",
+        "required_result": "## Description\n\nThis slice connects Provider Python's existing declarations to Rust-managed manifest and presentation exchange. It retains the Python authoring surface while moving wire representation and exchange behavior to the shared runtime.\n\n## Outcome\n\nExisting Provider Python declarations are compiled or adapted into the canonical SFP manifest/presentation input consumed and served by Rust.\n\n## Ownership and boundaries\n\nProvider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.\n\n## Required behavior\n\nKeep Provider Python's current declaration models and authoring surface while passing the manifest/presentation to Rust. Python may define Provider-specific declarations but must not duplicate SFP serialization, wire validation, revision management, exchange, or session fencing.\n\nProvider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.\n\nPreserve current declaration models, operation/trigger identifiers, schema authoring, and Provider presentation authoring. Python remains responsible for expressing Provider-specific declarations; Rust owns protocol validation, serialization, revision/session behavior, and exchange. Make conversion errors actionable at declaration or startup time, and avoid separate Python and Rust interpretations of the same wire contract.\n\n## Compatibility requirements\n\nPreserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.\n\n## Acceptance criteria\n\n- Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested.\n- Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns valid manifest/presentation exchange; malformed schema/declaration rejection; revision consistency; refresh and session fencing.\n- Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify valid manifest/presentation exchange; malformed schema/declaration rejection; revision consistency; refresh and session fencing across the real SFP boundary.\n\nWith built artifacts, verify valid manifests and optional presentations reach the Agent; malformed declarations are rejected; revision and refresh behavior is correct; and a presentation change does not alter operational eligibility. Run existing Provider Python manifest API tests to prove source compatibility.\n\n## Out of scope\n\nDo not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the manifest and presentation exchange slice.",
+        "sort_order": 67,
+        "step_id": "PYR3",
+        "title": "[TASK][MVP] Expose Rust-Managed Manifest and Presentation Exchange Through the Python SDK",
+        "verification_requirements": [
+          {
+            "explanation": "Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns manifest and presentation exchange.",
+            "kind": "test",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 0,
+            "target": "Provider Python public API compatibility tests",
+            "verification_id": "pyr3-api-compat"
+          },
+          {
+            "explanation": "Run the current Agent against built Provider Python backed by the built Rust Runtime; assert valid manifest/presentation exchange; malformed schema/declaration rejection; revision consistency; refresh and session fencing end to end.",
+            "kind": "integration",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 1,
+            "target": "Installed-process Agent-to-Provider scenario",
+            "verification_id": "pyr3-agent-e2e"
+          },
+          {
+            "explanation": "Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.",
+            "kind": "command",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 2,
+            "target": "Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks",
+            "verification_id": "pyr3-package-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-runtime-health",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "prt4-protocol-health",
+            "explanation": "Read the normative SFP health and availability procedure and its Provider/Agent responsibility split; focus on “Who implements Health”.",
+            "path": "docs/v0.1.0/procedures/health.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Health",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt4-agent-client",
+            "explanation": "Use the current Agent health and availability implementation as the interoperable peer contract.",
+            "path": "src/stateforge_agent/_sfp/_services/health/client.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt4-agent-test-health-client",
+            "explanation": "Preserve current Agent health and availability behavior; use these tests as interoperability expectations.",
+            "path": "tests/test_health_client.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt4-provider-service",
+            "explanation": "Use the current Provider Python health and availability implementation to identify behavior moving into the shared Rust runtime.",
+            "path": "src/stateforge_provider/_services/health/service.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          }
+        ],
+        "depends_on": [
+          "A2",
+          "P6",
+          "PYR3",
+          "R2"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider-runtime",
+        "required_result": "## Description\n\nThe Provider must report readiness and health on the established SFP channel. This milestone gives Rust ownership of that standard health procedure so other language SDKs do not each implement it.\n\n## Outcome\n\nThe Rust runtime exposes the Protocol-defined use of standard gRPC health, including readiness state and Watch behavior, on the active session.\n\n## Ownership and boundaries\n\nThe Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.\n\n## Required behavior\n\nImplement Provider-side standard gRPC health behavior on the established SFP channel. Rust owns readiness transitions, health checks/watch streams, session fencing, and recovery semantics. Distinguish liveness from readiness and do not report ready before required Provider initialization completes.\n\nThe implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.\n\nUse the standard health contract and the service names defined by the existing Protocol documentation. Model startup, ready, not-serving, and shutdown transitions; do not equate process liveness with service readiness. Start in the appropriate non-ready state until required Provider initialization completes. Serve checks and watches with the specified session and cancellation behavior, and prevent updates from an old session from changing the current status.\n\n## Compatibility requirements\n\nKeep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.\n\n## Acceptance criteria\n\n- Rust unit and conformance tests cover initial readiness; serving/not-serving transitions; Watch updates; startup/shutdown; session loss/recovery.\n\nTest initial state, transition ordering, check and watch results, startup failure, graceful shutdown, watch cancellation, reconnect/session fencing, and behavior when readiness changes concurrently with connection teardown.\n\n## Out of scope\n\nDo not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust.",
+        "sort_order": 68,
+        "step_id": "PRT4",
+        "title": "[TASK][MVP] Implement Health Reporting",
+        "verification_requirements": [
+          {
+            "explanation": "Exercise initial readiness; serving/not-serving transitions; Watch updates; startup/shutdown; session loss/recovery against the canonical SFP contract, including invalid and boundary cases.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 0,
+            "target": "Rust health and availability unit/conformance suite",
+            "verification_id": "prt4-conformance"
+          },
+          {
+            "explanation": "Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 1,
+            "target": "SFP compatibility vectors for health and availability",
+            "verification_id": "prt4-protocol-compat"
+          },
+          {
+            "explanation": "Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.",
+            "kind": "command",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 2,
+            "target": "cargo fmt \u002d\u002dcheck && cargo test \u002d\u002dworkspace && cargo clippy \u002d\u002dworkspace \u002d\u002dall-targets \u002d\u002d -D warnings",
+            "verification_id": "prt4-rust-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-python-rust-health",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "pyr4-protocol-health",
+            "explanation": "Read the normative SFP health and availability procedure and its Provider/Agent responsibility split; focus on “Who implements Health”.",
+            "path": "docs/v0.1.0/procedures/health.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Health",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr4-provider-provider",
+            "explanation": "Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime.",
+            "path": "src/stateforge_provider/provider.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr4-provider\u002d\u002dinit-",
+            "explanation": "Preserve existing public exports and import paths.",
+            "path": "src/stateforge_provider/__init__.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr4-provider-service",
+            "explanation": "Replace or adapt the current Python-owned health and availability implementation behind the stable author-facing API.",
+            "path": "src/stateforge_provider/_services/health/service.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "expected_to_change",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr4-agent-test-health-client",
+            "explanation": "Use the current Agent health and availability integration tests as the end-to-end compatibility contract.",
+            "path": "tests/test_health_client.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 4
+          }
+        ],
+        "depends_on": [
+          "A13",
+          "A2",
+          "PRT4",
+          "R2"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider",
+        "required_result": "## Description\n\nThis slice adapts the existing Python health declarations and lifecycle hooks to Rust's health service. Provider-specific readiness logic stays with the Provider; shared SFP health semantics move to Rust.\n\n## Outcome\n\nThe current Python health API drives Rust-owned health state and serves the existing Agent without a parallel Python health server.\n\n## Ownership and boundaries\n\nProvider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.\n\n## Required behavior\n\nPreserve the current Python health declaration and lifecycle API, mapping readiness changes into Rust. Provider-specific readiness hooks may remain Python callbacks; Rust owns health protocol behavior, state transitions, Watch delivery, and sessions. Do not maintain a competing Python health service.\n\nProvider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.\n\nPreserve current health declaration, readiness hooks, lifecycle calls, and public exports. Send readiness changes to Rust through the binding; keep Provider-specific initialization/readiness callbacks in Python where they belong. Rust owns the health service, state transitions, Check/Watch semantics, session fencing, and shutdown behavior. Do not keep a second Python health state machine or gRPC health endpoint.\n\n## Compatibility requirements\n\nPreserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.\n\n## Acceptance criteria\n\n- Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested.\n- Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns initial readiness; serving/not-serving transitions; Watch updates; startup/shutdown; session loss/recovery.\n- Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify initial readiness; serving/not-serving transitions; Watch updates; startup/shutdown; session loss/recovery across the real SFP boundary.\n\nRun installed-process Agent scenarios for initial not-ready state, ready transition, not-serving transition, Watch updates, startup failure, graceful shutdown, and reconnect. Verify the documented Python API still works and no Python-owned health protocol fallback is used.\n\n## Out of scope\n\nDo not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the health and availability slice.",
+        "sort_order": 69,
+        "step_id": "PYR4",
+        "title": "[TASK][MVP] Expose Rust-Managed Health Reporting Through the Python SDK",
+        "verification_requirements": [
+          {
+            "explanation": "Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns health and availability.",
+            "kind": "test",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 0,
+            "target": "Provider Python public API compatibility tests",
+            "verification_id": "pyr4-api-compat"
+          },
+          {
+            "explanation": "Run the current Agent against built Provider Python backed by the built Rust Runtime; assert initial readiness; serving/not-serving transitions; Watch updates; startup/shutdown; session loss/recovery end to end.",
+            "kind": "integration",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 1,
+            "target": "Installed-process Agent-to-Provider scenario",
+            "verification_id": "pyr4-agent-e2e"
+          },
+          {
+            "explanation": "Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.",
+            "kind": "command",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 2,
+            "target": "Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks",
+            "verification_id": "pyr4-package-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-runtime-capability-assessment",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "prt5-protocol-capability-assessment",
+            "explanation": "Read the normative SFP capability assessment procedure and its Provider/Agent responsibility split; focus on “Who implements Capability Assessment”.",
+            "path": "docs/v0.1.0/procedures/capability-assessment.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Capability Assessment",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt5-agent-coordinator",
+            "explanation": "Use the current Agent capability assessment implementation as the interoperable peer contract.",
+            "path": "src/stateforge_agent/_sfp/_services/capability_assessment/coordinator.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt5-agent-test-capability-assessment",
+            "explanation": "Preserve current Agent capability assessment behavior; use these tests as interoperability expectations.",
+            "path": "tests/test_capability_assessment.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt5-provider-service",
+            "explanation": "Use the current Provider Python capability assessment implementation to identify behavior moving into the shared Rust runtime.",
+            "path": "src/stateforge_provider/_services/capability_assessment/service.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          }
+        ],
+        "depends_on": [
+          "A3",
+          "P2",
+          "PYR4",
+          "R3"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider-runtime",
+        "required_result": "## Description\n\nCapability Assessment lets the Agent ask whether a declared Provider operation can run in a given context. Rust owns the common SFP request/response procedure while Provider-specific evaluation can remain a callback.\n\n## Outcome\n\nThe Rust runtime validates and processes Capability Assessment requests and returns normalized outcomes through the canonical Protocol contract.\n\n## Ownership and boundaries\n\nThe Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.\n\n## Required behavior\n\nImplement Provider-side assessment transport, request validation, deadlines, response normalization, and result/session lifecycle using Protocol-owned contracts. Rust owns assessment procedure semantics. A Provider-specific evaluator may be invoked as a host callback, but cannot reimplement wire handling, generic requirement validation, retries, or session behavior.\n\nThe implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.\n\nValidate the requested operation and assessment input against the accepted manifest and active session. Apply Protocol-defined deadlines and retry/error behavior. Normalize supported, unsupported, incompatible, and assessment-failure outcomes, preserving structured requirements and reasons. If an assessment needs Provider-specific facts, invoke the declared host callback with validated input; keep generic request validation, transport, result state, and session handling in Rust.\n\n## Compatibility requirements\n\nKeep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.\n\n## Acceptance criteria\n\n- Rust unit and conformance tests cover supported/unsupported/incompatible outcomes; requirement and reason propagation; deadlines; invalid/missing outcomes; retry behavior.\n\nTest each normalized outcome, unknown/undeclared operation, invalid or incomplete requirement data, callback success/failure, deadline expiration, retryable transport failure, and session invalidation. Ensure an evaluator exception becomes a safe protocol result/error without exposing Python tracebacks or secrets.\n\n## Out of scope\n\nDo not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust.",
+        "sort_order": 70,
+        "step_id": "PRT5",
+        "title": "[TASK][MVP] Implement Capability Assessment",
+        "verification_requirements": [
+          {
+            "explanation": "Exercise supported/unsupported/incompatible outcomes; requirement and reason propagation; deadlines; invalid/missing outcomes; retry behavior against the canonical SFP contract, including invalid and boundary cases.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 0,
+            "target": "Rust capability assessment unit/conformance suite",
+            "verification_id": "prt5-conformance"
+          },
+          {
+            "explanation": "Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 1,
+            "target": "SFP compatibility vectors for capability assessment",
+            "verification_id": "prt5-protocol-compat"
+          },
+          {
+            "explanation": "Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.",
+            "kind": "command",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 2,
+            "target": "cargo fmt \u002d\u002dcheck && cargo test \u002d\u002dworkspace && cargo clippy \u002d\u002dworkspace \u002d\u002dall-targets \u002d\u002d -D warnings",
+            "verification_id": "prt5-rust-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-python-rust-capability-assessment",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "pyr5-protocol-capability-assessment",
+            "explanation": "Read the normative SFP capability assessment procedure and its Provider/Agent responsibility split; focus on “Who implements Capability Assessment”.",
+            "path": "docs/v0.1.0/procedures/capability-assessment.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Capability Assessment",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr5-provider-provider",
+            "explanation": "Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime.",
+            "path": "src/stateforge_provider/provider.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr5-provider\u002d\u002dinit-",
+            "explanation": "Preserve existing public exports and import paths.",
+            "path": "src/stateforge_provider/__init__.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr5-provider-service",
+            "explanation": "Replace or adapt the current Python-owned capability assessment implementation behind the stable author-facing API.",
+            "path": "src/stateforge_provider/_services/capability_assessment/service.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "expected_to_change",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr5-agent-test-capability-assessment",
+            "explanation": "Use the current Agent capability assessment integration tests as the end-to-end compatibility contract.",
+            "path": "tests/test_capability_assessment.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 4
+          }
+        ],
+        "depends_on": [
+          "A13",
+          "A3",
+          "PRT5",
+          "R3"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider",
+        "required_result": "## Description\n\nThis slice exposes Rust-managed Capability Assessment through the existing Python Provider declarations. The Python API remains the ergonomic place to supply Provider-specific assessment logic.\n\n## Outcome\n\nProvider Python keeps its established capability declaration and evaluator API while Rust owns the SFP assessment procedure and invokes the Python evaluator only where required.\n\n## Ownership and boundaries\n\nProvider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.\n\n## Required behavior\n\nPreserve the current Python capability declaration/evaluator API and adapt evaluator callbacks to Rust. Python remains the ergonomic surface for Provider-specific logic; Rust owns request/response contracts, generic validation, deadline/retry behavior, and protocol state.\n\nProvider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.\n\nPreserve the declaration shape, evaluator callback signature, and exports. Pass validated assessment inputs from Rust to the Provider-specific callback, then return its result to Rust for normalization and SFP response. Do not duplicate generic requirement validation, deadlines, retries, session checks, or response-state logic in Python.\n\n## Compatibility requirements\n\nPreserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.\n\n## Acceptance criteria\n\n- Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested.\n- Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns supported/unsupported/incompatible outcomes; requirement and reason propagation; deadlines; invalid/missing outcomes; retry behavior.\n- Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify supported/unsupported/incompatible outcomes; requirement and reason propagation; deadlines; invalid/missing outcomes; retry behavior across the real SFP boundary.\n\nTest supported, unsupported, and incompatible cases; requirement and reason propagation; invalid evaluator results; evaluator exceptions; deadline and retry behavior; and source compatibility. Run the current Agent against installed Provider Python backed by Rust and verify these outcomes cross the real SFP boundary.\n\n## Out of scope\n\nDo not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the capability assessment slice.",
+        "sort_order": 71,
+        "step_id": "PYR5",
+        "title": "[TASK][MVP] Expose Rust-Managed Capability Assessment Through the Python SDK",
+        "verification_requirements": [
+          {
+            "explanation": "Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns capability assessment.",
+            "kind": "test",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 0,
+            "target": "Provider Python public API compatibility tests",
+            "verification_id": "pyr5-api-compat"
+          },
+          {
+            "explanation": "Run the current Agent against built Provider Python backed by the built Rust Runtime; assert supported/unsupported/incompatible outcomes; requirement and reason propagation; deadlines; invalid/missing outcomes; retry behavior end to end.",
+            "kind": "integration",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 1,
+            "target": "Installed-process Agent-to-Provider scenario",
+            "verification_id": "pyr5-agent-e2e"
+          },
+          {
+            "explanation": "Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.",
+            "kind": "command",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 2,
+            "target": "Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks",
+            "verification_id": "pyr5-package-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-runtime-operation-admission",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "prt6-protocol-operation-admission",
+            "explanation": "Read the normative SFP operation admission and dispatch procedure and its Provider/Agent responsibility split; focus on “Who implements Operation Admission”.",
+            "path": "docs/v0.1.0/procedures/operation-admission.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Operation Admission",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt6-agent-coordinator",
+            "explanation": "Use the current Agent operation admission and dispatch implementation as the interoperable peer contract.",
+            "path": "src/stateforge_agent/_sfp/_services/operation_admission/coordinator.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt6-agent-test-operation-admission",
+            "explanation": "Preserve current Agent operation admission and dispatch behavior; use these tests as interoperability expectations.",
+            "path": "tests/test_operation_admission.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt6-provider-runtime",
+            "explanation": "Use the current Provider Python operation admission and dispatch implementation to identify behavior moving into the shared Rust runtime.",
+            "path": "src/stateforge_provider/_services/operation_admission/runtime.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          }
+        ],
+        "depends_on": [
+          "A5",
+          "P4",
+          "PYR5",
+          "R5"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider-runtime",
+        "required_result": "## Description\n\nOperation Admission is the boundary where a requested action becomes accepted work. The Rust runtime must own idempotency and admission state so a language binding cannot accidentally dispatch duplicate work.\n\n## Outcome\n\nAn accepted operation is recorded and dispatched to its Provider handler once per retained operation identity, according to the canonical SFP admission and fingerprint rules.\n\n## Ownership and boundaries\n\nThe Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.\n\n## Required behavior\n\nImplement atomic admission, canonical request fingerprinting, duplicate resolution, conflict detection, retained admission state, and exactly-one handler dispatch per accepted operation. Rust owns identifiers, admission state, idempotency, validation, and dispatch coordination. Invoke only the Provider author's business handler; do not move user implementation into Rust.\n\nThe implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.\n\nValidate the operation identifier, request schema, active session, and immutable invocation fields before admission. Compute the canonical request fingerprint exactly as Protocol defines it. Atomically create the accepted record before invoking user code. For a repeated ID with identical content, resolve the existing record without a second handler invocation; for the same ID with changed content, return the defined conflict. Define concurrency and retained-state behavior, and do not interpret missing/expired state as permission to redispatch an uncertain side effect.\n\n## Compatibility requirements\n\nKeep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.\n\n## Acceptance criteria\n\n- Rust unit and conformance tests cover new admission; identical retry; same-ID changed-content conflict; concurrent duplicate; invalid/undeclared operation; exactly-one callback invocation; retention boundary.\n\nExercise new admission, identical retry, changed-payload/target conflict, concurrent duplicate submissions, invalid schema, undeclared operation, deadline before admission, handler dispatch count, and retained versus expired state. Avoid claiming business-level exactly-once effects; test only the guarantees made by the SFP admission contract.\n\n## Out of scope\n\nDo not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust.",
+        "sort_order": 72,
+        "step_id": "PRT6",
+        "title": "[TASK][MVP] Implement Idempotent Operation Admission and Dispatch",
+        "verification_requirements": [
+          {
+            "explanation": "Exercise new admission; identical retry; same-ID changed-content conflict; concurrent duplicate; invalid/undeclared operation; exactly-one callback invocation; retention boundary against the canonical SFP contract, including invalid and boundary cases.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 0,
+            "target": "Rust operation admission and dispatch unit/conformance suite",
+            "verification_id": "prt6-conformance"
+          },
+          {
+            "explanation": "Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 1,
+            "target": "SFP compatibility vectors for operation admission and dispatch",
+            "verification_id": "prt6-protocol-compat"
+          },
+          {
+            "explanation": "Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.",
+            "kind": "command",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 2,
+            "target": "cargo fmt \u002d\u002dcheck && cargo test \u002d\u002dworkspace && cargo clippy \u002d\u002dworkspace \u002d\u002dall-targets \u002d\u002d -D warnings",
+            "verification_id": "prt6-rust-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-python-rust-operation-admission",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "pyr6-protocol-operation-admission",
+            "explanation": "Read the normative SFP operation admission and dispatch procedure and its Provider/Agent responsibility split; focus on “Who implements Operation Admission”.",
+            "path": "docs/v0.1.0/procedures/operation-admission.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Operation Admission",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr6-provider-provider",
+            "explanation": "Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime.",
+            "path": "src/stateforge_provider/provider.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr6-provider\u002d\u002dinit-",
+            "explanation": "Preserve existing public exports and import paths.",
+            "path": "src/stateforge_provider/__init__.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr6-provider-runtime",
+            "explanation": "Replace or adapt the current Python-owned operation admission and dispatch implementation behind the stable author-facing API.",
+            "path": "src/stateforge_provider/_services/operation_admission/runtime.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "expected_to_change",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr6-agent-test-operation-admission",
+            "explanation": "Use the current Agent operation admission and dispatch integration tests as the end-to-end compatibility contract.",
+            "path": "tests/test_operation_admission.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 4
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr6-provider-operations",
+            "explanation": "Keep Provider-specific user handler declarations and callbacks in Python; move only shared SFP runtime behavior into Rust.",
+            "path": "src/stateforge_provider/operations.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 5
+          }
+        ],
+        "depends_on": [
+          "A13",
+          "A5",
+          "PRT6",
+          "R5"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider",
+        "required_result": "## Description\n\nThis slice preserves Python's operation authoring API while routing admission and dispatch through Rust. Provider-defined operation logic remains in Python and runs only after Rust accepts new work.\n\n## Outcome\n\nExisting @operation declarations, request models, handler signatures, and context ergonomics continue to work over Rust-owned admission and dispatch.\n\n## Ownership and boundaries\n\nProvider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.\n\n## Required behavior\n\nPreserve @operation, request models, handler signature, and context ergonomics while routing invocations to Rust. Python must not implement a parallel admission registry, fingerprint, retry/idempotency algorithm, transport, or dispatch state machine. User handlers remain Python callbacks and run only after Rust admits a new operation.\n\nProvider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.\n\nKeep public imports, decorators, operation registration, validation messages, and handler call conventions compatible. Deliver the immutable request and callback registration to Rust. Rust validates, fingerprints, stores admission state, resolves duplicates/conflicts, and decides whether to dispatch. Invoke the Python handler only for a new accepted record; never duplicate the admission decision in a Python registry.\n\n## Compatibility requirements\n\nPreserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.\n\n## Acceptance criteria\n\n- Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested.\n- Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns new admission; identical retry; same-ID changed-content conflict; concurrent duplicate; invalid/undeclared operation; exactly-one callback invocation; retention boundary.\n- Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify new admission; identical retry; same-ID changed-content conflict; concurrent duplicate; invalid/undeclared operation; exactly-one callback invocation; retention boundary across the real SFP boundary.\n\nRun the compatibility suite and installed Agent scenario for new admission, same-request retry, changed-content conflict, concurrent duplicates, invalid/undeclared operation, exactly-one callback invocation per retained accepted ID, and state-retention boundaries. Verify the runtime path uses the built Rust artifact, not the legacy Python admission runtime.\n\n## Out of scope\n\nDo not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the operation admission and dispatch slice.",
+        "sort_order": 73,
+        "step_id": "PYR6",
+        "title": "[TASK][MVP] Expose Rust-Managed Operation Admission and Dispatch Through the Python SDK",
+        "verification_requirements": [
+          {
+            "explanation": "Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns operation admission and dispatch.",
+            "kind": "test",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 0,
+            "target": "Provider Python public API compatibility tests",
+            "verification_id": "pyr6-api-compat"
+          },
+          {
+            "explanation": "Run the current Agent against built Provider Python backed by the built Rust Runtime; assert new admission; identical retry; same-ID changed-content conflict; concurrent duplicate; invalid/undeclared operation; exactly-one callback invocation; retention boundary end to end.",
+            "kind": "integration",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 1,
+            "target": "Installed-process Agent-to-Provider scenario",
+            "verification_id": "pyr6-agent-e2e"
+          },
+          {
+            "explanation": "Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.",
+            "kind": "command",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 2,
+            "target": "Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks",
+            "verification_id": "pyr6-package-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-runtime-operation-lifecycle",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "prt7-protocol-progress-results-cancellation",
+            "explanation": "Read the normative SFP operation progress, results, errors, and cancellation procedure and its Provider/Agent responsibility split; focus on “Who implements Operation Lifecycle”.",
+            "path": "docs/v0.1.0/procedures/progress-results-cancellation.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Operation Lifecycle",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt7-agent-coordinator",
+            "explanation": "Use the current Agent operation progress, results, errors, and cancellation implementation as the interoperable peer contract.",
+            "path": "src/stateforge_agent/_sfp/_services/operation_lifecycle/coordinator.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt7-agent-test-operation-lifecycle",
+            "explanation": "Preserve current Agent operation progress, results, errors, and cancellation behavior; use these tests as interoperability expectations.",
+            "path": "tests/test_operation_lifecycle.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt7-provider-runtime",
+            "explanation": "Use the current Provider Python operation progress, results, errors, and cancellation implementation to identify behavior moving into the shared Rust runtime.",
+            "path": "src/stateforge_provider/_services/operation_lifecycle/runtime.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          }
+        ],
+        "depends_on": [
+          "A6",
+          "P5",
+          "PYR6",
+          "R6"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider-runtime",
+        "required_result": "## Description\n\nAfter admission and dispatch, the Provider must expose live progress and a stable terminal outcome. This milestone places the operation lifecycle semantics in Rust, including cancellation races.\n\n## Outcome\n\nRust owns the authoritative operation state machine, sequenced progress observations, terminal results/errors, and cooperative cancellation behavior.\n\n## Ownership and boundaries\n\nThe Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.\n\n## Required behavior\n\nImplement the authoritative lifecycle state machine in Rust: sequenced progress, replayable observations, terminal result/error state, and cooperative cancellation including races. Rust owns transitions, progress semantics, terminal immutability, observer streams, retention/backpressure, and normalized failures. Host-language handlers may report progress, return results, raise errors, and cooperate with cancellation only through the binding.\n\nThe implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.\n\nImplement the Protocol-defined accepted/running/cancellation-requested/terminal states and legal transitions. Assign monotonic progress sequence values, retain/coalesce observations within defined bounds, replay current state to late watchers, and keep terminal outcomes immutable while retained. Validate successful results against the declared result schema; normalize failures without leaking secrets or remote tracebacks. Treat cancellation as cooperative: a request is not proof the operation stopped, and the first terminal outcome wins a completion/cancel race.\n\n## Compatibility requirements\n\nKeep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.\n\n## Acceptance criteria\n\n- Rust unit and conformance tests cover monotonic progress and replay; valid terminal results; normalized failures; cancellation requested/unsupported/already-terminal; completion-cancel races; terminal immutability.\n\nCover early and late Watch, monotonic sequence and replay, gaps/retention behavior, valid and invalid result schemas, normalized errors and partial-effect information, unsupported/already-terminal cancellation, cooperative cancellation, completion/cancellation races, and terminal immutability.\n\n## Out of scope\n\nDo not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust.",
+        "sort_order": 74,
+        "step_id": "PRT7",
+        "title": "[TASK][MVP] Implement the Operation Lifecycle: Progress, Results, Errors, and Cancellation",
+        "verification_requirements": [
+          {
+            "explanation": "Exercise monotonic progress and replay; valid terminal results; normalized failures; cancellation requested/unsupported/already-terminal; completion-cancel races; terminal immutability against the canonical SFP contract, including invalid and boundary cases.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 0,
+            "target": "Rust operation progress, results, errors, and cancellation unit/conformance suite",
+            "verification_id": "prt7-conformance"
+          },
+          {
+            "explanation": "Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 1,
+            "target": "SFP compatibility vectors for operation progress, results, errors, and cancellation",
+            "verification_id": "prt7-protocol-compat"
+          },
+          {
+            "explanation": "Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.",
+            "kind": "command",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 2,
+            "target": "cargo fmt \u002d\u002dcheck && cargo test \u002d\u002dworkspace && cargo clippy \u002d\u002dworkspace \u002d\u002dall-targets \u002d\u002d -D warnings",
+            "verification_id": "prt7-rust-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-python-rust-operation-lifecycle",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "pyr7-protocol-progress-results-cancellation",
+            "explanation": "Read the normative SFP operation progress, results, errors, and cancellation procedure and its Provider/Agent responsibility split; focus on “Who implements Operation Lifecycle”.",
+            "path": "docs/v0.1.0/procedures/progress-results-cancellation.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Operation Lifecycle",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr7-provider-provider",
+            "explanation": "Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime.",
+            "path": "src/stateforge_provider/provider.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr7-provider\u002d\u002dinit-",
+            "explanation": "Preserve existing public exports and import paths.",
+            "path": "src/stateforge_provider/__init__.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr7-provider-runtime",
+            "explanation": "Replace or adapt the current Python-owned operation progress, results, errors, and cancellation implementation behind the stable author-facing API.",
+            "path": "src/stateforge_provider/_services/operation_lifecycle/runtime.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "expected_to_change",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr7-agent-test-operation-lifecycle",
+            "explanation": "Use the current Agent operation progress, results, errors, and cancellation integration tests as the end-to-end compatibility contract.",
+            "path": "tests/test_operation_lifecycle.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 4
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr7-provider-operations",
+            "explanation": "Keep Provider-specific user handler declarations and callbacks in Python; move only shared SFP runtime behavior into Rust.",
+            "path": "src/stateforge_provider/operations.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 5
+          }
+        ],
+        "depends_on": [
+          "A13",
+          "A6",
+          "PRT7",
+          "R6"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider",
+        "required_result": "## Description\n\nThis slice makes Rust-owned progress, results, errors, and cancellation usable from the existing Python operation handler API. Python presents the runtime behavior ergonomically but does not implement its semantics.\n\n## Outcome\n\nProvider Python handlers continue to report progress, produce typed results, raise failures, and cooperate with cancellation through the established API, while Rust controls lifecycle state.\n\n## Ownership and boundaries\n\nProvider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.\n\n## Required behavior\n\nPreserve the current Python handler and context API, exposing Rust-owned progress, result completion, normalized errors, and cooperative cancellation ergonomically. Progress semantics and lifecycle state exist only in Rust; Python must not mirror sequence allocation, terminal transitions, replay, retention, cancellation races, or transport. Python handlers remain user callbacks.\n\nProvider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.\n\nPreserve handler signatures and context APIs; adapt existing progress/result/error/cancellation helpers to Rust-managed operations. A Python handler may emit progress, return a result, raise an exception, and observe a cancellation request, but it must not allocate protocol sequence numbers, manage replay/retention, decide terminal transitions, or implement cancellation races. Convert Python exceptions into the Rust runtime's normalized error representation.\n\n## Compatibility requirements\n\nPreserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.\n\n## Acceptance criteria\n\n- Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested.\n- Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns monotonic progress and replay; valid terminal results; normalized failures; cancellation requested/unsupported/already-terminal; completion-cancel races; terminal immutability.\n- Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify monotonic progress and replay; valid terminal results; normalized failures; cancellation requested/unsupported/already-terminal; completion-cancel races; terminal immutability across the real SFP boundary.\n\nRun Agent end-to-end tests for sequenced progress and replay, successful typed result, invalid result, normalized failure, cancellation request, unsupported cancellation, completion/cancel race, and immutable terminal state. Confirm existing Python handler code remains source-compatible and the integration uses installed Rust-backed artifacts.\n\n## Out of scope\n\nDo not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the operation progress, results, errors, and cancellation slice.",
+        "sort_order": 75,
+        "step_id": "PYR7",
+        "title": "[TASK][MVP] Expose the Rust-Managed Operation Lifecycle Through the Python SDK",
+        "verification_requirements": [
+          {
+            "explanation": "Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns operation progress, results, errors, and cancellation.",
+            "kind": "test",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 0,
+            "target": "Provider Python public API compatibility tests",
+            "verification_id": "pyr7-api-compat"
+          },
+          {
+            "explanation": "Run the current Agent against built Provider Python backed by the built Rust Runtime; assert monotonic progress and replay; valid terminal results; normalized failures; cancellation requested/unsupported/already-terminal; completion-cancel races; terminal immutability end to end.",
+            "kind": "integration",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 1,
+            "target": "Installed-process Agent-to-Provider scenario",
+            "verification_id": "pyr7-agent-e2e"
+          },
+          {
+            "explanation": "Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.",
+            "kind": "command",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 2,
+            "target": "Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks",
+            "verification_id": "pyr7-package-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-runtime-trigger-publication",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "prt8-protocol-triggers",
+            "explanation": "Read the normative SFP trigger publication and acknowledgement procedure and its Provider/Agent responsibility split; focus on “Who implements Trigger Publication”.",
+            "path": "docs/v0.1.0/procedures/triggers.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Trigger Publication",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt8-agent-coordinator",
+            "explanation": "Use the current Agent trigger publication and acknowledgement implementation as the interoperable peer contract.",
+            "path": "src/stateforge_agent/_sfp/_services/trigger_publication/coordinator.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt8-agent-test-trigger-publication",
+            "explanation": "Preserve current Agent trigger publication and acknowledgement behavior; use these tests as interoperability expectations.",
+            "path": "tests/test_trigger_publication.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt8-provider-runtime",
+            "explanation": "Use the current Provider Python trigger publication and acknowledgement implementation to identify behavior moving into the shared Rust runtime.",
+            "path": "src/stateforge_provider/_services/trigger_publication/runtime.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          }
+        ],
+        "depends_on": [
+          "A4",
+          "P3",
+          "PYR7",
+          "R4"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider-runtime",
+        "required_result": "## Description\n\nTriggers originate from Provider-specific event detection but are delivered through a shared SFP publication procedure. Rust owns publication identity, retry, acknowledgement, and stream state.\n\n## Outcome\n\nThe Rust runtime publishes valid trigger envelopes and handles acknowledgements/replay according to the canonical SFP contract without duplicating events after a lost acknowledgement.\n\n## Ownership and boundaries\n\nThe Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.\n\n## Required behavior\n\nImplement Provider-side stream setup, envelope validation, stable publication IDs, canonical equality, bounded retry/replay, and acknowledgement handling. Rust owns publication state, retries, acknowledgement dispositions, session fencing, and backpressure. Provider-specific trigger detection/event construction may remain host callbacks.\n\nThe implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.\n\nValidate trigger identifiers and payloads against the accepted manifest and active session. Assign/preserve stable publication identity; use canonical content equality so identical replay is a duplicate and ID reuse with changed content is a conflict. Implement the defined accepted-new, accepted-duplicate, and rejected acknowledgements, bounded retry/replay, ordering, and backpressure. Provider-specific event detection and payload construction may run as host callbacks; Rust owns the publication protocol.\n\n## Compatibility requirements\n\nKeep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.\n\n## Acceptance criteria\n\n- Rust unit and conformance tests cover accepted-new; accepted-duplicate replay; changed-content conflict; lost acknowledgement; invalid payload/session; bounded backpressure.\n\nTest new publication, duplicate replay, conflicting ID/content, lost acknowledgement, invalid/undeclared trigger, invalid payload, stale session, ordering, retry bounds, and backpressure. Verify acknowledgement results correspond to the correct publication and replay does not create a second logical delivery.\n\n## Out of scope\n\nDo not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust.",
+        "sort_order": 76,
+        "step_id": "PRT8",
+        "title": "[TASK][MVP] Implement Trigger Publication and Acknowledgement",
+        "verification_requirements": [
+          {
+            "explanation": "Exercise accepted-new; accepted-duplicate replay; changed-content conflict; lost acknowledgement; invalid payload/session; bounded backpressure against the canonical SFP contract, including invalid and boundary cases.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 0,
+            "target": "Rust trigger publication and acknowledgement unit/conformance suite",
+            "verification_id": "prt8-conformance"
+          },
+          {
+            "explanation": "Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 1,
+            "target": "SFP compatibility vectors for trigger publication and acknowledgement",
+            "verification_id": "prt8-protocol-compat"
+          },
+          {
+            "explanation": "Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.",
+            "kind": "command",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 2,
+            "target": "cargo fmt \u002d\u002dcheck && cargo test \u002d\u002dworkspace && cargo clippy \u002d\u002dworkspace \u002d\u002dall-targets \u002d\u002d -D warnings",
+            "verification_id": "prt8-rust-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-python-rust-trigger-publication",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "pyr8-protocol-triggers",
+            "explanation": "Read the normative SFP trigger publication and acknowledgement procedure and its Provider/Agent responsibility split; focus on “Who implements Trigger Publication”.",
+            "path": "docs/v0.1.0/procedures/triggers.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements Trigger Publication",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr8-provider-provider",
+            "explanation": "Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime.",
+            "path": "src/stateforge_provider/provider.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr8-provider\u002d\u002dinit-",
+            "explanation": "Preserve existing public exports and import paths.",
+            "path": "src/stateforge_provider/__init__.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr8-provider-runtime",
+            "explanation": "Replace or adapt the current Python-owned trigger publication and acknowledgement implementation behind the stable author-facing API.",
+            "path": "src/stateforge_provider/_services/trigger_publication/runtime.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "expected_to_change",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr8-agent-test-trigger-publication",
+            "explanation": "Use the current Agent trigger publication and acknowledgement integration tests as the end-to-end compatibility contract.",
+            "path": "tests/test_trigger_publication.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 4
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr8-provider-triggers",
+            "explanation": "Keep Provider-specific user handler declarations and callbacks in Python; move only shared SFP runtime behavior into Rust.",
+            "path": "src/stateforge_provider/triggers.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 5
+          }
+        ],
+        "depends_on": [
+          "A13",
+          "A4",
+          "PRT8",
+          "R4"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider",
+        "required_result": "## Description\n\nThis slice keeps Python trigger declarations and event-producing callbacks while handing publication and acknowledgement to Rust. It is the Python binding for the shared trigger procedure.\n\n## Outcome\n\nExisting Python trigger authoring remains usable, but Rust owns publication IDs, transport, replay, deduplication, acknowledgements, and backpressure.\n\n## Ownership and boundaries\n\nProvider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.\n\n## Required behavior\n\nPreserve current Python trigger declarations and event-producing callback API while handing events to Rust. Python must not implement publication transport, IDs/deduplication, retry/replay, acknowledgement state, or session semantics; it provides ergonomic authoring and invokes Provider-specific event callbacks.\n\nProvider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.\n\nPreserve trigger declarations, callback signatures, and event construction in Provider Python. Pass each produced event to Rust for schema validation and publication. Surface accepted, duplicate, rejected, retry, and terminal transport outcomes through the ergonomic SDK API without implementing a parallel Python queue or acknowledgement state machine.\n\n## Compatibility requirements\n\nPreserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.\n\n## Acceptance criteria\n\n- Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested.\n- Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns accepted-new; accepted-duplicate replay; changed-content conflict; lost acknowledgement; invalid payload/session; bounded backpressure.\n- Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify accepted-new; accepted-duplicate replay; changed-content conflict; lost acknowledgement; invalid payload/session; bounded backpressure across the real SFP boundary.\n\nTest callback/API compatibility and run the Agent against installed Rust-backed Provider Python for accepted-new, duplicate replay, conflicting content, lost acknowledgement, invalid payload/session, ordering, and bounded backpressure. Confirm replay retains the same publication identity and does not re-run event detection unless the host callback contract explicitly requires it.\n\n## Out of scope\n\nDo not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the trigger publication and acknowledgement slice.",
+        "sort_order": 77,
+        "step_id": "PYR8",
+        "title": "[TASK][MVP] Expose Rust-Managed Trigger Publication and Acknowledgement Through the Python SDK",
+        "verification_requirements": [
+          {
+            "explanation": "Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns trigger publication and acknowledgement.",
+            "kind": "test",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 0,
+            "target": "Provider Python public API compatibility tests",
+            "verification_id": "pyr8-api-compat"
+          },
+          {
+            "explanation": "Run the current Agent against built Provider Python backed by the built Rust Runtime; assert accepted-new; accepted-duplicate replay; changed-content conflict; lost acknowledgement; invalid payload/session; bounded backpressure end to end.",
+            "kind": "integration",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 1,
+            "target": "Installed-process Agent-to-Provider scenario",
+            "verification_id": "pyr8-agent-e2e"
+          },
+          {
+            "explanation": "Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.",
+            "kind": "command",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 2,
+            "target": "Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks",
+            "verification_id": "pyr8-package-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-runtime-disconnection-recovery",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "prt9-protocol-disconnection-recovery",
+            "explanation": "Read the normative SFP disconnection recovery and state reconciliation procedure and its Provider/Agent responsibility split; focus on “Who implements recovery”.",
+            "path": "docs/v0.1.0/procedures/disconnection-recovery.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements recovery",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt9-agent-reconnect",
+            "explanation": "Use the current Agent disconnection recovery and state reconciliation implementation as the interoperable peer contract.",
+            "path": "src/stateforge_agent/_sfp/_runtime/reconnect.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt9-agent-test-endpoint-lifecycle",
+            "explanation": "Preserve current Agent disconnection recovery and state reconciliation behavior; use these tests as interoperability expectations.",
+            "path": "tests/test_endpoint_lifecycle.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "prt9-provider-server",
+            "explanation": "Use the current Provider Python disconnection recovery and state reconciliation implementation to identify behavior moving into the shared Rust runtime.",
+            "path": "src/stateforge_provider/_runtime/server.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          }
+        ],
+        "depends_on": [
+          "A11",
+          "P8",
+          "P9",
+          "PYR8",
+          "R9"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider-runtime",
+        "required_result": "## Description\n\nThe final runtime procedure reconciles endpoint/session continuity with in-flight operations and trigger publications after disconnection. It depends on the earlier runtime procedures because recovery must restore their state consistently.\n\n## Outcome\n\nRust re-establishes a valid session, fences old channels, and resumes only the operation and trigger work justified by retained state and Protocol rules.\n\n## Ownership and boundaries\n\nThe Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.\n\n## Required behavior\n\nImplement Provider-side recovery using Rust-owned session, admission, lifecycle, and trigger state. Fence stale channels/generations, classify retained versus lost state, resume observation/publication safely, and never redispatch uncertain operations automatically. Preserve Protocol-defined indeterminate outcomes; do not promise recovery beyond retained evidence.\n\nThe implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.\n\nFollow the Protocol recovery order: rediscover and validate the endpoint, negotiate a new session, fence the old channel, classify state continuity, then reconcile admissions, operation observations, and trigger publications. Resume observation/replay from retained cursors or identities. If accepted-operation state is unavailable or ambiguous, report the defined indeterminate condition; never automatically redispatch an uncertain side effect. Preserve the distinction between transport loss and business-operation cancellation.\n\n## Compatibility requirements\n\nKeep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.\n\n## Acceptance criteria\n\n- Rust unit and conformance tests cover disconnect/reconnect; stale session/generation fencing; retained/lost operation state; trigger replay; uncertain admission without automatic redispatch.\n\nTest reconnect with unchanged and changed endpoint generations; stale channel rejection; retained and lost admission/lifecycle records; resuming late operation observers; trigger replay after lost acknowledgement; duplicate acknowledgement; and ambiguous admission without redispatch. Verify cleanup and bounded state recovery.\n\n## Out of scope\n\nDo not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust.",
+        "sort_order": 78,
+        "step_id": "PRT9",
+        "title": "[TASK][MVP] Implement Disconnection Recovery and State Reconciliation",
+        "verification_requirements": [
+          {
+            "explanation": "Exercise disconnect/reconnect; stale session/generation fencing; retained/lost operation state; trigger replay; uncertain admission without automatic redispatch against the canonical SFP contract, including invalid and boundary cases.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 0,
+            "target": "Rust disconnection recovery and state reconciliation unit/conformance suite",
+            "verification_id": "prt9-conformance"
+          },
+          {
+            "explanation": "Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.",
+            "kind": "test",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 1,
+            "target": "SFP compatibility vectors for disconnection recovery and state reconciliation",
+            "verification_id": "prt9-protocol-compat"
+          },
+          {
+            "explanation": "Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.",
+            "kind": "command",
+            "repository_alias": "provider-runtime",
+            "required": true,
+            "sort_order": 2,
+            "target": "cargo fmt \u002d\u002dcheck && cargo test \u002d\u002dworkspace && cargo clippy \u002d\u002dworkspace \u002d\u002dall-targets \u002d\u002d -D warnings",
+            "verification_id": "prt9-rust-gates"
+          }
+        ]
+      },
+      {
+        "branch_name": "mvp/provider-python-rust-disconnection-recovery",
+        "context_resources": [
+          {
+            "authority": "canonical",
+            "context_id": "pyr9-protocol-disconnection-recovery",
+            "explanation": "Read the normative SFP disconnection recovery and state reconciliation procedure and its Provider/Agent responsibility split; focus on “Who implements recovery”.",
+            "path": "docs/v0.1.0/procedures/disconnection-recovery.md",
+            "repository_alias": "protocol",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "markdown_heading",
+            "selector_value": "Who implements recovery",
+            "sort_order": 0
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr9-provider-provider",
+            "explanation": "Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime.",
+            "path": "src/stateforge_provider/provider.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 1
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr9-provider\u002d\u002dinit-",
+            "explanation": "Preserve existing public exports and import paths.",
+            "path": "src/stateforge_provider/__init__.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "must_preserve",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 2
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr9-provider-server",
+            "explanation": "Replace or adapt the current Python-owned disconnection recovery and state reconciliation implementation behind the stable author-facing API.",
+            "path": "src/stateforge_provider/_runtime/server.py",
+            "repository_alias": "provider",
+            "required": true,
+            "role": "expected_to_change",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 3
+          },
+          {
+            "authority": "compatibility",
+            "context_id": "pyr9-agent-test-endpoint-lifecycle",
+            "explanation": "Use the current Agent disconnection recovery and state reconciliation integration tests as the end-to-end compatibility contract.",
+            "path": "tests/test_endpoint_lifecycle.py",
+            "repository_alias": "agent",
+            "required": true,
+            "role": "must_understand",
+            "selector_kind": "file",
+            "selector_value": null,
+            "sort_order": 4
+          }
+        ],
+        "depends_on": [
+          "A11",
+          "A13",
+          "PRT9",
+          "R9"
+        ],
+        "release": "MVP",
+        "repository_alias": "provider",
+        "required_result": "## Description\n\nThis slice makes Rust-managed recovery the behavior behind the existing Provider Python lifecycle. It closes the procedure-by-procedure migration and enables the supported Rust-backed Python Provider path.\n\n## Outcome\n\nProvider Python preserves its public lifecycle and callbacks while delegating reconnect, fencing, replay, and reconciliation decisions entirely to Rust.\n\n## Ownership and boundaries\n\nProvider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.\n\n## Required behavior\n\nPreserve Provider Python startup, shutdown, and callback APIs while exposing Rust-managed reconnection/reconciliation. Python must not own session recovery, state replay, stale-channel fencing, redispatch decisions, or retry semantics. Provider-specific callbacks remain host code; uncertainty is reported from Rust runtime state.\n\nProvider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.\n\nKeep existing Provider construction, startup/shutdown, handler, and callback APIs. Bind their lifecycle to the Rust runtime's reconnect/reconciliation state. Python may restart or re-register Provider-specific callbacks as required by the SDK, but must not decide session continuity, replay cursors, whether to redispatch, or whether an outcome is indeterminate. Surface those outcomes from Rust without converting uncertainty into success or a fresh execution.\n\n## Compatibility requirements\n\nPreserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.\n\n## Acceptance criteria\n\n- Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested.\n- Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns disconnect/reconnect; stale session/generation fencing; retained/lost operation state; trigger replay; uncertain admission without automatic redispatch.\n- Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify disconnect/reconnect; stale session/generation fencing; retained/lost operation state; trigger replay; uncertain admission without automatic redispatch across the real SFP boundary.\n\nUse installed Provider Python and the current Agent to test disconnect/reconnect, stale generation/session fencing, retained/lost operation state, resumed observation, trigger replay and duplicate acknowledgements, and uncertain admission without automatic redispatch. Verify Python public API compatibility and no Python recovery fallback.\n\n## Out of scope\n\nDo not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the disconnection recovery and state reconciliation slice.",
+        "sort_order": 79,
+        "step_id": "PYR9",
+        "title": "[TASK][MVP] Expose Rust-Managed Disconnection Recovery Through the Python SDK",
+        "verification_requirements": [
+          {
+            "explanation": "Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns disconnection recovery and state reconciliation.",
+            "kind": "test",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 0,
+            "target": "Provider Python public API compatibility tests",
+            "verification_id": "pyr9-api-compat"
+          },
+          {
+            "explanation": "Run the current Agent against built Provider Python backed by the built Rust Runtime; assert disconnect/reconnect; stale session/generation fencing; retained/lost operation state; trigger replay; uncertain admission without automatic redispatch end to end.",
+            "kind": "integration",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 1,
+            "target": "Installed-process Agent-to-Provider scenario",
+            "verification_id": "pyr9-agent-e2e"
+          },
+          {
+            "explanation": "Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.",
+            "kind": "command",
+            "repository_alias": "provider",
+            "required": true,
+            "sort_order": 2,
+            "target": "Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks",
+            "verification_id": "pyr9-package-gates"
+          }
+        ]
       }
     ]
   }
@@ -9077,7 +10916,7 @@ STATEFORGE_DPT_MANIFEST -->
 
 **Project:** StateForge  
 **Release:** MVP  
-**Revision:** 43
+**Revision:** 44
 
 ## Repositories
 
@@ -9090,6 +10929,7 @@ STATEFORGE_DPT_MANIFEST -->
 | `sf-aop` | [stateforge-org/stateforge-aop](https://github.com/stateforge-org/stateforge-aop) | StateForge Agent Orchestration Protocol |
 | `docs` | [stateforge-org/stateforge-docs](https://github.com/stateforge-org/stateforge-docs) | Cross-cutting documentation infrastructure |
 | `provider-views` | [stateforge-org/stateforge-provider-views](https://github.com/stateforge-org/stateforge-provider-views) | Tooling for generating and releasing language-specific Provider Views libraries from the StateForge Control Plane’s canonical component catalog. |
+| `provider-runtime` | [stateforge-org/stateforge-provider-runtime](https://github.com/stateforge-org/stateforge-provider-runtime) | A Rust runtime that implements the Provider side of SFP, enabling language-specific Provider SDKs to expose Operations and Triggers through a shared protocol implementation. |
 
 ## Cross-repository implementation graph
 
@@ -9165,6 +11005,24 @@ _No cross-repository relationships are registered yet._
 | `C8` | `control-plane` | **[TASK][MVP] Implement Schema-Based Candidate Matching and Field-Mapping Suggestions**<br>## Outcome and ownership  Implement Schema-Based Candidate Matching and Field-Mapping Suggestions in stateforge-control-plane.  ## Shared model and boundaries  Profiles define versioned vendor-independent schemas and intended behavior; Providers expose concrete Operations/Triggers, not Profile claims. Contracts are reusable Policy-shaped graphs with virtual Profile nodes, dependencies and standardized data connections. Policies can be built directly from concrete nodes without Profiles/Contracts, or instantiated from Contracts. Implementation selections, confirmed field mappings and supplied values belong to each Policy. Structural matching is not behavioral proof; users review intent when selecting implementations.  CP owns models, persistence, internal interfaces, and React/TypeScript/Vite UI. No SF-AOP dependency, transport design, remote dispatch, SFP/Agent/Provider edits, or fake Agent is authorized. Use explicit accepted-declaration snapshots internally; fixture tests prove CP behavior only. Establish missing minimal CP foundations, reuse existing mechanisms and record decisions. Profile matching is separate from the Provider Views catalog.  ## Required behavior  - Match Profile schemas to accepted concrete declaration snapshots without Provider claims. Operation Profiles match Operations; Trigger Profiles match event payloads. Schema inputs/outputs are directional: the implementation must accept Profile-supplied inputs and guarantee required standardized outputs after mapping. - Rank candidates: best is complete same-name/path compatible fields; also show different-name compatible candidates, ambiguous multiple mappings, and partial matches. Keep useful partial candidates visible with unresolved requirements. Do not label partial matches fully fulfilled. A same-name incompatible field must not prevent consideration of a differently named compatible field. - Preserve structural subtyping: extra result fields are allowed; extra optional inputs are allowed; additional mandatory inputs need explicit supplied values or proven actual default materialization. A JSON Schema default annotation alone is not a supplied value. Do not require schema equality. - Analyze nested properties, requiredness, compatible types including integer/number and nullability, enums, arrays/item schemas, bounds and additional-property rules. Publish the supported reasoning subset. Unsupported or excessively complex cases produce cannot-establish results, not success or invented proof of incompatibility. No external schema retrieval, unbounded recursion or combinatorial search. - Return deterministic, structured match reports with field paths, suggestions, ambiguity, missing values and reasons. Same-name safe mappings may be automatic; ambiguous suggestions require user confirmation. Type equality never proves identical meaning or behavior. - Keep matching read-only and reusable by C9/C10; no arbitrary executable transformations, primitive coercion, automatic composition of unrelated implementations, or live availability/authorization assertions.  ## Verification and delivery  Automate model/application and browser acceptance tests, persistence, quality/build and docs checks. Reuse existing CP CI and retain reproducible evidence. Fixture-based tests are not live interoperability. Human-reviewed merged PRs, not local code, establish delivery. | `C5`, `C6` | `BLOCKED` | — |
 | `C9` | `control-plane` | **[TASK][MVP] Create Concrete Policies from Contracts with Implementation Selection and Mappings**<br>## Outcome and ownership  Create Concrete Policies from Contracts with Implementation Selection and Mappings in stateforge-control-plane.  ## Shared model and boundaries  Profiles define versioned vendor-independent schemas and intended behavior; Providers expose concrete Operations/Triggers, not Profile claims. Contracts are reusable Policy-shaped graphs with virtual Profile nodes, dependencies and standardized data connections. Policies can be built directly from concrete nodes without Profiles/Contracts, or instantiated from Contracts. Implementation selections, confirmed field mappings and supplied values belong to each Policy. Structural matching is not behavioral proof; users review intent when selecting implementations.  CP owns models, persistence, internal interfaces, and React/TypeScript/Vite UI. No SF-AOP dependency, transport design, remote dispatch, SFP/Agent/Provider edits, or fake Agent is authorized. Use explicit accepted-declaration snapshots internally; fixture tests prove CP behavior only. Establish missing minimal CP foundations, reuse existing mechanisms and record decisions. Profile matching is separate from the Provider Views catalog.  ## Required behavior  - Add a Contract-to-Policy creation flow: choose a published Contract revision, inspect its virtual Profile graph, select a concrete Operation/Trigger for each required node, resolve suggested field mappings and supplied inputs, and save a concrete Policy. Different Policies from one template may select different implementations across one or multiple Providers. - Show C8 candidate ranks and reasons, including differently named fields, ambiguous and partial candidates. Resolve uncertainty interactively rather than silently selecting based on type. Show Profile intent and implementation description for user-reviewed suitability; do not call this a behavioral proof. - Store each Policy's concrete selections, input/output/event field mappings, explicitly supplied values, provenance and exact Contract/Profile/declaration revisions. Keep the Contract unchanged. Use directed structured paths and validate duplicate/conflicting destination mappings, nested arrays and missing data explicitly. - Implement pure CP adapters for Profile input to operation request, operation result to Profile output, and trigger event to standardized event. Validate source and projected values against their relevant schemas before/after mapping. Allow extra outputs and optional inputs. Materialize only explicitly configured/default-supported values; never assume JSON Schema defaults execute. No arbitrary code or silent coercion. - Keep incomplete drafts saveable with visible unresolved requirements; only structurally complete supported bindings are eligible for validation as ready for future execution. User confirmation cannot override a proven schema mismatch. - Preserve graph dependencies and standardized inter-node wiring through concretization. A partial candidate cannot be silently supplemented by another implementation unless the template explicitly models separate nodes. Direct Policy authoring remains independent and available. - Test adapters locally with realistic data; do not add live Agent dispatch, a substitute Agent daemon, SF-AOP APIs or a claim that full remote orchestration is implemented.  ## Verification and delivery  Automate model/application and browser acceptance tests, persistence, quality/build and docs checks. Reuse existing CP CI and retain reproducible evidence. Fixture-based tests are not live interoperability. Human-reviewed merged PRs, not local code, establish delivery. | `C7`, `C8` | `BLOCKED` | — |
 | `C10` | `control-plane` | **[TASK][MVP] Validate Policy Fulfillment and Revalidate Changed Definitions**<br>## Outcome and ownership  Validate Policy Fulfillment and Revalidate Changed Definitions in stateforge-control-plane.  ## Shared model and boundaries  Profiles define versioned vendor-independent schemas and intended behavior; Providers expose concrete Operations/Triggers, not Profile claims. Contracts are reusable Policy-shaped graphs with virtual Profile nodes, dependencies and standardized data connections. Policies can be built directly from concrete nodes without Profiles/Contracts, or instantiated from Contracts. Implementation selections, confirmed field mappings and supplied values belong to each Policy. Structural matching is not behavioral proof; users review intent when selecting implementations.  CP owns models, persistence, internal interfaces, and React/TypeScript/Vite UI. No SF-AOP dependency, transport design, remote dispatch, SFP/Agent/Provider edits, or fake Agent is authorized. Use explicit accepted-declaration snapshots internally; fixture tests prove CP behavior only. Establish missing minimal CP foundations, reuse existing mechanisms and record decisions. Profile matching is separate from the Provider Views catalog.  ## Required behavior  - Implement a single CP validation and fulfillment-report pipeline for direct and Contract-derived Policies. Check graph validity, concrete declaration references, configured/mapped required inputs, result/event guarantees, Profile coverage when applicable, pinned revisions, and supported adapters. - Keep structural readiness distinct from live Provider health, Capability Assessment, authorization, deployment and execution state. Do not report real-time availability from an offline schema match. Direct Policies bypass Profile/Contract requirements but retain concrete schema and graph validation. - Invalidate affected cached reports when Profile/Contract revisions, confirmed mappings, configuration, accepted manifest/declaration revisions or implementation selections change. Recompute against exact referenced snapshots with deterministic content identities; unchanged unrelated declarations should not invalidate everything. - Preserve pinned Policy revisions and references. New definitions are available updates, not silent rewrites of saved Policies. Require explicit revision adoption and renewed validation when appropriate. Missing/archived/replaced sources produce actionable stale/unresolved diagnostics; never silently switch Provider or auto-remap a changed field. - Prevent incomplete, incompatible, stale or cannot-establish bindings from being classified structurally ready. Display per-node/per-edge coverage, selected implementation, mappings, unresolved obligations and reasons with navigation to repairs. - Preserve historical validation evidence and distinguish current definition changes from already-running work. Without remote execution integration do not implement cancellation/retry/remediation or assert an operation failed because its definition changed. - Complete shared docs/examples and automated CP regression/CI coverage across C5-C10. Scope is CP validation and adapter evidence, not SF-AOP or full installed-system execution.  ## Verification and delivery  Automate model/application and browser acceptance tests, persistence, quality/build and docs checks. Reuse existing CP CI and retain reproducible evidence. Fixture-based tests are not live interoperability. Human-reviewed merged PRs, not local code, establish delivery. | `C6`, `C9` | `BLOCKED` | — |
+| `PRT1` | `provider-runtime` | **[TASK][MVP] Implement Provider Endpoint Discovery**<br>## Description  This first runtime procedure gives the Agent a Provider endpoint it can discover and connect to. It establishes the filesystem and socket lifecycle that Bootstrap will use next.  ## Outcome  A Rust-managed Provider endpoint is published only when its matching local socket is ready, with stable Provider identity and a new endpoint generation for each runtime start.  ## Ownership and boundaries  The Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.  ## Required behavior  Create the Provider instance identity and increasing endpoint generation, create and permission the generation-specific local socket, then atomically publish its matching descriptor only after the socket is ready. Retire only runtime-owned artifacts safely. Fail closed on malformed, partial, stale, or mismatched descriptor/socket state. The Agent remains the discovery observer and provisional channel initiator; trust is established by Bootstrap, not discovery.  The implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.  Use the canonical Protocol descriptor v1 filename, schema, bounds, and permissions rather than creating a second format. Create a generation-specific Unix-domain socket, ensure its mode is restrictive, and atomically publish the descriptor only after the socket is bound and accepting connections. On restart, advance the endpoint generation so stale descriptors and channels cannot be mistaken for the live instance. During shutdown, remove only artifacts owned by this runtime instance; do not delete another Provider's socket or descriptor.  ## Compatibility requirements  Keep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.  ## Acceptance criteria  - Rust unit and conformance tests cover descriptor/socket identity and generation correlation; atomic publication ordering; permissions; restart generation changes; safe cleanup; malformed/stale endpoint rejection.  Cover missing, malformed, partially written, stale, mismatched, and permission-denied descriptor/socket cases; restart generation changes; publication-before-listener prevention; and safe cleanup when startup fails partway through.  ## Out of scope  Do not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust. | `A0`, `P0`, `R0` | `READY` | — |
+| `PYR1` | `provider` | **[TASK][MVP] Expose Rust-Managed Endpoint Discovery Through the Python SDK**<br>## Description  This slice connects the existing Provider Python startup experience to Rust endpoint discovery. It is the first migration point where the current Agent can exercise Provider Python backed by the new runtime.  ## Outcome  Existing Provider Python startup and shutdown APIs launch and retire the Rust-owned endpoint without changing the descriptor or Agent-facing contract.  ## Ownership and boundaries  Provider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.  ## Required behavior  Expose the Rust runtime's endpoint lifecycle through the current Provider Python construction and startup API. Preserve existing public imports, configuration, startup/shutdown behavior, descriptor format, and errors. Python must not create a parallel descriptor publisher, socket manager, generation counter, or discovery protocol implementation.  Provider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.  Keep the current Provider constructor, configuration, imports, startup/shutdown calls, and error reporting source-compatible. Map the existing configuration into the Rust runtime, expose its startup result and failures clearly, and ensure shutdown retires the correct runtime-owned endpoint. Package and load the runtime as a required implementation dependency; do not silently fall back to the existing Python descriptor/socket implementation.  ## Compatibility requirements  Preserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.  ## Acceptance criteria  - Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested. - Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns descriptor/socket identity and generation correlation; atomic publication ordering; permissions; restart generation changes; safe cleanup; malformed/stale endpoint rejection. - Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify descriptor/socket identity and generation correlation; atomic publication ordering; permissions; restart generation changes; safe cleanup; malformed/stale endpoint rejection across the real SFP boundary.  Build and install the artifacts, start and stop Provider Python, and verify through the current Agent that descriptor identity, endpoint generation, socket permissions, restart behavior, and cleanup match the existing contract. Exercise runtime load/start failures and prove they do not activate a Python protocol fallback.  ## Out of scope  Do not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the endpoint discovery slice. | `A0`, `A13`, `PRT1`, `R0` | `BLOCKED` | — |
+| `PRT2` | `provider-runtime` | **[TASK][MVP] Implement Bootstrap Handshake and Version Negotiation**<br>## Description  After endpoint discovery, the Provider must establish a trusted SFP session before serving procedure calls. This milestone implements the Provider side of the existing Bootstrap contract.  ## Outcome  The Rust runtime establishes a session only after validating the discovered Provider identity and endpoint generation and negotiating a mutually supported SFP version.  ## Ownership and boundaries  The Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.  ## Required behavior  Implement Provider-side Bootstrap using canonical Protocol messages. Verify discovered Provider identity and endpoint generation, negotiate the highest mutually supported SFP version, establish session identity/state, and fence requests outside the active session. Reject incompatible versions and stale or mismatched endpoints deterministically.  The implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.  Consume the canonical Bootstrap messages and rules from Protocol. Compare the identity and generation received over the provisional channel with the endpoint the runtime published. Select the highest mutually supported version according to the contract; reject an empty version intersection and mismatched or stale generations deterministically. Bind subsequent requests to the resulting active session and reject requests arriving on a superseded or invalid channel.  ## Compatibility requirements  Keep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.  ## Acceptance criteria  - Rust unit and conformance tests cover identity/generation match and mismatch; highest-common-version selection; no-common-version errors; session establishment; stale-session fencing.  Test matching and mismatching identities/generations, version lists with one and several common versions, no common version, malformed handshake messages, repeated connection attempts, and requests associated with a stale session. Verify errors are stable and no later service becomes usable before a successful handshake.  ## Out of scope  Do not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust. | `A0`, `P0`, `PRT1` | `BLOCKED` | — |
+| `PYR2` | `provider` | **[TASK][MVP] Expose Rust-Managed Session Negotiation Through the Python SDK**<br>## Description  This slice routes Provider Python startup/session management through the Rust Bootstrap implementation. It follows the Rust handshake milestone and provides the first negotiated session for later procedures.  ## Outcome  The existing Python startup API opens the Rust-managed SFP session and surfaces the negotiated result through the established ergonomic interface.  ## Ownership and boundaries  Provider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.  ## Required behavior  Wire the existing Provider Python startup/session API to Rust-managed Bootstrap. Preserve public configuration and lifecycle calls while exposing ergonomic errors and negotiated session information. Python must not independently negotiate versions, validate session identity, or own session fencing.  Provider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.  Preserve Provider Python's public construction, configuration, lifecycle, and import paths. Delegate version negotiation, identity/generation checks, session creation, and fencing to Rust; Python may translate runtime errors into the SDK's established error style but must not make its own negotiation decision. Ensure a failed handshake aborts startup cleanly and does not report the Provider ready.  ## Compatibility requirements  Preserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.  ## Acceptance criteria  - Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested. - Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns identity/generation match and mismatch; highest-common-version selection; no-common-version errors; session establishment; stale-session fencing. - Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify identity/generation match and mismatch; highest-common-version selection; no-common-version errors; session establishment; stale-session fencing across the real SFP boundary.  Exercise successful negotiation and startup failure against the current Agent using installed Provider Python and the built Rust runtime. Verify common-version selection, no-common-version failure, identity/generation mismatch, stale-session rejection, and source compatibility for existing callers.  ## Out of scope  Do not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the Bootstrap session negotiation slice. | `A0`, `A13`, `PRT2` | `BLOCKED` | — |
+| `PRT3` | `provider-runtime` | **[TASK][MVP] Implement Provider Manifest and Presentation Exchange**<br>## Description  Once a session exists, the Agent needs the Provider's operational manifest and optional presentation snapshot. This milestone moves the Provider-side exchange and its protocol lifecycle into Rust without making presentation operationally authoritative.  ## Outcome  The Rust runtime serves the declared manifest and optional presentation through the canonical SFP exchange, with validation and revision/session behavior matching Protocol.  ## Ownership and boundaries  The Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.  ## Required behavior  Serve the accepted Provider manifest and optional presentation snapshot through canonical SFP. Rust owns wire exchange, protocol validation, session/revision fencing, and safe refresh. Keep the operational manifest authoritative; presentation metadata cannot alter operation or trigger semantics. Provider-specific declarations may be supplied by the host SDK, while Rust owns their protocol representation and exchange.  The implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.  Use the Protocol-owned manifest and presentation structures; do not define new wire fields or duplicate schemas. Keep presentation optional and separate from operation/trigger eligibility, request/result schemas, and execution behavior. Enforce the contract's structural validation, accepted revision/snapshot rules, session association, refresh behavior, and resource bounds. Host-language declarations may supply the Provider-specific manifest content, while Rust owns its SFP representation, validation, serving, and refresh.  ## Compatibility requirements  Keep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.  ## Acceptance criteria  - Rust unit and conformance tests cover valid manifest/presentation exchange; malformed schema/declaration rejection; revision consistency; refresh and session fencing.  Cover valid and absent presentation, malformed manifest/presentation, stale or inconsistent revision, refresh during a session, refresh across sessions, and proof that presentation-only changes do not alter operational declarations or admission semantics.  ## Out of scope  Do not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust. | `A1`, `P1`, `PYR2` | `BLOCKED` | — |
+| `PYR3` | `provider` | **[TASK][MVP] Expose Rust-Managed Manifest and Presentation Exchange Through the Python SDK**<br>## Description  This slice connects Provider Python's existing declarations to Rust-managed manifest and presentation exchange. It retains the Python authoring surface while moving wire representation and exchange behavior to the shared runtime.  ## Outcome  Existing Provider Python declarations are compiled or adapted into the canonical SFP manifest/presentation input consumed and served by Rust.  ## Ownership and boundaries  Provider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.  ## Required behavior  Keep Provider Python's current declaration models and authoring surface while passing the manifest/presentation to Rust. Python may define Provider-specific declarations but must not duplicate SFP serialization, wire validation, revision management, exchange, or session fencing.  Provider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.  Preserve current declaration models, operation/trigger identifiers, schema authoring, and Provider presentation authoring. Python remains responsible for expressing Provider-specific declarations; Rust owns protocol validation, serialization, revision/session behavior, and exchange. Make conversion errors actionable at declaration or startup time, and avoid separate Python and Rust interpretations of the same wire contract.  ## Compatibility requirements  Preserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.  ## Acceptance criteria  - Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested. - Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns valid manifest/presentation exchange; malformed schema/declaration rejection; revision consistency; refresh and session fencing. - Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify valid manifest/presentation exchange; malformed schema/declaration rejection; revision consistency; refresh and session fencing across the real SFP boundary.  With built artifacts, verify valid manifests and optional presentations reach the Agent; malformed declarations are rejected; revision and refresh behavior is correct; and a presentation change does not alter operational eligibility. Run existing Provider Python manifest API tests to prove source compatibility.  ## Out of scope  Do not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the manifest and presentation exchange slice. | `A1`, `A13`, `PRT3`, `R1` | `BLOCKED` | — |
+| `PRT4` | `provider-runtime` | **[TASK][MVP] Implement Health Reporting**<br>## Description  The Provider must report readiness and health on the established SFP channel. This milestone gives Rust ownership of that standard health procedure so other language SDKs do not each implement it.  ## Outcome  The Rust runtime exposes the Protocol-defined use of standard gRPC health, including readiness state and Watch behavior, on the active session.  ## Ownership and boundaries  The Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.  ## Required behavior  Implement Provider-side standard gRPC health behavior on the established SFP channel. Rust owns readiness transitions, health checks/watch streams, session fencing, and recovery semantics. Distinguish liveness from readiness and do not report ready before required Provider initialization completes.  The implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.  Use the standard health contract and the service names defined by the existing Protocol documentation. Model startup, ready, not-serving, and shutdown transitions; do not equate process liveness with service readiness. Start in the appropriate non-ready state until required Provider initialization completes. Serve checks and watches with the specified session and cancellation behavior, and prevent updates from an old session from changing the current status.  ## Compatibility requirements  Keep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.  ## Acceptance criteria  - Rust unit and conformance tests cover initial readiness; serving/not-serving transitions; Watch updates; startup/shutdown; session loss/recovery.  Test initial state, transition ordering, check and watch results, startup failure, graceful shutdown, watch cancellation, reconnect/session fencing, and behavior when readiness changes concurrently with connection teardown.  ## Out of scope  Do not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust. | `A2`, `P6`, `PYR3`, `R2` | `BLOCKED` | — |
+| `PYR4` | `provider` | **[TASK][MVP] Expose Rust-Managed Health Reporting Through the Python SDK**<br>## Description  This slice adapts the existing Python health declarations and lifecycle hooks to Rust's health service. Provider-specific readiness logic stays with the Provider; shared SFP health semantics move to Rust.  ## Outcome  The current Python health API drives Rust-owned health state and serves the existing Agent without a parallel Python health server.  ## Ownership and boundaries  Provider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.  ## Required behavior  Preserve the current Python health declaration and lifecycle API, mapping readiness changes into Rust. Provider-specific readiness hooks may remain Python callbacks; Rust owns health protocol behavior, state transitions, Watch delivery, and sessions. Do not maintain a competing Python health service.  Provider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.  Preserve current health declaration, readiness hooks, lifecycle calls, and public exports. Send readiness changes to Rust through the binding; keep Provider-specific initialization/readiness callbacks in Python where they belong. Rust owns the health service, state transitions, Check/Watch semantics, session fencing, and shutdown behavior. Do not keep a second Python health state machine or gRPC health endpoint.  ## Compatibility requirements  Preserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.  ## Acceptance criteria  - Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested. - Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns initial readiness; serving/not-serving transitions; Watch updates; startup/shutdown; session loss/recovery. - Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify initial readiness; serving/not-serving transitions; Watch updates; startup/shutdown; session loss/recovery across the real SFP boundary.  Run installed-process Agent scenarios for initial not-ready state, ready transition, not-serving transition, Watch updates, startup failure, graceful shutdown, and reconnect. Verify the documented Python API still works and no Python-owned health protocol fallback is used.  ## Out of scope  Do not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the health and availability slice. | `A13`, `A2`, `PRT4`, `R2` | `BLOCKED` | — |
+| `PRT5` | `provider-runtime` | **[TASK][MVP] Implement Capability Assessment**<br>## Description  Capability Assessment lets the Agent ask whether a declared Provider operation can run in a given context. Rust owns the common SFP request/response procedure while Provider-specific evaluation can remain a callback.  ## Outcome  The Rust runtime validates and processes Capability Assessment requests and returns normalized outcomes through the canonical Protocol contract.  ## Ownership and boundaries  The Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.  ## Required behavior  Implement Provider-side assessment transport, request validation, deadlines, response normalization, and result/session lifecycle using Protocol-owned contracts. Rust owns assessment procedure semantics. A Provider-specific evaluator may be invoked as a host callback, but cannot reimplement wire handling, generic requirement validation, retries, or session behavior.  The implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.  Validate the requested operation and assessment input against the accepted manifest and active session. Apply Protocol-defined deadlines and retry/error behavior. Normalize supported, unsupported, incompatible, and assessment-failure outcomes, preserving structured requirements and reasons. If an assessment needs Provider-specific facts, invoke the declared host callback with validated input; keep generic request validation, transport, result state, and session handling in Rust.  ## Compatibility requirements  Keep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.  ## Acceptance criteria  - Rust unit and conformance tests cover supported/unsupported/incompatible outcomes; requirement and reason propagation; deadlines; invalid/missing outcomes; retry behavior.  Test each normalized outcome, unknown/undeclared operation, invalid or incomplete requirement data, callback success/failure, deadline expiration, retryable transport failure, and session invalidation. Ensure an evaluator exception becomes a safe protocol result/error without exposing Python tracebacks or secrets.  ## Out of scope  Do not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust. | `A3`, `P2`, `PYR4`, `R3` | `BLOCKED` | — |
+| `PYR5` | `provider` | **[TASK][MVP] Expose Rust-Managed Capability Assessment Through the Python SDK**<br>## Description  This slice exposes Rust-managed Capability Assessment through the existing Python Provider declarations. The Python API remains the ergonomic place to supply Provider-specific assessment logic.  ## Outcome  Provider Python keeps its established capability declaration and evaluator API while Rust owns the SFP assessment procedure and invokes the Python evaluator only where required.  ## Ownership and boundaries  Provider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.  ## Required behavior  Preserve the current Python capability declaration/evaluator API and adapt evaluator callbacks to Rust. Python remains the ergonomic surface for Provider-specific logic; Rust owns request/response contracts, generic validation, deadline/retry behavior, and protocol state.  Provider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.  Preserve the declaration shape, evaluator callback signature, and exports. Pass validated assessment inputs from Rust to the Provider-specific callback, then return its result to Rust for normalization and SFP response. Do not duplicate generic requirement validation, deadlines, retries, session checks, or response-state logic in Python.  ## Compatibility requirements  Preserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.  ## Acceptance criteria  - Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested. - Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns supported/unsupported/incompatible outcomes; requirement and reason propagation; deadlines; invalid/missing outcomes; retry behavior. - Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify supported/unsupported/incompatible outcomes; requirement and reason propagation; deadlines; invalid/missing outcomes; retry behavior across the real SFP boundary.  Test supported, unsupported, and incompatible cases; requirement and reason propagation; invalid evaluator results; evaluator exceptions; deadline and retry behavior; and source compatibility. Run the current Agent against installed Provider Python backed by Rust and verify these outcomes cross the real SFP boundary.  ## Out of scope  Do not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the capability assessment slice. | `A13`, `A3`, `PRT5`, `R3` | `BLOCKED` | — |
+| `PRT6` | `provider-runtime` | **[TASK][MVP] Implement Idempotent Operation Admission and Dispatch**<br>## Description  Operation Admission is the boundary where a requested action becomes accepted work. The Rust runtime must own idempotency and admission state so a language binding cannot accidentally dispatch duplicate work.  ## Outcome  An accepted operation is recorded and dispatched to its Provider handler once per retained operation identity, according to the canonical SFP admission and fingerprint rules.  ## Ownership and boundaries  The Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.  ## Required behavior  Implement atomic admission, canonical request fingerprinting, duplicate resolution, conflict detection, retained admission state, and exactly-one handler dispatch per accepted operation. Rust owns identifiers, admission state, idempotency, validation, and dispatch coordination. Invoke only the Provider author's business handler; do not move user implementation into Rust.  The implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.  Validate the operation identifier, request schema, active session, and immutable invocation fields before admission. Compute the canonical request fingerprint exactly as Protocol defines it. Atomically create the accepted record before invoking user code. For a repeated ID with identical content, resolve the existing record without a second handler invocation; for the same ID with changed content, return the defined conflict. Define concurrency and retained-state behavior, and do not interpret missing/expired state as permission to redispatch an uncertain side effect.  ## Compatibility requirements  Keep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.  ## Acceptance criteria  - Rust unit and conformance tests cover new admission; identical retry; same-ID changed-content conflict; concurrent duplicate; invalid/undeclared operation; exactly-one callback invocation; retention boundary.  Exercise new admission, identical retry, changed-payload/target conflict, concurrent duplicate submissions, invalid schema, undeclared operation, deadline before admission, handler dispatch count, and retained versus expired state. Avoid claiming business-level exactly-once effects; test only the guarantees made by the SFP admission contract.  ## Out of scope  Do not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust. | `A5`, `P4`, `PYR5`, `R5` | `BLOCKED` | — |
+| `PYR6` | `provider` | **[TASK][MVP] Expose Rust-Managed Operation Admission and Dispatch Through the Python SDK**<br>## Description  This slice preserves Python's operation authoring API while routing admission and dispatch through Rust. Provider-defined operation logic remains in Python and runs only after Rust accepts new work.  ## Outcome  Existing @operation declarations, request models, handler signatures, and context ergonomics continue to work over Rust-owned admission and dispatch.  ## Ownership and boundaries  Provider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.  ## Required behavior  Preserve @operation, request models, handler signature, and context ergonomics while routing invocations to Rust. Python must not implement a parallel admission registry, fingerprint, retry/idempotency algorithm, transport, or dispatch state machine. User handlers remain Python callbacks and run only after Rust admits a new operation.  Provider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.  Keep public imports, decorators, operation registration, validation messages, and handler call conventions compatible. Deliver the immutable request and callback registration to Rust. Rust validates, fingerprints, stores admission state, resolves duplicates/conflicts, and decides whether to dispatch. Invoke the Python handler only for a new accepted record; never duplicate the admission decision in a Python registry.  ## Compatibility requirements  Preserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.  ## Acceptance criteria  - Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested. - Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns new admission; identical retry; same-ID changed-content conflict; concurrent duplicate; invalid/undeclared operation; exactly-one callback invocation; retention boundary. - Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify new admission; identical retry; same-ID changed-content conflict; concurrent duplicate; invalid/undeclared operation; exactly-one callback invocation; retention boundary across the real SFP boundary.  Run the compatibility suite and installed Agent scenario for new admission, same-request retry, changed-content conflict, concurrent duplicates, invalid/undeclared operation, exactly-one callback invocation per retained accepted ID, and state-retention boundaries. Verify the runtime path uses the built Rust artifact, not the legacy Python admission runtime.  ## Out of scope  Do not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the operation admission and dispatch slice. | `A13`, `A5`, `PRT6`, `R5` | `BLOCKED` | — |
+| `PRT7` | `provider-runtime` | **[TASK][MVP] Implement the Operation Lifecycle: Progress, Results, Errors, and Cancellation**<br>## Description  After admission and dispatch, the Provider must expose live progress and a stable terminal outcome. This milestone places the operation lifecycle semantics in Rust, including cancellation races.  ## Outcome  Rust owns the authoritative operation state machine, sequenced progress observations, terminal results/errors, and cooperative cancellation behavior.  ## Ownership and boundaries  The Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.  ## Required behavior  Implement the authoritative lifecycle state machine in Rust: sequenced progress, replayable observations, terminal result/error state, and cooperative cancellation including races. Rust owns transitions, progress semantics, terminal immutability, observer streams, retention/backpressure, and normalized failures. Host-language handlers may report progress, return results, raise errors, and cooperate with cancellation only through the binding.  The implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.  Implement the Protocol-defined accepted/running/cancellation-requested/terminal states and legal transitions. Assign monotonic progress sequence values, retain/coalesce observations within defined bounds, replay current state to late watchers, and keep terminal outcomes immutable while retained. Validate successful results against the declared result schema; normalize failures without leaking secrets or remote tracebacks. Treat cancellation as cooperative: a request is not proof the operation stopped, and the first terminal outcome wins a completion/cancel race.  ## Compatibility requirements  Keep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.  ## Acceptance criteria  - Rust unit and conformance tests cover monotonic progress and replay; valid terminal results; normalized failures; cancellation requested/unsupported/already-terminal; completion-cancel races; terminal immutability.  Cover early and late Watch, monotonic sequence and replay, gaps/retention behavior, valid and invalid result schemas, normalized errors and partial-effect information, unsupported/already-terminal cancellation, cooperative cancellation, completion/cancellation races, and terminal immutability.  ## Out of scope  Do not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust. | `A6`, `P5`, `PYR6`, `R6` | `BLOCKED` | — |
+| `PYR7` | `provider` | **[TASK][MVP] Expose the Rust-Managed Operation Lifecycle Through the Python SDK**<br>## Description  This slice makes Rust-owned progress, results, errors, and cancellation usable from the existing Python operation handler API. Python presents the runtime behavior ergonomically but does not implement its semantics.  ## Outcome  Provider Python handlers continue to report progress, produce typed results, raise failures, and cooperate with cancellation through the established API, while Rust controls lifecycle state.  ## Ownership and boundaries  Provider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.  ## Required behavior  Preserve the current Python handler and context API, exposing Rust-owned progress, result completion, normalized errors, and cooperative cancellation ergonomically. Progress semantics and lifecycle state exist only in Rust; Python must not mirror sequence allocation, terminal transitions, replay, retention, cancellation races, or transport. Python handlers remain user callbacks.  Provider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.  Preserve handler signatures and context APIs; adapt existing progress/result/error/cancellation helpers to Rust-managed operations. A Python handler may emit progress, return a result, raise an exception, and observe a cancellation request, but it must not allocate protocol sequence numbers, manage replay/retention, decide terminal transitions, or implement cancellation races. Convert Python exceptions into the Rust runtime's normalized error representation.  ## Compatibility requirements  Preserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.  ## Acceptance criteria  - Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested. - Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns monotonic progress and replay; valid terminal results; normalized failures; cancellation requested/unsupported/already-terminal; completion-cancel races; terminal immutability. - Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify monotonic progress and replay; valid terminal results; normalized failures; cancellation requested/unsupported/already-terminal; completion-cancel races; terminal immutability across the real SFP boundary.  Run Agent end-to-end tests for sequenced progress and replay, successful typed result, invalid result, normalized failure, cancellation request, unsupported cancellation, completion/cancel race, and immutable terminal state. Confirm existing Python handler code remains source-compatible and the integration uses installed Rust-backed artifacts.  ## Out of scope  Do not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the operation progress, results, errors, and cancellation slice. | `A13`, `A6`, `PRT7`, `R6` | `BLOCKED` | — |
+| `PRT8` | `provider-runtime` | **[TASK][MVP] Implement Trigger Publication and Acknowledgement**<br>## Description  Triggers originate from Provider-specific event detection but are delivered through a shared SFP publication procedure. Rust owns publication identity, retry, acknowledgement, and stream state.  ## Outcome  The Rust runtime publishes valid trigger envelopes and handles acknowledgements/replay according to the canonical SFP contract without duplicating events after a lost acknowledgement.  ## Ownership and boundaries  The Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.  ## Required behavior  Implement Provider-side stream setup, envelope validation, stable publication IDs, canonical equality, bounded retry/replay, and acknowledgement handling. Rust owns publication state, retries, acknowledgement dispositions, session fencing, and backpressure. Provider-specific trigger detection/event construction may remain host callbacks.  The implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.  Validate trigger identifiers and payloads against the accepted manifest and active session. Assign/preserve stable publication identity; use canonical content equality so identical replay is a duplicate and ID reuse with changed content is a conflict. Implement the defined accepted-new, accepted-duplicate, and rejected acknowledgements, bounded retry/replay, ordering, and backpressure. Provider-specific event detection and payload construction may run as host callbacks; Rust owns the publication protocol.  ## Compatibility requirements  Keep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.  ## Acceptance criteria  - Rust unit and conformance tests cover accepted-new; accepted-duplicate replay; changed-content conflict; lost acknowledgement; invalid payload/session; bounded backpressure.  Test new publication, duplicate replay, conflicting ID/content, lost acknowledgement, invalid/undeclared trigger, invalid payload, stale session, ordering, retry bounds, and backpressure. Verify acknowledgement results correspond to the correct publication and replay does not create a second logical delivery.  ## Out of scope  Do not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust. | `A4`, `P3`, `PYR7`, `R4` | `BLOCKED` | — |
+| `PYR8` | `provider` | **[TASK][MVP] Expose Rust-Managed Trigger Publication and Acknowledgement Through the Python SDK**<br>## Description  This slice keeps Python trigger declarations and event-producing callbacks while handing publication and acknowledgement to Rust. It is the Python binding for the shared trigger procedure.  ## Outcome  Existing Python trigger authoring remains usable, but Rust owns publication IDs, transport, replay, deduplication, acknowledgements, and backpressure.  ## Ownership and boundaries  Provider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.  ## Required behavior  Preserve current Python trigger declarations and event-producing callback API while handing events to Rust. Python must not implement publication transport, IDs/deduplication, retry/replay, acknowledgement state, or session semantics; it provides ergonomic authoring and invokes Provider-specific event callbacks.  Provider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.  Preserve trigger declarations, callback signatures, and event construction in Provider Python. Pass each produced event to Rust for schema validation and publication. Surface accepted, duplicate, rejected, retry, and terminal transport outcomes through the ergonomic SDK API without implementing a parallel Python queue or acknowledgement state machine.  ## Compatibility requirements  Preserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.  ## Acceptance criteria  - Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested. - Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns accepted-new; accepted-duplicate replay; changed-content conflict; lost acknowledgement; invalid payload/session; bounded backpressure. - Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify accepted-new; accepted-duplicate replay; changed-content conflict; lost acknowledgement; invalid payload/session; bounded backpressure across the real SFP boundary.  Test callback/API compatibility and run the Agent against installed Rust-backed Provider Python for accepted-new, duplicate replay, conflicting content, lost acknowledgement, invalid payload/session, ordering, and bounded backpressure. Confirm replay retains the same publication identity and does not re-run event detection unless the host callback contract explicitly requires it.  ## Out of scope  Do not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the trigger publication and acknowledgement slice. | `A13`, `A4`, `PRT8`, `R4` | `BLOCKED` | — |
+| `PRT9` | `provider-runtime` | **[TASK][MVP] Implement Disconnection Recovery and State Reconciliation**<br>## Description  The final runtime procedure reconciles endpoint/session continuity with in-flight operations and trigger publications after disconnection. It depends on the earlier runtime procedures because recovery must restore their state consistently.  ## Outcome  Rust re-establishes a valid session, fences old channels, and resumes only the operation and trigger work justified by retained state and Protocol rules.  ## Ownership and boundaries  The Rust Provider Runtime is authoritative for this procedure's SFP transport, wire-level validation, state, retries, session fencing, and error behavior. Use the versioned contract in stateforge-protocol and do not fork or change it. Invoke host-language code only for Provider-specific declarations or business handlers; such callbacks do not own the shared protocol semantics.  ## Required behavior  Implement Provider-side recovery using Rust-owned session, admission, lifecycle, and trigger state. Fence stale channels/generations, classify retained versus lost state, resume observation/publication safely, and never redispatch uncertain operations automatically. Preserve Protocol-defined indeterminate outcomes; do not promise recovery beyond retained evidence.  The implementation must behave consistently with the current Agent and preserve existing SFP contracts. Make resource bounds, state retention, error mapping, concurrency, and startup/shutdown behavior explicit in code and tests.  Follow the Protocol recovery order: rediscover and validate the endpoint, negotiate a new session, fence the old channel, classify state continuity, then reconcile admissions, operation observations, and trigger publications. Resume observation/replay from retained cursors or identities. If accepted-operation state is unavailable or ambiguous, report the defined indeterminate condition; never automatically redispatch an uncertain side effect. Preserve the distinction between transport loss and business-operation cancellation.  ## Compatibility requirements  Keep the current Agent as an unchanged interoperability peer. Preserve the canonical SFP schema, identifiers, fingerprints, and documented error/retention guarantees. This milestone changes the Provider-side implementation, not Protocol ownership or Agent behavior.  ## Acceptance criteria  - Rust unit and conformance tests cover disconnect/reconnect; stale session/generation fencing; retained/lost operation state; trigger replay; uncertain admission without automatic redispatch.  Test reconnect with unchanged and changed endpoint generations; stale channel rejection; retained and lost admission/lifecycle records; resuming late operation observers; trigger replay after lost acknowledgement; duplicate acknowledgement; and ambiguous admission without redispatch. Verify cleanup and bounded state recovery.  ## Out of scope  Do not add Agent behavior, alter Protocol-owned schemas, change unrelated Provider APIs, or introduce product-specific behavior into Rust. | `A11`, `P8`, `P9`, `PYR8`, `R9` | `BLOCKED` | — |
+| `PYR9` | `provider` | **[TASK][MVP] Expose Rust-Managed Disconnection Recovery Through the Python SDK**<br>## Description  This slice makes Rust-managed recovery the behavior behind the existing Provider Python lifecycle. It closes the procedure-by-procedure migration and enables the supported Rust-backed Python Provider path.  ## Outcome  Provider Python preserves its public lifecycle and callbacks while delegating reconnect, fencing, replay, and reconciliation decisions entirely to Rust.  ## Ownership and boundaries  Provider Python remains the public, ergonomic authoring API and the place for Provider-specific declarations and user callbacks. Rust owns the shared SFP transport and procedure semantics, including validation, state, retries, session handling, and recovery where applicable. The Python layer adapts the existing API to Rust; it must not maintain a competing protocol implementation or fallback.  ## Required behavior  Preserve Provider Python startup, shutdown, and callback APIs while exposing Rust-managed reconnection/reconciliation. Python must not own session recovery, state replay, stale-channel fencing, redispatch decisions, or retry semantics. Provider-specific callbacks remain host code; uncertainty is reported from Rust runtime state.  Provider-specific user-defined declarations, operation handlers, trigger callbacks, or readiness/evaluation hooks remain in Python where applicable. The binding passes inputs to Rust and presents Rust outcomes through the existing or narrowly extended ergonomic API; it does not reimplement runtime behavior.  Keep existing Provider construction, startup/shutdown, handler, and callback APIs. Bind their lifecycle to the Rust runtime's reconnect/reconciliation state. Python may restart or re-register Provider-specific callbacks as required by the SDK, but must not decide session continuity, replay cursors, whether to redispatch, or whether an outcome is indeterminate. Surface those outcomes from Rust without converting uncertainty into success or a fresh execution.  ## Compatibility requirements  Preserve existing documented Provider Python imports, declarations, decorators, request/result models, handler signatures, lifecycle calls, and callback behavior. The installed-process integration must use Provider Python backed by the built Rust Runtime and the current Agent; do not pass by silently exercising the legacy Python runtime. Keep Provider-specific business logic in Python.  ## Acceptance criteria  - Existing documented Provider Python imports, decorators, handler signatures, lifecycle calls, and behavior remain source-compatible; any adapter or deprecation is explicitly tested. - Python tests cover the author-facing binding and verify Rust, not a Python fallback, owns disconnect/reconnect; stale session/generation fencing; retained/lost operation state; trigger replay; uncertain admission without automatic redispatch. - Run an installed-process integration scenario with the current StateForge Agent against Provider Python backed by the Rust Runtime. Verify disconnect/reconnect; stale session/generation fencing; retained/lost operation state; trigger replay; uncertain admission without automatic redispatch across the real SFP boundary.  Use installed Provider Python and the current Agent to test disconnect/reconnect, stale generation/session fencing, retained/lost operation state, resumed observation, trigger replay and duplicate acknowledgements, and uncertain admission without automatic redispatch. Verify Python public API compatibility and no Python recovery fallback.  ## Out of scope  Do not move Provider-specific business logic into Rust, create a parallel Python SFP runtime, or change Agent behavior. Completing all nine Provider Python milestones together makes the Rust-backed Python Provider the supported runtime path; this milestone is only the disconnection recovery and state reconciliation slice. | `A11`, `A13`, `PRT9`, `R9` | `BLOCKED` | — |
 
 ## Milestone context contracts
 
@@ -10465,6 +12323,324 @@ _No implementation context has been declared yet._
 - **test** · `control-plane` · `Full CP application/browser workflows cover both authoring paths, ambiguous/partial repair, multiple Providers, reload/persistence, authorization and secret safety; no silent rebinding or false remote-execution claims.` — Automated acceptance evidence for the milestone's required observable behavior.
 - **command** · `control-plane` · `Run all configured CP frontend/backend quality gates, production build, full regression tests and strict documentation checks; document the new public behavior and limitations.` — Prevent a model-only or UI-only implementation from being declared complete and keep examples usable.
 
+### `PRT1` — [TASK][MVP] Implement Provider Endpoint Discovery
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/endpoint-discovery.md` → `markdown_heading:Descriptor v1 contract` | `must_understand` | `canonical` | Yes | Read the normative SFP endpoint discovery procedure and its Provider/Agent responsibility split; focus on “Descriptor v1 contract”. |
+| `agent/src/stateforge_agent/_sfp/_runtime/discovery.py` | `must_understand` | `compatibility` | Yes | Use the current Agent endpoint discovery implementation as the interoperable peer contract. |
+| `agent/tests/test_endpoint_lifecycle.py` | `must_preserve` | `compatibility` | Yes | Preserve current Agent endpoint discovery behavior; use these tests as interoperability expectations. |
+| `provider/src/stateforge_provider/_runtime/descriptor.py` | `must_understand` | `compatibility` | Yes | Use the current Provider Python endpoint discovery implementation to identify behavior moving into the shared Rust runtime. |
+
+#### Verification contract
+
+- **test** · `provider-runtime` · `Rust endpoint discovery unit/conformance suite` — Exercise descriptor/socket identity and generation correlation; atomic publication ordering; permissions; restart generation changes; safe cleanup; malformed/stale endpoint rejection against the canonical SFP contract, including invalid and boundary cases.
+- **test** · `provider-runtime` · `SFP compatibility vectors for endpoint discovery` — Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.
+- **command** · `provider-runtime` · `cargo fmt --check && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings` — Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.
+
+### `PYR1` — [TASK][MVP] Expose Rust-Managed Endpoint Discovery Through the Python SDK
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/endpoint-discovery.md` → `markdown_heading:Descriptor v1 contract` | `must_understand` | `canonical` | Yes | Read the normative SFP endpoint discovery procedure and its Provider/Agent responsibility split; focus on “Descriptor v1 contract”. |
+| `provider/src/stateforge_provider/provider.py` | `must_preserve` | `compatibility` | Yes | Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime. |
+| `provider/src/stateforge_provider/__init__.py` | `must_preserve` | `compatibility` | Yes | Preserve existing public exports and import paths. |
+| `provider/src/stateforge_provider/_runtime/descriptor.py` | `expected_to_change` | `compatibility` | Yes | Replace or adapt the current Python-owned endpoint discovery implementation behind the stable author-facing API. |
+| `agent/tests/test_endpoint_lifecycle.py` | `must_understand` | `compatibility` | Yes | Use the current Agent endpoint discovery integration tests as the end-to-end compatibility contract. |
+
+#### Verification contract
+
+- **test** · `provider` · `Provider Python public API compatibility tests` — Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns endpoint discovery.
+- **integration** · `provider` · `Installed-process Agent-to-Provider scenario` — Run the current Agent against built Provider Python backed by the built Rust Runtime; assert descriptor/socket identity and generation correlation; atomic publication ordering; permissions; restart generation changes; safe cleanup; malformed/stale endpoint rejection end to end.
+- **command** · `provider` · `Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks` — Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.
+
+### `PRT2` — [TASK][MVP] Implement Bootstrap Handshake and Version Negotiation
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/bootstrap.md` | `must_understand` | `canonical` | Yes | Read the normative SFP Bootstrap session negotiation procedure and its Provider/Agent responsibility split. |
+| `agent/src/stateforge_agent/_sfp/_services/bootstrap/client.py` | `must_understand` | `compatibility` | Yes | Use the current Agent Bootstrap session negotiation implementation as the interoperable peer contract. |
+| `agent/tests/test_sfp_session.py` | `must_preserve` | `compatibility` | Yes | Preserve current Agent Bootstrap session negotiation behavior; use these tests as interoperability expectations. |
+| `provider/src/stateforge_provider/_services/bootstrap/service.py` | `must_understand` | `compatibility` | Yes | Use the current Provider Python Bootstrap session negotiation implementation to identify behavior moving into the shared Rust runtime. |
+
+#### Verification contract
+
+- **test** · `provider-runtime` · `Rust Bootstrap session negotiation unit/conformance suite` — Exercise identity/generation match and mismatch; highest-common-version selection; no-common-version errors; session establishment; stale-session fencing against the canonical SFP contract, including invalid and boundary cases.
+- **test** · `provider-runtime` · `SFP compatibility vectors for Bootstrap session negotiation` — Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.
+- **command** · `provider-runtime` · `cargo fmt --check && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings` — Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.
+
+### `PYR2` — [TASK][MVP] Expose Rust-Managed Session Negotiation Through the Python SDK
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/bootstrap.md` | `must_understand` | `canonical` | Yes | Read the normative SFP Bootstrap session negotiation procedure and its Provider/Agent responsibility split. |
+| `provider/src/stateforge_provider/provider.py` | `must_preserve` | `compatibility` | Yes | Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime. |
+| `provider/src/stateforge_provider/__init__.py` | `must_preserve` | `compatibility` | Yes | Preserve existing public exports and import paths. |
+| `provider/src/stateforge_provider/_services/bootstrap/service.py` | `expected_to_change` | `compatibility` | Yes | Replace or adapt the current Python-owned Bootstrap session negotiation implementation behind the stable author-facing API. |
+| `agent/tests/test_sfp_session.py` | `must_understand` | `compatibility` | Yes | Use the current Agent Bootstrap session negotiation integration tests as the end-to-end compatibility contract. |
+
+#### Verification contract
+
+- **test** · `provider` · `Provider Python public API compatibility tests` — Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns Bootstrap session negotiation.
+- **integration** · `provider` · `Installed-process Agent-to-Provider scenario` — Run the current Agent against built Provider Python backed by the built Rust Runtime; assert identity/generation match and mismatch; highest-common-version selection; no-common-version errors; session establishment; stale-session fencing end to end.
+- **command** · `provider` · `Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks` — Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.
+
+### `PRT3` — [TASK][MVP] Implement Provider Manifest and Presentation Exchange
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/provider-manifest.md` → `markdown_heading:Who implements Manifest Exchange` | `must_understand` | `canonical` | Yes | Read the normative SFP manifest and presentation exchange procedure and its Provider/Agent responsibility split; focus on “Who implements Manifest Exchange”. |
+| `agent/src/stateforge_agent/_sfp/_services/manifest/client.py` | `must_understand` | `compatibility` | Yes | Use the current Agent manifest and presentation exchange implementation as the interoperable peer contract. |
+| `agent/tests/test_manifest_exchange.py` | `must_preserve` | `compatibility` | Yes | Preserve current Agent manifest and presentation exchange behavior; use these tests as interoperability expectations. |
+| `provider/src/stateforge_provider/_services/manifest/declaration.py` | `must_understand` | `compatibility` | Yes | Use the current Provider Python manifest and presentation exchange implementation to identify behavior moving into the shared Rust runtime. |
+
+#### Verification contract
+
+- **test** · `provider-runtime` · `Rust manifest and presentation exchange unit/conformance suite` — Exercise valid manifest/presentation exchange; malformed schema/declaration rejection; revision consistency; refresh and session fencing against the canonical SFP contract, including invalid and boundary cases.
+- **test** · `provider-runtime` · `SFP compatibility vectors for manifest and presentation exchange` — Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.
+- **command** · `provider-runtime` · `cargo fmt --check && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings` — Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.
+
+### `PYR3` — [TASK][MVP] Expose Rust-Managed Manifest and Presentation Exchange Through the Python SDK
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/provider-manifest.md` → `markdown_heading:Who implements Manifest Exchange` | `must_understand` | `canonical` | Yes | Read the normative SFP manifest and presentation exchange procedure and its Provider/Agent responsibility split; focus on “Who implements Manifest Exchange”. |
+| `provider/src/stateforge_provider/provider.py` | `must_preserve` | `compatibility` | Yes | Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime. |
+| `provider/src/stateforge_provider/__init__.py` | `must_preserve` | `compatibility` | Yes | Preserve existing public exports and import paths. |
+| `provider/src/stateforge_provider/_services/manifest/declaration.py` | `expected_to_change` | `compatibility` | Yes | Replace or adapt the current Python-owned manifest and presentation exchange implementation behind the stable author-facing API. |
+| `agent/tests/test_manifest_exchange.py` | `must_understand` | `compatibility` | Yes | Use the current Agent manifest and presentation exchange integration tests as the end-to-end compatibility contract. |
+
+#### Verification contract
+
+- **test** · `provider` · `Provider Python public API compatibility tests` — Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns manifest and presentation exchange.
+- **integration** · `provider` · `Installed-process Agent-to-Provider scenario` — Run the current Agent against built Provider Python backed by the built Rust Runtime; assert valid manifest/presentation exchange; malformed schema/declaration rejection; revision consistency; refresh and session fencing end to end.
+- **command** · `provider` · `Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks` — Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.
+
+### `PRT4` — [TASK][MVP] Implement Health Reporting
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/health.md` → `markdown_heading:Who implements Health` | `must_understand` | `canonical` | Yes | Read the normative SFP health and availability procedure and its Provider/Agent responsibility split; focus on “Who implements Health”. |
+| `agent/src/stateforge_agent/_sfp/_services/health/client.py` | `must_understand` | `compatibility` | Yes | Use the current Agent health and availability implementation as the interoperable peer contract. |
+| `agent/tests/test_health_client.py` | `must_preserve` | `compatibility` | Yes | Preserve current Agent health and availability behavior; use these tests as interoperability expectations. |
+| `provider/src/stateforge_provider/_services/health/service.py` | `must_understand` | `compatibility` | Yes | Use the current Provider Python health and availability implementation to identify behavior moving into the shared Rust runtime. |
+
+#### Verification contract
+
+- **test** · `provider-runtime` · `Rust health and availability unit/conformance suite` — Exercise initial readiness; serving/not-serving transitions; Watch updates; startup/shutdown; session loss/recovery against the canonical SFP contract, including invalid and boundary cases.
+- **test** · `provider-runtime` · `SFP compatibility vectors for health and availability` — Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.
+- **command** · `provider-runtime` · `cargo fmt --check && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings` — Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.
+
+### `PYR4` — [TASK][MVP] Expose Rust-Managed Health Reporting Through the Python SDK
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/health.md` → `markdown_heading:Who implements Health` | `must_understand` | `canonical` | Yes | Read the normative SFP health and availability procedure and its Provider/Agent responsibility split; focus on “Who implements Health”. |
+| `provider/src/stateforge_provider/provider.py` | `must_preserve` | `compatibility` | Yes | Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime. |
+| `provider/src/stateforge_provider/__init__.py` | `must_preserve` | `compatibility` | Yes | Preserve existing public exports and import paths. |
+| `provider/src/stateforge_provider/_services/health/service.py` | `expected_to_change` | `compatibility` | Yes | Replace or adapt the current Python-owned health and availability implementation behind the stable author-facing API. |
+| `agent/tests/test_health_client.py` | `must_understand` | `compatibility` | Yes | Use the current Agent health and availability integration tests as the end-to-end compatibility contract. |
+
+#### Verification contract
+
+- **test** · `provider` · `Provider Python public API compatibility tests` — Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns health and availability.
+- **integration** · `provider` · `Installed-process Agent-to-Provider scenario` — Run the current Agent against built Provider Python backed by the built Rust Runtime; assert initial readiness; serving/not-serving transitions; Watch updates; startup/shutdown; session loss/recovery end to end.
+- **command** · `provider` · `Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks` — Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.
+
+### `PRT5` — [TASK][MVP] Implement Capability Assessment
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/capability-assessment.md` → `markdown_heading:Who implements Capability Assessment` | `must_understand` | `canonical` | Yes | Read the normative SFP capability assessment procedure and its Provider/Agent responsibility split; focus on “Who implements Capability Assessment”. |
+| `agent/src/stateforge_agent/_sfp/_services/capability_assessment/coordinator.py` | `must_understand` | `compatibility` | Yes | Use the current Agent capability assessment implementation as the interoperable peer contract. |
+| `agent/tests/test_capability_assessment.py` | `must_preserve` | `compatibility` | Yes | Preserve current Agent capability assessment behavior; use these tests as interoperability expectations. |
+| `provider/src/stateforge_provider/_services/capability_assessment/service.py` | `must_understand` | `compatibility` | Yes | Use the current Provider Python capability assessment implementation to identify behavior moving into the shared Rust runtime. |
+
+#### Verification contract
+
+- **test** · `provider-runtime` · `Rust capability assessment unit/conformance suite` — Exercise supported/unsupported/incompatible outcomes; requirement and reason propagation; deadlines; invalid/missing outcomes; retry behavior against the canonical SFP contract, including invalid and boundary cases.
+- **test** · `provider-runtime` · `SFP compatibility vectors for capability assessment` — Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.
+- **command** · `provider-runtime` · `cargo fmt --check && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings` — Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.
+
+### `PYR5` — [TASK][MVP] Expose Rust-Managed Capability Assessment Through the Python SDK
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/capability-assessment.md` → `markdown_heading:Who implements Capability Assessment` | `must_understand` | `canonical` | Yes | Read the normative SFP capability assessment procedure and its Provider/Agent responsibility split; focus on “Who implements Capability Assessment”. |
+| `provider/src/stateforge_provider/provider.py` | `must_preserve` | `compatibility` | Yes | Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime. |
+| `provider/src/stateforge_provider/__init__.py` | `must_preserve` | `compatibility` | Yes | Preserve existing public exports and import paths. |
+| `provider/src/stateforge_provider/_services/capability_assessment/service.py` | `expected_to_change` | `compatibility` | Yes | Replace or adapt the current Python-owned capability assessment implementation behind the stable author-facing API. |
+| `agent/tests/test_capability_assessment.py` | `must_understand` | `compatibility` | Yes | Use the current Agent capability assessment integration tests as the end-to-end compatibility contract. |
+
+#### Verification contract
+
+- **test** · `provider` · `Provider Python public API compatibility tests` — Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns capability assessment.
+- **integration** · `provider` · `Installed-process Agent-to-Provider scenario` — Run the current Agent against built Provider Python backed by the built Rust Runtime; assert supported/unsupported/incompatible outcomes; requirement and reason propagation; deadlines; invalid/missing outcomes; retry behavior end to end.
+- **command** · `provider` · `Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks` — Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.
+
+### `PRT6` — [TASK][MVP] Implement Idempotent Operation Admission and Dispatch
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/operation-admission.md` → `markdown_heading:Who implements Operation Admission` | `must_understand` | `canonical` | Yes | Read the normative SFP operation admission and dispatch procedure and its Provider/Agent responsibility split; focus on “Who implements Operation Admission”. |
+| `agent/src/stateforge_agent/_sfp/_services/operation_admission/coordinator.py` | `must_understand` | `compatibility` | Yes | Use the current Agent operation admission and dispatch implementation as the interoperable peer contract. |
+| `agent/tests/test_operation_admission.py` | `must_preserve` | `compatibility` | Yes | Preserve current Agent operation admission and dispatch behavior; use these tests as interoperability expectations. |
+| `provider/src/stateforge_provider/_services/operation_admission/runtime.py` | `must_understand` | `compatibility` | Yes | Use the current Provider Python operation admission and dispatch implementation to identify behavior moving into the shared Rust runtime. |
+
+#### Verification contract
+
+- **test** · `provider-runtime` · `Rust operation admission and dispatch unit/conformance suite` — Exercise new admission; identical retry; same-ID changed-content conflict; concurrent duplicate; invalid/undeclared operation; exactly-one callback invocation; retention boundary against the canonical SFP contract, including invalid and boundary cases.
+- **test** · `provider-runtime` · `SFP compatibility vectors for operation admission and dispatch` — Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.
+- **command** · `provider-runtime` · `cargo fmt --check && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings` — Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.
+
+### `PYR6` — [TASK][MVP] Expose Rust-Managed Operation Admission and Dispatch Through the Python SDK
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/operation-admission.md` → `markdown_heading:Who implements Operation Admission` | `must_understand` | `canonical` | Yes | Read the normative SFP operation admission and dispatch procedure and its Provider/Agent responsibility split; focus on “Who implements Operation Admission”. |
+| `provider/src/stateforge_provider/provider.py` | `must_preserve` | `compatibility` | Yes | Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime. |
+| `provider/src/stateforge_provider/__init__.py` | `must_preserve` | `compatibility` | Yes | Preserve existing public exports and import paths. |
+| `provider/src/stateforge_provider/_services/operation_admission/runtime.py` | `expected_to_change` | `compatibility` | Yes | Replace or adapt the current Python-owned operation admission and dispatch implementation behind the stable author-facing API. |
+| `agent/tests/test_operation_admission.py` | `must_understand` | `compatibility` | Yes | Use the current Agent operation admission and dispatch integration tests as the end-to-end compatibility contract. |
+| `provider/src/stateforge_provider/operations.py` | `must_preserve` | `compatibility` | Yes | Keep Provider-specific user handler declarations and callbacks in Python; move only shared SFP runtime behavior into Rust. |
+
+#### Verification contract
+
+- **test** · `provider` · `Provider Python public API compatibility tests` — Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns operation admission and dispatch.
+- **integration** · `provider` · `Installed-process Agent-to-Provider scenario` — Run the current Agent against built Provider Python backed by the built Rust Runtime; assert new admission; identical retry; same-ID changed-content conflict; concurrent duplicate; invalid/undeclared operation; exactly-one callback invocation; retention boundary end to end.
+- **command** · `provider` · `Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks` — Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.
+
+### `PRT7` — [TASK][MVP] Implement the Operation Lifecycle: Progress, Results, Errors, and Cancellation
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/progress-results-cancellation.md` → `markdown_heading:Who implements Operation Lifecycle` | `must_understand` | `canonical` | Yes | Read the normative SFP operation progress, results, errors, and cancellation procedure and its Provider/Agent responsibility split; focus on “Who implements Operation Lifecycle”. |
+| `agent/src/stateforge_agent/_sfp/_services/operation_lifecycle/coordinator.py` | `must_understand` | `compatibility` | Yes | Use the current Agent operation progress, results, errors, and cancellation implementation as the interoperable peer contract. |
+| `agent/tests/test_operation_lifecycle.py` | `must_preserve` | `compatibility` | Yes | Preserve current Agent operation progress, results, errors, and cancellation behavior; use these tests as interoperability expectations. |
+| `provider/src/stateforge_provider/_services/operation_lifecycle/runtime.py` | `must_understand` | `compatibility` | Yes | Use the current Provider Python operation progress, results, errors, and cancellation implementation to identify behavior moving into the shared Rust runtime. |
+
+#### Verification contract
+
+- **test** · `provider-runtime` · `Rust operation progress, results, errors, and cancellation unit/conformance suite` — Exercise monotonic progress and replay; valid terminal results; normalized failures; cancellation requested/unsupported/already-terminal; completion-cancel races; terminal immutability against the canonical SFP contract, including invalid and boundary cases.
+- **test** · `provider-runtime` · `SFP compatibility vectors for operation progress, results, errors, and cancellation` — Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.
+- **command** · `provider-runtime` · `cargo fmt --check && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings` — Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.
+
+### `PYR7` — [TASK][MVP] Expose the Rust-Managed Operation Lifecycle Through the Python SDK
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/progress-results-cancellation.md` → `markdown_heading:Who implements Operation Lifecycle` | `must_understand` | `canonical` | Yes | Read the normative SFP operation progress, results, errors, and cancellation procedure and its Provider/Agent responsibility split; focus on “Who implements Operation Lifecycle”. |
+| `provider/src/stateforge_provider/provider.py` | `must_preserve` | `compatibility` | Yes | Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime. |
+| `provider/src/stateforge_provider/__init__.py` | `must_preserve` | `compatibility` | Yes | Preserve existing public exports and import paths. |
+| `provider/src/stateforge_provider/_services/operation_lifecycle/runtime.py` | `expected_to_change` | `compatibility` | Yes | Replace or adapt the current Python-owned operation progress, results, errors, and cancellation implementation behind the stable author-facing API. |
+| `agent/tests/test_operation_lifecycle.py` | `must_understand` | `compatibility` | Yes | Use the current Agent operation progress, results, errors, and cancellation integration tests as the end-to-end compatibility contract. |
+| `provider/src/stateforge_provider/operations.py` | `must_preserve` | `compatibility` | Yes | Keep Provider-specific user handler declarations and callbacks in Python; move only shared SFP runtime behavior into Rust. |
+
+#### Verification contract
+
+- **test** · `provider` · `Provider Python public API compatibility tests` — Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns operation progress, results, errors, and cancellation.
+- **integration** · `provider` · `Installed-process Agent-to-Provider scenario` — Run the current Agent against built Provider Python backed by the built Rust Runtime; assert monotonic progress and replay; valid terminal results; normalized failures; cancellation requested/unsupported/already-terminal; completion-cancel races; terminal immutability end to end.
+- **command** · `provider` · `Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks` — Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.
+
+### `PRT8` — [TASK][MVP] Implement Trigger Publication and Acknowledgement
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/triggers.md` → `markdown_heading:Who implements Trigger Publication` | `must_understand` | `canonical` | Yes | Read the normative SFP trigger publication and acknowledgement procedure and its Provider/Agent responsibility split; focus on “Who implements Trigger Publication”. |
+| `agent/src/stateforge_agent/_sfp/_services/trigger_publication/coordinator.py` | `must_understand` | `compatibility` | Yes | Use the current Agent trigger publication and acknowledgement implementation as the interoperable peer contract. |
+| `agent/tests/test_trigger_publication.py` | `must_preserve` | `compatibility` | Yes | Preserve current Agent trigger publication and acknowledgement behavior; use these tests as interoperability expectations. |
+| `provider/src/stateforge_provider/_services/trigger_publication/runtime.py` | `must_understand` | `compatibility` | Yes | Use the current Provider Python trigger publication and acknowledgement implementation to identify behavior moving into the shared Rust runtime. |
+
+#### Verification contract
+
+- **test** · `provider-runtime` · `Rust trigger publication and acknowledgement unit/conformance suite` — Exercise accepted-new; accepted-duplicate replay; changed-content conflict; lost acknowledgement; invalid payload/session; bounded backpressure against the canonical SFP contract, including invalid and boundary cases.
+- **test** · `provider-runtime` · `SFP compatibility vectors for trigger publication and acknowledgement` — Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.
+- **command** · `provider-runtime` · `cargo fmt --check && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings` — Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.
+
+### `PYR8` — [TASK][MVP] Expose Rust-Managed Trigger Publication and Acknowledgement Through the Python SDK
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/triggers.md` → `markdown_heading:Who implements Trigger Publication` | `must_understand` | `canonical` | Yes | Read the normative SFP trigger publication and acknowledgement procedure and its Provider/Agent responsibility split; focus on “Who implements Trigger Publication”. |
+| `provider/src/stateforge_provider/provider.py` | `must_preserve` | `compatibility` | Yes | Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime. |
+| `provider/src/stateforge_provider/__init__.py` | `must_preserve` | `compatibility` | Yes | Preserve existing public exports and import paths. |
+| `provider/src/stateforge_provider/_services/trigger_publication/runtime.py` | `expected_to_change` | `compatibility` | Yes | Replace or adapt the current Python-owned trigger publication and acknowledgement implementation behind the stable author-facing API. |
+| `agent/tests/test_trigger_publication.py` | `must_understand` | `compatibility` | Yes | Use the current Agent trigger publication and acknowledgement integration tests as the end-to-end compatibility contract. |
+| `provider/src/stateforge_provider/triggers.py` | `must_preserve` | `compatibility` | Yes | Keep Provider-specific user handler declarations and callbacks in Python; move only shared SFP runtime behavior into Rust. |
+
+#### Verification contract
+
+- **test** · `provider` · `Provider Python public API compatibility tests` — Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns trigger publication and acknowledgement.
+- **integration** · `provider` · `Installed-process Agent-to-Provider scenario` — Run the current Agent against built Provider Python backed by the built Rust Runtime; assert accepted-new; accepted-duplicate replay; changed-content conflict; lost acknowledgement; invalid payload/session; bounded backpressure end to end.
+- **command** · `provider` · `Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks` — Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.
+
+### `PRT9` — [TASK][MVP] Implement Disconnection Recovery and State Reconciliation
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/disconnection-recovery.md` → `markdown_heading:Who implements recovery` | `must_understand` | `canonical` | Yes | Read the normative SFP disconnection recovery and state reconciliation procedure and its Provider/Agent responsibility split; focus on “Who implements recovery”. |
+| `agent/src/stateforge_agent/_sfp/_runtime/reconnect.py` | `must_understand` | `compatibility` | Yes | Use the current Agent disconnection recovery and state reconciliation implementation as the interoperable peer contract. |
+| `agent/tests/test_endpoint_lifecycle.py` | `must_preserve` | `compatibility` | Yes | Preserve current Agent disconnection recovery and state reconciliation behavior; use these tests as interoperability expectations. |
+| `provider/src/stateforge_provider/_runtime/server.py` | `must_understand` | `compatibility` | Yes | Use the current Provider Python disconnection recovery and state reconciliation implementation to identify behavior moving into the shared Rust runtime. |
+
+#### Verification contract
+
+- **test** · `provider-runtime` · `Rust disconnection recovery and state reconciliation unit/conformance suite` — Exercise disconnect/reconnect; stale session/generation fencing; retained/lost operation state; trigger replay; uncertain admission without automatic redispatch against the canonical SFP contract, including invalid and boundary cases.
+- **test** · `provider-runtime` · `SFP compatibility vectors for disconnection recovery and state reconciliation` — Prove Rust behavior matches the versioned Protocol contract and does not introduce a competing wire definition.
+- **command** · `provider-runtime` · `cargo fmt --check && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings` — Formatting, Rust tests, and warning-free clippy pass for the runtime workspace.
+
+### `PYR9` — [TASK][MVP] Expose Rust-Managed Disconnection Recovery Through the Python SDK
+
+#### Required context and protected behavior
+
+| Repository path | Role | Authority | Required | Why |
+| --- | --- | --- | --- | --- |
+| `protocol/docs/v0.1.0/procedures/disconnection-recovery.md` → `markdown_heading:Who implements recovery` | `must_understand` | `canonical` | Yes | Read the normative SFP disconnection recovery and state reconciliation procedure and its Provider/Agent responsibility split; focus on “Who implements recovery”. |
+| `provider/src/stateforge_provider/provider.py` | `must_preserve` | `compatibility` | Yes | Preserve the existing Provider construction and lifecycle API while routing it through the Rust runtime. |
+| `provider/src/stateforge_provider/__init__.py` | `must_preserve` | `compatibility` | Yes | Preserve existing public exports and import paths. |
+| `provider/src/stateforge_provider/_runtime/server.py` | `expected_to_change` | `compatibility` | Yes | Replace or adapt the current Python-owned disconnection recovery and state reconciliation implementation behind the stable author-facing API. |
+| `agent/tests/test_endpoint_lifecycle.py` | `must_understand` | `compatibility` | Yes | Use the current Agent disconnection recovery and state reconciliation integration tests as the end-to-end compatibility contract. |
+
+#### Verification contract
+
+- **test** · `provider` · `Provider Python public API compatibility tests` — Verify existing imports, declarations, handler signatures, and lifecycle behavior remain compatible while Rust alone owns disconnection recovery and state reconciliation.
+- **integration** · `provider` · `Installed-process Agent-to-Provider scenario` — Run the current Agent against built Provider Python backed by the built Rust Runtime; assert disconnect/reconnect; stale session/generation fencing; retained/lost operation state; trigger replay; uncertain admission without automatic redispatch end to end.
+- **command** · `provider` · `Build/install runtime and Provider Python artifacts; run relevant tests, lint, typing and packaging checks` — Verify the exact installed artifacts pass and no Python protocol-runtime fallback is used.
+
 
 ## Delivery rules
 
@@ -10486,11 +12662,11 @@ this generated file manually.
 
 <!-- STATEFORGE_DPT_SECURITY_CACHE
 {
-  "fingerprint": "633eba7d2368f61df018307bf8383006d9eef1652c81573a0b827843e2bbc77c",
+  "fingerprint": "2120307af8dbf7cb7c73bc3e90d692d1a5018e563435a9d50d0936331ab5ded5",
   "format": "stateforge-dpt-security-cache",
   "format_version": 1,
-  "generated_at": "2026-11-09T15:10:46+00:00",
-  "plan_fingerprint": "5a327b961bbcb021e4ceb0bfc519c1f9ec246cdbc75bd4a23c02ad030aa529da",
+  "generated_at": "2026-11-22T14:56:00+00:00",
+  "plan_fingerprint": "d523dcbc32d39bc7600b7c86e1f8f813e5430899b3cfb83c1746026fc47369a4",
   "repositories": [
     {
       "alias": "agent",
@@ -10507,7 +12683,7 @@ this generated file manually.
         "tool_version": "0.13.5"
       },
       "generated_at": "2026-11-09T14:59:49+00:00",
-      "observed_commit_sha": "5ae24c1cc06fd5ab82cee89f1b010cf37d787095",
+      "observed_commit_sha": "a7c4426fb4f2c27b967817a22b9c440ab9b27eda",
       "plan_source_branch": "mvp/implementation",
       "repository": "stateforge-org/stateforge-agent",
       "sbom": {
@@ -21917,7 +24093,7 @@ this generated file manually.
         "tool_version": "0.13.5"
       },
       "generated_at": "2026-10-27T10:20:39+00:00",
-      "observed_commit_sha": "0dab0576d884ae10f3bef0135b641168234b18b6",
+      "observed_commit_sha": "ba9dba66d9ea19f1838f7d74668a41fea8ee4e52",
       "plan_source_branch": "mvp/implementation",
       "repository": "stateforge-org/stateforge-protocol",
       "sbom": {
@@ -33458,7 +35634,7 @@ this generated file manually.
         "tool_version": "0.13.5"
       },
       "generated_at": "2026-11-09T14:57:00+00:00",
-      "observed_commit_sha": "ed2b71c96974ff3e1cedb9e256419cb1b85bc92b",
+      "observed_commit_sha": "0e3a8b03274e43bc34a7772a0e443041a3e9ae68",
       "plan_source_branch": "mvp/implementation",
       "repository": "stateforge-org/stateforge-provider-python",
       "sbom": {
