@@ -169,6 +169,10 @@ def test_rejects_invalid_handshake_response_semantics(change: str) -> None:
         (0, 0),
         (True, 0),
         (1, True),
+        (None, 0),
+        (1, None),
+        (-1, 0),
+        (1, -1),
         (primitives.PROTOBUF_UINT32_MAX + 1, 0),
         (1, primitives.PROTOBUF_UINT32_MAX + 1),
     ],
@@ -179,6 +183,12 @@ def test_rejects_invalid_protocol_versions(
 ) -> None:
     with pytest.raises(validation.BootstrapValidationError):
         validation.validate_protocol_version(major, minor)
+
+
+def test_accepts_maximum_protocol_version_components() -> None:
+    maximum = primitives.PROTOBUF_UINT32_MAX
+    version = validation.validate_protocol_version(maximum, maximum)
+    assert (version.major, version.minor) == (maximum, maximum)
 
 
 def test_bootstrap_service_contains_handshake_method() -> None:

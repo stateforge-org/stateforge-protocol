@@ -12,7 +12,7 @@
         "stateforge_protocol/sfp/endpoint_discovery/v1/endpoint_descriptor.schema.json"
       ],
       "fixtureRoots": [
-        "stateforge_protocol/fixtures/endpoint_discovery"
+        "endpoint_discovery"
       ],
       "sourceTests": [
         "tests/test_endpoint_discovery_contract.py"
@@ -28,7 +28,7 @@
       "validationException": null,
       "schemaResources": [],
       "fixtureRoots": [
-        "stateforge_protocol/fixtures/bootstrap"
+        "bootstrap"
       ],
       "sourceTests": [
         "tests/test_bootstrap_contract.py"
@@ -44,7 +44,7 @@
       "validationException": "Uses the standard grpc.health.v1 service and status vocabulary.",
       "schemaResources": [],
       "fixtureRoots": [
-        "stateforge_protocol/fixtures/health"
+        "health"
       ],
       "sourceTests": [
         "tests/test_health_contract.py"
@@ -62,7 +62,7 @@
         "stateforge_protocol/sfp/manifest/v1/manifest.schema.json"
       ],
       "fixtureRoots": [
-        "stateforge_protocol/fixtures/manifest"
+        "manifest"
       ],
       "sourceTests": [
         "tests/test_manifest_contract.py",
@@ -82,7 +82,7 @@
         "stateforge_protocol/sfp/capability_assessment/v1/capability_assessment.schema.json"
       ],
       "fixtureRoots": [
-        "stateforge_protocol/fixtures/capability_assessment"
+        "capability_assessment"
       ],
       "sourceTests": [
         "tests/test_capability_assessment_contract.py",
@@ -101,7 +101,7 @@
         "stateforge_protocol/sfp/trigger_publication/v1/trigger_publication.schema.json"
       ],
       "fixtureRoots": [
-        "stateforge_protocol/fixtures/trigger_publication"
+        "trigger_publication"
       ],
       "sourceTests": [
         "tests/test_trigger_publication_contract.py"
@@ -119,7 +119,7 @@
         "stateforge_protocol/sfp/operation_admission/v1/operation_admission.schema.json"
       ],
       "fixtureRoots": [
-        "stateforge_protocol/fixtures/operation_admission"
+        "operation_admission"
       ],
       "sourceTests": [
         "tests/test_operation_admission_contract.py"
@@ -137,7 +137,7 @@
         "stateforge_protocol/sfp/operation_lifecycle/v1/operation_lifecycle.schema.json"
       ],
       "fixtureRoots": [
-        "stateforge_protocol/fixtures/operation_lifecycle"
+        "operation_lifecycle"
       ],
       "sourceTests": [
         "tests/test_operation_lifecycle_contract.py"
@@ -153,7 +153,7 @@
       "validationException": "Composes the public procedure validators and recovery classifiers.",
       "schemaResources": [],
       "fixtureRoots": [
-        "stateforge_protocol/fixtures/disconnection_recovery"
+        "disconnection_recovery"
       ],
       "sourceTests": [
         "tests/test_disconnection_recovery_contract.py"
@@ -169,7 +169,7 @@
       "validationException": "Aggregates the authoritative per-procedure transport limits.",
       "schemaResources": [],
       "fixtureRoots": [
-        "stateforge_protocol/fixtures/conformance"
+        "conformance"
       ],
       "sourceTests": [
         "tests/test_shared_endpoint_limits.py"

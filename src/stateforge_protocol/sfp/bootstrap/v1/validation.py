@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Final
 from uuid import UUID
 
-from stateforge_protocol.sfp import _validation, primitives
+from stateforge_protocol import _native
+from stateforge_protocol.sfp import _validation
 from stateforge_protocol.sfp.bootstrap.v1 import bootstrap_pb2, contract
 from stateforge_protocol.sfp.endpoint_discovery.v1 import (
     contract as discovery_contract,
@@ -38,19 +39,15 @@ class ProtocolVersion:
     minor: int
 
     def __post_init__(self) -> None:
-        """Reject values outside the protobuf and SFP version contract."""
-        _VALIDATION.require_integer_range(
-            self.major,
-            minimum=1,
-            maximum=primitives.PROTOBUF_UINT32_MAX,
-            message="SFP major version must be a positive uint32",
-        )
-        _VALIDATION.require_integer_range(
-            self.minor,
-            minimum=0,
-            maximum=primitives.PROTOBUF_UINT32_MAX,
-            message="SFP minor version must be a uint32",
-        )
+        """Translate Python values and delegate version semantics to Rust."""
+        try:
+            version = bootstrap_pb2.ProtocolVersion()
+            version.major = self.major
+            version.minor = self.minor
+
+            _native.validate_protocol_version(version)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise BootstrapValidationError(str(error)) from error
 
 
 @dataclass(frozen=True, slots=True)

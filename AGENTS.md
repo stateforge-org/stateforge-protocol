@@ -5,7 +5,9 @@ Before planning, reviewing, or changing this repository, read these files:
 1. `CLAUDE.md`
 2. Root `STATEFORGE_DPT.md`
 3. `.agents/skills/stateforge-dpt-milestone/SKILL.md`
-4. Applicable engineering skills under `.claude/skills/`
+4. `.claude/skills/stateforge-rust-development/SKILL.md` for Rust design,
+   implementation, packaging, or review
+5. Applicable repository-specific engineering skills under `.claude/skills/`
 
 Implement only the specifically requested Issue's milestone and preserve the
 Protocol-only repository boundary. Local commits are allowed. Humans own

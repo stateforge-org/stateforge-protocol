@@ -78,7 +78,7 @@ one authoritative Python contract surface:
 - generated protobuf and gRPC modules;
 - versioned service identities, RPC paths, limits, and shared scalar rules;
 - context-independent semantic validation APIs;
-- packaged JSON Schemas and conformance fixtures; and
+- packaged JSON Schemas; and
 - the complete shared-endpoint service inventory and transport ceilings.
 
 Install the current checkout with:
@@ -91,6 +91,10 @@ Public modules and supported imports are documented in the
 [Python contract reference](https://docs.stateforge.net/sfp/latest/reference/python-contracts/). Generated
 `*_pb2.py`, `*_pb2.pyi`, and `*_pb2_grpc.py` modules are derived artifacts and
 must not be edited manually.
+
+The shared conformance corpus lives in `tests/fixtures/` and is included in
+the source distribution, not the runtime wheel. Installed-package verification
+uses those same fixtures against the installed library.
 
 ## Documentation
 
@@ -113,7 +117,9 @@ python -m mkdocs serve
 
 ## Development
 
-Python 3.11 or newer and Buf are required. Create an isolated environment and
+Python 3.11 or newer, Rust 1.85 or newer, and Buf are required. The Python
+package builds its native extension with Maturin and Cargo, so installing the
+checkout also compiles the Rust workspace. Create an isolated environment and
 install the development and documentation dependency groups:
 
 ```bash
@@ -127,7 +133,9 @@ python -m pip install --group dev --group docs .
 
 When a `.proto` source changes, regenerate its checked-in Python bindings with
 `buf generate`. Keep protobuf sources, generated bindings, validation schemas,
-and conformance vectors in the same change.
+and conformance vectors in the same change. Rust protobuf and gRPC types are
+generated from those same `.proto` files during the Cargo build; do not edit
+generated outputs by hand.
 
 Run the complete local verification suite with:
 
@@ -140,6 +148,12 @@ python -m ruff format --check .
 python -m ruff check .
 python -m mypy src
 python -m pytest
+cargo fmt --all -- --check
+cargo check --workspace --all-targets --locked
+cargo test --workspace --all-targets --locked
+cargo +1.85.0 test --workspace --all-targets --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo doc --workspace --no-deps --locked
 python -m build
 python -m mkdocs build --strict
 ```

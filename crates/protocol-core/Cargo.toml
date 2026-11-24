@@ -1,0 +1,23 @@
+[package]
+name = "stateforge-protocol-core"
+version = "0.1.0"
+description = "Rust implementation of StateForge Protocol contracts."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+build = "build.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+prost.workspace = true
+prost-types.workspace = true
+tonic.workspace = true
+tonic-prost = "0.14"
+
+[build-dependencies]
+protoc-bin-vendored = "3"
+tonic-prost-build = "0.14"

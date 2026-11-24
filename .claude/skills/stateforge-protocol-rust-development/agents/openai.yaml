@@ -1,0 +1,4 @@
+interface:
+  display_name: "StateForge Protocol Rust Development"
+  short_description: "Rust contracts and Python bindings"
+  default_prompt: "Use $stateforge-protocol-rust-development for Rust-native SFP contracts, Rust crates, or the Python binding in stateforge-protocol."

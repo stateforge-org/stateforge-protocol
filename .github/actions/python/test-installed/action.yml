@@ -92,6 +92,7 @@ runs:
             "${GITHUB_WORKSPACE}/scripts/ci/verify_installed.py" \
             --expected-version "${EXPECTED_VERSION}" \
             --workspace "${GITHUB_WORKSPACE}" \
+            --fixture-root "${GITHUB_WORKSPACE}/tests/fixtures" \
             --output "${evidence_directory}/wheel-conformance.json"
         } 2>&1 | tee "${EVIDENCE_DIRECTORY}/installed-package.log"
 
@@ -123,5 +124,6 @@ runs:
             "${GITHUB_WORKSPACE}/scripts/ci/verify_installed.py" \
             --expected-version "${EXPECTED_VERSION}" \
             --workspace "${GITHUB_WORKSPACE}" \
+            --fixture-root "${GITHUB_WORKSPACE}/tests/fixtures" \
             --output "${evidence_directory}/sdist-conformance.json"
         } 2>&1 | tee "${EVIDENCE_DIRECTORY}/installed-sdist.log"

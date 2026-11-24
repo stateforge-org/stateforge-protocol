@@ -5,15 +5,19 @@ from __future__ import annotations
 import importlib
 import json
 import re
+import tomllib
 from pathlib import Path
 
+import pytest
 from grpc_health.v1 import health_pb2
+from scripts.ci.verify_installed import _verify_fixture_corpus
 
 from stateforge_protocol.sfp import health_contract, shared_endpoint
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SOURCE_PACKAGE = _ROOT / "src" / "stateforge_protocol"
-_INVENTORY = _ROOT / "tests" / "fixtures" / "conformance" / "coverage.json"
+_FIXTURE_ROOT = _ROOT / "tests" / "fixtures"
+_INVENTORY = _FIXTURE_ROOT / "conformance" / "coverage.json"
 _PROCEDURE_KEYS = {
     "id",
     "kind",
@@ -111,9 +115,8 @@ def test_inventory_resources_and_public_modules_exist() -> None:
         for resource in procedure["schemaResources"]:
             assert _package_source_path(str(resource)).is_file(), resource
         for resource in procedure["fixtureRoots"]:
-            source = _ROOT / str(resource).replace(
-                "stateforge_protocol/fixtures", "tests/fixtures", 1
-            )
+            source = (_FIXTURE_ROOT / str(resource)).resolve()
+            assert source.is_relative_to(_FIXTURE_ROOT), resource
             assert source.is_dir(), resource
             assert any(path.is_file() for path in source.rglob("*")), resource
         for test in procedure["sourceTests"]:
@@ -134,13 +137,47 @@ def test_inventory_is_registered_in_every_standard_ci_path() -> None:
     }
     assert "python -m pytest" in content["sourceAction"]
     assert "verify_installed.py" in content["installedAction"]
+    artifact_formats = ("wheel", "sdist")
+    assert content["installedAction"].count(
+        '--fixture-root "${GITHUB_WORKSPACE}/tests/fixtures"'
+    ) == len(artifact_formats)
     assert "protocol-source-verify.yml" in content["standardWorkflow"]
     assert "protocol-installed-test.yml" in content["standardWorkflow"]
 
 
-def test_inventory_itself_is_packaged_as_conformance_evidence() -> None:
-    pyproject = (_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert '"tests/fixtures" = "stateforge_protocol/fixtures"' in pyproject
+def test_fixtures_are_source_distribution_resources_only() -> None:
+    pyproject = tomllib.loads(
+        (_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    includes = pyproject["tool"]["maturin"]["include"]
+    assert {"path": "tests/**/*", "format": "sdist"} in includes
+    assert all(
+        entry.get("format") == "sdist"
+        for entry in includes
+        if "fixtures" in entry["path"] or "tests" in entry["path"]
+    )
+    assert not (_SOURCE_PACKAGE / "fixtures").exists()
+
+
+def test_installed_verifier_uses_external_fixtures(tmp_path: Path) -> None:
+    package_root = tmp_path / "stateforge_protocol"
+    package_root.mkdir()
+    count = len(list(_FIXTURE_ROOT.rglob("*.json")))
+    assert _verify_fixture_corpus(package_root, _FIXTURE_ROOT) == count
+
+
+def test_installed_verifier_rejects_packaged_fixtures(tmp_path: Path) -> None:
+    package_root = tmp_path / "stateforge_protocol"
+    (package_root / "fixtures").mkdir(parents=True)
+    with pytest.raises(ValueError, match="test-only fixtures"):
+        _verify_fixture_corpus(package_root, _FIXTURE_ROOT)
+
+
+def test_installed_verifier_rejects_missing_corpus(tmp_path: Path) -> None:
+    package_root = tmp_path / "stateforge_protocol"
+    package_root.mkdir()
+    with pytest.raises(ValueError, match="No conformance fixtures found"):
+        _verify_fixture_corpus(package_root, tmp_path / "missing")
 
 
 def test_documented_coverage_matches_inventory() -> None:

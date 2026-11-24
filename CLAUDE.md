@@ -10,8 +10,12 @@ Use `stateforge-python-development` for Python, packaging, tests, and docs;
 `stateforge-protocol-development` for SFP contracts or integrations; and
 `stateforge-documentation` for public documentation structure, writing,
 versioning, visuals, and walkthroughs. Use `stateforge-pr-review` when drafting
-a PR description or assisting a review. These engineering skills live under
-`.claude/skills/`.
+a PR description or assisting a review. For Rust design, implementation,
+packaging, and review, apply the shared `stateforge-rust-development` skill
+first, then `stateforge-protocol-rust-development` alongside the Protocol
+skill. The shared skill defines engineering standards; the Protocol Rust
+skill defines contract ownership and the Python-binding boundary.
+These engineering skills live under `.claude/skills/`.
 
 ## Delivery discipline
 

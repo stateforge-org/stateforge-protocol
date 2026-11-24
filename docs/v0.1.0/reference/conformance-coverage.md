@@ -2,8 +2,8 @@
 
 SFP conformance means that independent implementations interpret the same
 documents, messages, state transitions, and failure cases the same way. The
-Protocol package records that proof in a machine-readable coverage catalog and
-ships the catalog with the fixtures used to exercise every contract surface.
+Protocol repository records that proof in a machine-readable coverage catalog
+and a shared corpus of fixtures that exercise every contract surface.
 
 ## From contract to evidence
 
@@ -39,7 +39,8 @@ Each layer answers a different question:
     <h3>Did the release preserve the contract?</h3>
     <p>
       The built wheel and source distribution are installed in clean
-      environments and replay the packaged conformance evidence.
+      environments and exercise the same conformance fixtures from the source
+      distribution or checkout.
     </p>
   </article>
   <article class="sf-docs-card">
@@ -54,7 +55,7 @@ Each layer answers a different question:
 
 Passing an earlier layer does not replace a later one. Source tests can prove a
 validator is correct while an installed-package check still catches a missing
-schema, fixture, generated module, or package-data rule.
+schema, generated module, or package-data rule.
 
 ## Covered contract surfaces
 
@@ -98,14 +99,15 @@ owner and the reason whenever a separate validator or service does not apply.
 | Disconnection Recovery | Composes session identity classification with the validators of the procedures being reconciled. It introduces no recovery RPC. |
 | Shared Endpoint | Aggregates the registered procedure inventory and transport ceilings. It introduces no independent wire exchange. |
 
-## Packaged evidence
+## Shared conformance evidence
 
 The source catalog lives at
 [`tests/fixtures/conformance/coverage.json`](https://github.com/stateforge-org/stateforge-protocol/blob/mvp/implementation/tests/fixtures/conformance/coverage.json).
-During packaging, the complete fixture tree is installed under
-`stateforge_protocol/fixtures/`. An installed verifier then loads the catalog,
-imports each declared public module, resolves every schema and fixture root,
-and checks that every declared surface produced a result.
+Rust and Python tests share the fixture tree under `tests/fixtures/`. The
+source distribution includes this corpus; the runtime wheel includes the
+library and its schemas, without test fixtures. The installed verifier receives
+the fixture root explicitly, imports the declared modules from the installed
+package, resolves its schemas, and exercises every declared contract surface.
 
 Each catalog entry binds one contract surface to:
 
@@ -116,7 +118,7 @@ Each catalog entry binds one contract surface to:
 | `contractModule` | Public module that owns the stable contract |
 | `validationModule` | Public semantic validator, or an explicit explanation when the surface intentionally has none |
 | `schemaResources` | Packaged machine-readable schemas required by the contract |
-| `fixtureRoots` | Packaged valid, invalid, boundary, and scenario evidence |
+| `fixtureRoots` | Valid, invalid, boundary, and scenario evidence, relative to `tests/fixtures/` |
 | `sourceTests` | Focused tests that interpret the evidence against the public API |
 | `installedResultKey` | Unique key proving the installed verifier exercised that surface |
 

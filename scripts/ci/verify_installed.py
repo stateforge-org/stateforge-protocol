@@ -206,7 +206,23 @@ def _verify_bootstrap_validation(fixture_root: Path) -> int:
         raise ValueError("Installed Bootstrap fixture identities differ")
     if response.endpoint_generation != request.expected_endpoint_generation:
         raise ValueError("Installed Bootstrap fixture generations differ")
-    return 2
+
+    request.supported_sfp_versions[0].major = 0
+    try:
+        bootstrap_validation.validate_handshake_request(request)
+    except bootstrap_validation.BootstrapValidationError:
+        pass
+    else:
+        raise ValueError("Bootstrap accepted an invalid offered version")
+
+    response.selected_sfp_version.major = 0
+    try:
+        bootstrap_validation.validate_handshake_response(response)
+    except bootstrap_validation.BootstrapValidationError:
+        pass
+    else:
+        raise ValueError("Bootstrap accepted an invalid selected version")
+    return 4
 
 
 def _verify_manifest_validation(fixture_root: Path) -> int:
@@ -915,6 +931,7 @@ def _coverage_resources(
 
 def _verify_coverage_entry(
     package_root: Path,
+    fixture_root: Path,
     procedure: dict[str, object],
 ) -> str | None:
     """Verify the modules and resources declared by one coverage entry."""
@@ -936,12 +953,15 @@ def _verify_coverage_entry(
     else:
         raise ValueError("Installed validation module entry is invalid")
 
-    for member in ("schemaResources", "fixtureRoots"):
-        for resource in _coverage_resources(procedure, member):
-            if not (package_root.parent / resource).exists():
-                raise ValueError(
-                    f"Installed conformance resource is missing: {resource}"
-                )
+    for resource in _coverage_resources(procedure, "schemaResources"):
+        if not (package_root.parent / resource).is_file():
+            raise ValueError(f"Installed schema is missing: {resource}")
+    for resource in _coverage_resources(procedure, "fixtureRoots"):
+        path = (fixture_root / resource).resolve()
+        if not _is_within(path, fixture_root) or not path.is_dir():
+            raise ValueError(
+                f"Conformance fixture root is missing: {resource}"
+            )
 
     service_name = procedure.get("serviceName")
     if service_name is not None and not isinstance(service_name, str):
@@ -974,7 +994,11 @@ def _verify_coverage_inventory(
     services = {
         service_name
         for procedure in procedures
-        if (service_name := _verify_coverage_entry(package_root, procedure))
+        if (
+            service_name := _verify_coverage_entry(
+                package_root, fixture_root, procedure
+            )
+        )
         is not None
     }
 
@@ -998,8 +1022,24 @@ def _is_within(path: Path, parent: Path) -> bool:
     return True
 
 
-def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
-    """Verify package metadata, imports, schemas, fixtures, and isolation."""
+def _verify_fixture_corpus(package_root: Path, fixture_root: Path) -> int:
+    """Check that conformance data is external and contains valid JSON."""
+    if (package_root / "fixtures").exists():
+        raise ValueError("Installed package contains test-only fixtures")
+    if _is_within(fixture_root, package_root):
+        raise ValueError("Conformance fixtures must be outside the package")
+    fixture_files = sorted(fixture_root.rglob("*.json"))
+    if not fixture_files:
+        raise ValueError(f"No conformance fixtures found in {fixture_root}")
+    for fixture in fixture_files:
+        json.loads(fixture.read_text(encoding="utf-8"))
+    return len(fixture_files)
+
+
+def verify(
+    expected_version: str, workspace: Path | None, fixture_root: Path
+) -> dict[str, object]:
+    """Verify an installed package against the external conformance corpus."""
     distribution = metadata.distribution(_DISTRIBUTION)
     if distribution.version != expected_version:
         msg = (
@@ -1042,12 +1082,8 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
     for schema in schemas:
         json.loads(schema.read_text(encoding="utf-8"))
 
-    fixture_root = package_root / "fixtures"
-    fixture_files = sorted(fixture_root.rglob("*.json"))
-    if not fixture_files:
-        raise ValueError("Installed package contains no conformance fixtures")
-    for fixture in fixture_files:
-        json.loads(fixture.read_text(encoding="utf-8"))
+    fixture_root = fixture_root.resolve()
+    fixture_count = _verify_fixture_corpus(package_root, fixture_root)
 
     procedure_contract_count = _verify_wire_contracts()
     endpoint_discovery_vector_count = _verify_endpoint_discovery_fixtures(
@@ -1093,7 +1129,7 @@ def verify(expected_version: str, workspace: Path | None) -> dict[str, object]:
         "package_root": str(package_root),
         "generated_module_count": len(module_names),
         "schema_count": len(schemas),
-        "fixture_count": len(fixture_files),
+        "fixture_count": fixture_count,
         "procedure_contract_count": procedure_contract_count,
         "coverage_inventory_count": coverage_inventory_count,
         "conformance_results": conformance_results,
@@ -1110,10 +1146,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--workspace", type=Path)
+    parser.add_argument("--fixture-root", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     arguments = parser.parse_args()
     try:
-        result = verify(arguments.expected_version, arguments.workspace)
+        result = verify(
+            arguments.expected_version,
+            arguments.workspace,
+            arguments.fixture_root,
+        )
     except (ImportError, OSError, ValueError, json.JSONDecodeError) as error:
         sys.stderr.write(f"Installed-package verification failed: {error}\n")
         return 1

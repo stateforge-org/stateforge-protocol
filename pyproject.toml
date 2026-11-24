@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling>=1.27"]
-build-backend = "hatchling.build"
+requires = ["maturin==1.16.0"]
+build-backend = "maturin"
 
 
 [project]
@@ -63,36 +63,23 @@ docs = [
 environments = ["python_version == '3.13'"]
 
 
-[tool.hatch.build.targets.wheel]
-packages = [
-    "src/stateforge_protocol",
-]
-
-
-[tool.hatch.build.targets.wheel.force-include]
-"tests/fixtures" = "stateforge_protocol/fixtures"
-
-
-[tool.hatch.build.targets.sdist]
+[tool.maturin]
+manifest-path = "crates/python-extension/Cargo.toml"
+module-name = "stateforge_protocol._native"
+python-source = "src"
+python-packages = ["stateforge_protocol"]
+locked = true
 include = [
-    "/.github",
-    "/LICENSE",
-    "/README.md",
-    "/buf.gen.yaml",
-    "/buf.yaml",
-    "/docs",
-    "/examples",
-    "/mkdocs.yml",
-    "/proto",
-    "/pyproject.toml",
-    "/scripts",
-    "/src",
-    "/tests",
-]
-exclude = [
-    "**/.DS_Store",
-    "**/__pycache__",
-    "**/*.pyc",
+    { path = ".cargo/config.toml", format = "sdist" },
+    { path = ".github/**/*", format = "sdist" },
+    { path = "buf.gen.yaml", format = "sdist" },
+    { path = "buf.yaml", format = "sdist" },
+    { path = "docs/**/*", format = "sdist" },
+    { path = "examples/**/*", format = "sdist" },
+    { path = "mkdocs.yml", format = "sdist" },
+    { path = "proto/**/*", format = "sdist" },
+    { path = "scripts/**/*", format = "sdist" },
+    { path = "tests/**/*", format = "sdist" },
 ]
 
 

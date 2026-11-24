@@ -1,0 +1,3 @@
+[env]
+# Repository root used by the Protocol core build script.
+STATEFORGE_PROTOCOL_REPOSITORY_ROOT = { value = ".", relative = true, force = true }

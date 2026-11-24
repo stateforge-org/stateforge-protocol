@@ -41,7 +41,8 @@ flowchart LR
     <h3>The published package stands alone</h3>
     <p>
       Clean environments install the downloaded distributions outside the
-      checkout and replay the packaged contract and conformance evidence.
+      checkout and replay the shared conformance evidence against the installed
+      contract.
     </p>
   </article>
   <article class="sf-docs-card">
@@ -82,7 +83,7 @@ installation. No downstream job rebuilds the package.
 | --- | --- | --- |
 | Source contracts | Dependency-lock check, Actionlint, Zizmor, Buf lint and format, deterministic generation, the complete test suite with coverage, Ruff, mypy, and strict documentation build | The source tree, generated outputs, automation, and documented contract agree, including Provider presentation overlays, revisions, assets, and fallback |
 | Distribution build | One wheel and one source distribution, followed by metadata, checksum, and provenance generation | The candidate has one attributable artifact identity |
-| Installed package | Wheel and source-distribution installation in isolated virtual environments with the checkout removed from Python import resolution | The package contains its generated modules, public contracts, schemas, typing marker, Provider presentation fixture, and conformance fixtures |
+| Installed package | Wheel and source-distribution installation in isolated virtual environments with the checkout removed from Python import resolution | The package contains its generated modules, public contracts, schemas, and typing marker; externally supplied conformance fixtures exercise the installed APIs |
 | Agent consumer | Exact wheel installation, package-origin verification, Protocol-ownership audit, and the complete Agent quality suite | The Agent consumes this candidate through public Protocol APIs |
 | Provider consumer | Exact wheel installation, package-origin verification, Protocol-ownership audit, and the complete Provider quality suite | StateForge Provider Python consumes this candidate through public Protocol APIs |
 
